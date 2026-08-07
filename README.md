@@ -50,6 +50,18 @@ pip install -r requirements.txt
 python manage.py runserver
 ```
 
+### トラブルシューティング（Windows）
+
+**必要なPythonバージョン**：Python 3.10以上が必要です（`python --version` で確認できます）。インストールされていない場合は [python.org](https://www.python.org/downloads/) からダウンロードし、インストール時に「Add python.exe to PATH」に必ずチェックを入れてください。
+
+**「このシステムではスクリプトの実行が無効になっています」と出る場合**：PowerShellで下記を実行してから、もう一度 `venv\Scripts\Activate.ps1` を試してください。
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+**「'python' は、内部コマンドまたは外部コマンド...として認識されていません」と出る場合**：Pythonがインストールされていないか、PATHが通っていません。上記のPythonインストール手順を確認してください。
+
 ---
 
 ## English
@@ -97,6 +109,18 @@ venv\Scripts\activate.bat
 pip install -r requirements.txt
 python manage.py runserver
 ```
+
+### Troubleshooting (Windows)
+
+**Required Python version**: Python 3.10 or later is required (check with `python --version`). If not installed, download it from [python.org](https://www.python.org/downloads/) and make sure to check "Add python.exe to PATH" during installation.
+
+**If you see "running scripts is disabled on this system"**: Run the following in PowerShell, then try `venv\Scripts\Activate.ps1` again.
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+**If you see "'python' is not recognized as an internal or external command"**: Python is not installed, or not added to PATH. Follow the installation steps above.
 
 ---
 
@@ -147,3 +171,15 @@ venv\Scripts\activate.bat
 pip install -r requirements.txt
 python manage.py runserver
 ```
+
+### Xử lý sự cố (Windows)
+
+**Phiên bản Python cần thiết**: Cần Python 3.10 trở lên (kiểm tra bằng `python --version`). Nếu chưa cài đặt, hãy tải từ [python.org](https://www.python.org/downloads/) và nhớ tích vào "Add python.exe to PATH" khi cài đặt.
+
+**Nếu gặp lỗi "running scripts is disabled on this system"**: Chạy lệnh sau trong PowerShell, sau đó thử lại `venv\Scripts\Activate.ps1`.
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+**Nếu gặp lỗi "'python' is not recognized as an internal or external command"**: Python chưa được cài đặt, hoặc chưa được thêm vào PATH. Làm theo các bước cài đặt ở trên.
