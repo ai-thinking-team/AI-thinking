@@ -23,6 +23,7 @@ cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -36,6 +37,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -47,6 +49,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -83,6 +86,7 @@ cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -96,6 +100,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -107,6 +112,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -145,6 +151,7 @@ cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -158,6 +165,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
@@ -169,6 +177,7 @@ cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
+python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
 python manage.py runserver
 ```
 
