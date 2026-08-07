@@ -18,6 +18,8 @@ AIを当たり前に使う時代に、学生が自分で考え、判断し、成
 ### セットアップ（Mac / Linux）
 
 ```bash
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -29,6 +31,8 @@ python manage.py runserver
 PowerShellの場合：
 
 ```powershell
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -38,6 +42,8 @@ python manage.py runserver
 コマンドプロンプトの場合：
 
 ```cmd
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
@@ -60,6 +66,8 @@ Design a learning experience that lets students think, judge, and grow for thems
 ### Setup (Mac / Linux)
 
 ```bash
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -71,6 +79,8 @@ python manage.py runserver
 PowerShell:
 
 ```powershell
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -80,6 +90,8 @@ python manage.py runserver
 Command Prompt:
 
 ```cmd
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
@@ -104,6 +116,8 @@ Trong thời đại AI được sử dụng như một điều hiển nhiên, h�
 ### Cài đặt (Mac / Linux)
 
 ```bash
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -115,6 +129,8 @@ python manage.py runserver
 PowerShell:
 
 ```powershell
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -124,6 +140,8 @@ python manage.py runserver
 Command Prompt:
 
 ```cmd
+git clone https://github.com/ai-thinking-team/AI-thinking.git
+cd AI-thinking
 python -m venv venv
 venv\Scripts\activate.bat
 pip install -r requirements.txt
