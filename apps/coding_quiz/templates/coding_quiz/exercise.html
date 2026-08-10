@@ -25,7 +25,7 @@
   </form>
 </section>
 
-{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status }} — {{ execution_result.message }}</p>{% endif %}
+{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status.value }} — {{ execution_result.message }}</p>{% endif %}
 <section class="subject-grid">
   <article class="panel"><h2>Diagnosis</h2><p>One focused question examines a possible misconception before direct help.</p></article>
   <article class="panel"><h2>Revision</h2><p>Each hint must be followed by a new code or reasoning action.</p></article>

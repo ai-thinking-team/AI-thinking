@@ -46,6 +46,8 @@ class CodingRouteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(LearnerAttempt.objects.count(), 1)
         self.assertEqual(LearnerAttempt.objects.get().evaluation['status'], 'NOT_EXECUTED')
+        self.assertContains(response, 'NOT_EXECUTED')
+        self.assertNotContains(response, 'ExecutionStatus.NOT_EXECUTED')
 
 
 class CodingWorkflowServiceTests(TestCase):
