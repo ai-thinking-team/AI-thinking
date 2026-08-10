@@ -49,6 +49,16 @@ class CodingRouteTests(TestCase):
         self.assertContains(response, 'NOT_EXECUTED')
         self.assertNotContains(response, 'ExecutionStatus.NOT_EXECUTED')
 
+    def test_missing_confidence_shows_validation_error(self):
+        response = self.client.post(reverse('coding_quiz:exercise'), {
+            'source_code': 'def double_numbers(values):\n    return values',
+            'reasoning': 'I would loop through each number.',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(LearnerAttempt.objects.count(), 0)
+        self.assertContains(response, 'This field is required.')
+
 
 class CodingWorkflowServiceTests(TestCase):
     def setUp(self):
