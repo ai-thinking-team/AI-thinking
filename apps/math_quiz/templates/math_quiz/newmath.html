@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>New</title>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    background: #f5f5f5;
+  }
+  h1 {
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+  input[type="text"] {
+    padding: 10px 14px;
+    font-size: 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+  }
+  #dropzone {
+    width: 360px;
+    max-width: 80vw;
+    padding: 40px 20px;
+    margin-top: 20px;
+    border: 2px dashed #9ca3af;
+    border-radius: 10px;
+    text-align: center;
+    color: #6b7280;
+    cursor: pointer;
+    background: white;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  #dropzone.dragover {
+    border-color: #8b5cf6;
+    background: #f5f3ff;
+    color: #8b5cf6;
+  }
+  #fileInput {
+    display: none;
+  }
+  #fileName {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #4b5563;
+  }
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background: #8b5cf6;
+    color: white;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+  button:hover {
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+  <form method="post" action="{% url 'math_quiz:add_unit' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="text" name="name" placeholder="科目名を入力" required>
+
+    <h1>newページ</h1>
+    <p><a href="{% url 'math_quiz:home' %}">戻る</a></p>
+
+    <div id="dropzone">
+      ここにファイルをドラッグ&amp;ドロップ<br>
+      （またはクリックして選択）
+      <div id="fileName"></div>
+    </div>
+    <input type="file" id="fileInput" name="file">
+
+    <button type="submit">追加</button>
+  </form>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+
+    function setFile(file) {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      fileInput.files = transfer.files;
+      fileName.textContent = file.name;
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        fileName.textContent = fileInput.files[0].name;
+      }
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        setFile(e.dataTransfer.files[0]);
+      }
+    });
+  </script>
+</body>
+</html>

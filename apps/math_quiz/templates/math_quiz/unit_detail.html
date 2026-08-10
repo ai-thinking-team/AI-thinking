@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>{{ unit.name }}</title>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px 0 60px;
+    background: #f5f5f5;
+  }
+  h1 {
+    margin-bottom: 8px;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    max-width: 500px;
+    margin-top: 20px;
+  }
+  button.section-btn {
+    padding: 12px 24px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+    background: #8b5cf6;
+    transition: opacity 0.2s;
+  }
+  button.section-btn:hover {
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+  <p><a href="{% url 'math_quiz:home' %}">戻る</a></p>
+  <h1>{{ unit.name }}</h1>
+  {% if unit.file %}
+  <p><a href="{{ unit.file.url }}">元のファイルをダウンロード</a></p>
+  {% endif %}
+
+  <div class="buttons">
+    {% for section in unit.sections.all %}
+    <button class="section-btn" onclick="location.href='{% url 'math_quiz:section_quiz' section.id %}'">{{ section.title }}</button>
+    {% empty %}
+    <p>セクションがまだありません。</p>
+    {% endfor %}
+  </div>
+</body>
+</html>

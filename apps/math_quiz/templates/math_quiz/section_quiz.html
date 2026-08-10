@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>{{ section.title }}</title>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    background: #f5f5f5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 16px;
+    box-sizing: border-box;
+  }
+  .back-link {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+  }
+  #hintBtn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: #f59e0b;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  #hintPopup {
+    display: none;
+    position: absolute;
+    top: 72px;
+    right: 20px;
+    width: 260px;
+    padding: 16px;
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    line-height: 1.5;
+  }
+  h2 {
+    margin-bottom: 4px;
+    color: #6b7280;
+    font-size: 16px;
+  }
+  #problem {
+    max-width: 600px;
+    text-align: center;
+    font-size: 20px;
+    line-height: 1.7;
+    margin: 8px 0 32px;
+    white-space: pre-wrap;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  textarea {
+    width: 600px;
+    max-width: 90vw;
+    height: 200px;
+    font-size: 16px;
+    padding: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+  .confidence {
+    width: 600px;
+    max-width: 90vw;
+    margin-top: 16px;
+    text-align: center;
+  }
+  .confidence input[type="range"] {
+    width: 100%;
+  }
+  button[type="submit"] {
+    margin-top: 28px;
+    padding: 12px 40px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background: #8b5cf6;
+    color: white;
+    cursor: pointer;
+  }
+  button[type="submit"]:hover {
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+  <a class="back-link" href="{% url 'math_quiz:unit_detail' section.unit_id %}">戻る</a>
+
+  <button id="hintBtn" title="ヒント">💡</button>
+  <div id="hintPopup">{{ hint }}</div>
+
+  <h2>{{ section.unit.name }} - {{ section.title }}</h2>
+  <p id="problem">{{ problem }}</p>
+
+  <form method="post" action="{% url 'math_quiz:submit_answer' %}">
+    {% csrf_token %}
+    <input type="hidden" name="section_id" value="{{ section.id }}">
+    <textarea name="problem" style="display:none">{{ problem }}</textarea>
+    <textarea name="answer" placeholder="ここに解答を入力してください" required></textarea>
+
+    <div class="confidence">
+      <label for="confidence">自信度: <span id="confidenceValue">50</span>%</label><br>
+      <input type="range" id="confidence" name="confidence" min="0" max="100" value="50">
+    </div>
+
+    <button type="submit">提出</button>
+  </form>
+
+  <script>
+    const hintBtn = document.getElementById('hintBtn');
+    const hintPopup = document.getElementById('hintPopup');
+    hintBtn.addEventListener('click', () => {
+      hintPopup.style.display = hintPopup.style.display === 'block' ? 'none' : 'block';
+    });
+
+    const confidenceInput = document.getElementById('confidence');
+    const confidenceValue = document.getElementById('confidenceValue');
+    confidenceInput.addEventListener('input', () => {
+      confidenceValue.textContent = confidenceInput.value;
+    });
+  </script>
+</body>
+</html>

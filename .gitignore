@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
+media/
 .DS_Store
 .pytest_cache/
 .coverage

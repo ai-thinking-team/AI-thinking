@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ボタンサンプル</title>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    background: #f5f5f5;
+  }
+  h1 {
+    margin-bottom: 24px;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    max-width: 400px;
+  }
+  button {
+    padding: 12px 24px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+    transition: opacity 0.2s;
+  }
+  button:hover {
+    opacity: 0.85;
+  }
+  .btn-blue { background: #3b82f6; }
+  .btn-green { background: #22c55e; }
+  .btn-red { background: #ef4444; }
+  .btn-yellow { background: #eab308; }
+  .btn-new { background: #6b7280; }
+  .btn-unit { background: #8b5cf6; }
+  #message {
+    margin-top: 20px;
+    font-size: 18px;
+    color: #333;
+  }
+  .unit-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .btn-delete {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <h1>ボタンサンプル</h1>
+  <div class="buttons">
+    <button class="btn-blue" onclick="showMessage('青ボタンが押されました')">青</button>
+    <button class="btn-green" onclick="showMessage('緑ボタンが押されました')">緑</button>
+    <button class="btn-red" onclick="showMessage('赤ボタンが押されました')">赤</button>
+    <button class="btn-yellow" onclick="showMessage('黄ボタンが押されました')">黄</button>
+    <button class="btn-new" onclick="location.href='{% url "math_quiz:new" %}'">new</button>
+    {% for unit in units %}
+    <span class="unit-wrapper">
+      <button class="btn-unit" onclick="location.href='{% url "math_quiz:unit_detail" unit.id %}'">{{ unit.name }}</button>
+      <form method="post" action="{% url 'math_quiz:delete_unit' unit.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn-delete" title="削除" onclick="return confirm('{{ unit.name|escapejs }}を削除しますか？')">×</button>
+      </form>
+    </span>
+    {% endfor %}
+  </div>
+  <p id="message"></p>
+
+  <script>
+    function showMessage(text) {
+      document.getElementById('message').textContent = text;
+    }
+  </script>
+</body>
+</html>
