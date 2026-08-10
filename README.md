@@ -128,6 +128,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 **If you see "'python' is not recognized as an internal or external command"**: Python is not installed, or not added to PATH. Follow the installation steps above.
 
+### Local isolated Coding runner
+
+The Coding workflow requires a separate Docker-backed HTTP runner before a revision can be verified as `PASSED`. See [`runner_service/README.md`](runner_service/README.md). Without that service, submissions safely remain `NOT_EXECUTED` and cannot unlock Teach-Back or Mastery.
+
 ---
 
 ## Tiếng Việt

@@ -9,6 +9,13 @@
 </head>
 <body>
   {% include "components/navbar.html" %}
-  <main class="container">{% block content %}{% endblock %}</main>
+  <main class="container">
+    {% if messages %}
+      <div class="messages" aria-live="polite">
+        {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>

@@ -13,6 +13,28 @@ a { color: #244cc8; }
 label { display: block; margin: 1rem 0; font-weight: 600; }
 input, textarea, select { width: 100%; padding: .65rem; margin-top: .35rem; }
 button { padding: .7rem 1rem; border: 0; border-radius: .4rem; background: #244cc8; color: white; cursor: pointer; }
-.workflow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.25rem; }
+.page-header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.reset-form { flex: 0 0 auto; }
+.workflow { display: grid; grid-template-columns: repeat(6, 1fr); gap: .5rem; padding: 0; list-style: none; }
+.workflow li { padding: .75rem; border-radius: .5rem; background: #e5e9f2; color: #59647a; font-size: .9rem; }
+.workflow li span { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: .35rem; border-radius: 50%; background: #cbd2df; }
+.workflow li.current { background: #244cc8; color: white; font-weight: 700; }
+.workflow li.current span { background: white; color: #244cc8; }
+.workflow li.complete { background: #dff4e8; color: #155d37; }
+.workflow li.locked { opacity: .72; }
 .hint-panel { margin-top: 1.5rem; padding: 1rem; border-left: .3rem solid #c68a16; background: #fff7e8; }
 .status { padding: 1rem; background: #eaf2ff; border-radius: .5rem; }
+.messages { margin-bottom: 1rem; }
+.message { padding: 1rem; border-radius: .5rem; background: #eaf2ff; }
+.message.success { background: #dff4e8; }
+.errorlist { color: #a32222; margin: .35rem 0; }
+.question, .locked-note { padding: 1rem; border-left: .3rem solid #244cc8; background: #eef3ff; }
+.button-row { display: flex; flex-wrap: wrap; gap: .75rem; }
+.button-secondary { background: #59647a; }
+button:disabled { opacity: .55; cursor: wait; }
+pre { overflow-x: auto; padding: 1rem; border-radius: .5rem; background: #172033; color: #f7f8fc; }
+details { margin: .75rem 0; }
+@media (max-width: 760px) {
+  .workflow { grid-template-columns: 1fr 1fr; }
+  .page-header { display: block; }
+}

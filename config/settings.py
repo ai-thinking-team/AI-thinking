@@ -133,6 +133,9 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+CODE_RUNNER_URL = os.environ.get('CODE_RUNNER_URL', '')
+CODE_RUNNER_AUTH_TOKEN = os.environ.get('CODE_RUNNER_AUTH_TOKEN', '')
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

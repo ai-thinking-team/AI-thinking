@@ -1,37 +1,158 @@
 {% extends "base.html" %}
 
-{% block title %}Coding exercise{% endblock %}
+{% block title %}{{ exercise.activity.title }}{% endblock %}
 
 {% block content %}
-<h1>{{ exercise.activity.title }}</h1>
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Coding learning session</p>
+    <h1>{{ exercise.activity.title }}</h1>
+    <p><strong>Current stage:</strong> {{ current_stage_label }}</p>
+  </div>
+  <form method="post" class="reset-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="reset">
+    <button class="button-secondary" type="submit">Start demo again</button>
+  </form>
+</header>
+
 {% include "components/progress_bar.html" %}
-<section class="panel">
-  <h2>Understand and plan</h2>
+
+{% if current_stage != 'transfer' %}<section class="panel problem-panel">
+  <h2>Exercise</h2>
   <p>{{ exercise.activity.prompt }}</p>
   <p><strong>Public test:</strong> {{ exercise.public_test_description }}</p>
+  <h3>Starter code</h3>
   <pre><code>{{ exercise.starter_code }}</code></pre>
-</section>
+</section>{% endif %}
 
-<section class="panel">
-  <h2>Think-First submission</h2>
-  <p>AI support remains locked until code, reasoning, and confidence are stored.</p>
-  <form method="post">
+{% if latest_evaluation and current_stage != 'transfer' %}
+  <p class="status"><strong>Execution status:</strong> {{ latest_evaluation.status }} — {{ latest_evaluation.message }}</p>
+{% endif %}
+
+{% if current_stage == 'first' %}
+<section class="panel" id="first-attempt">
+  <h2>1. Think-First / First Attempt</h2>
+  <p>Submit code, your plan, and confidence. AI and hints remain locked until this is stored.</p>
+  <form method="post" data-disable-on-submit>
     {% csrf_token %}
-    {{ form.non_field_errors }}
-    <label>{{ form.source_code.label }}{{ form.source_code }}{{ form.source_code.errors }}</label>
-    <label>{{ form.reasoning.label }}{{ form.reasoning }}{{ form.reasoning.errors }}</label>
-    {% include "components/confidence_selector.html" %}
+    <input type="hidden" name="action" value="first_attempt">
+    {{ first_form.non_field_errors }}
+    <label>{{ first_form.source_code.label }}{{ first_form.source_code }}{{ first_form.source_code.errors }}</label>
+    <label>{{ first_form.reasoning.label }}{{ first_form.reasoning }}{{ first_form.reasoning.errors }}</label>
+    {% include "components/confidence_selector.html" with form=first_form %}
     <button type="submit">Store first attempt</button>
   </form>
 </section>
-
-{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status.value }} — {{ execution_result.message }}</p>{% endif %}
-<section class="subject-grid">
-  <article class="panel"><h2>Diagnosis</h2><p>One focused question examines a possible misconception before direct help.</p></article>
-  <article class="panel"><h2>Revision</h2><p>Each hint must be followed by a new code or reasoning action.</p></article>
-  <article class="panel"><h2>Teach-Back</h2><p>Explain the original error, correction, concept, and prevention strategy.</p></article>
-  <article class="panel"><h2>Transfer Check</h2><p>Solve a parallel Python task with AI and hints disabled.</p></article>
+{% elif current_stage == 'diagnosis' %}
+<section class="panel" id="diagnosis">
+  <h2>2. Diagnosis</h2>
+  <p>Your First Attempt is already saved. This browser is continuing from the next required step.</p>
+  <p class="question">{{ diagnostic_question }}</p>
+  <form method="post" data-disable-on-submit>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="diagnosis">
+    {{ diagnosis_form.non_field_errors }}
+    <label>{{ diagnosis_form.diagnosis_answer.label }}{{ diagnosis_form.diagnosis_answer }}{{ diagnosis_form.diagnosis_answer.errors }}</label>
+    <button type="submit">Save answer and continue</button>
+  </form>
 </section>
-{% include "components/hint_panel.html" %}
-<p><strong>AI support:</strong> {% if ai_enabled %}Available for a focused diagnostic question.{% else %}Locked by the server-controlled workflow.{% endif %}</p>
+{% elif current_stage == 'revision' %}
+<section class="panel" id="revision">
+  <h2>3. Revision</h2>
+  <p>This creates a new revision. Your first attempt remains unchanged.</p>
+  <p class="locked-note">Teach-Back opens only after an isolated runner verifies this exercise as <strong>PASSED</strong>. If the status is NOT_EXECUTED, your revision is still saved but the workflow remains here.</p>
+  <form method="post" data-disable-on-submit>
+    {% csrf_token %}
+    {{ revision_form.non_field_errors }}
+    <label>{{ revision_form.source_code.label }}{{ revision_form.source_code }}{{ revision_form.source_code.errors }}</label>
+    <label>{{ revision_form.reasoning.label }}{{ revision_form.reasoning }}{{ revision_form.reasoning.errors }}</label>
+    {% include "components/confidence_selector.html" with form=revision_form %}
+    <div class="button-row">
+      <button type="submit" name="action" value="save_revision">Save revision and keep working</button>
+      <button class="button-secondary" type="submit" name="action" value="finish_revision">Verify and finish revision</button>
+    </div>
+  </form>
+  {% include "components/hint_panel.html" %}
+</section>
+{% elif current_stage == 'teach_back' %}
+<section class="panel" id="teach-back">
+  <h2>4. Teach-Back</h2>
+  <p>Explain the change in your own words. A transparent rubric checks specificity and the target loop concept; incomplete responses remain at this step.</p>
+  {% if teach_back_attempts %}
+    {% with latest_teach_back=teach_back_attempts|last %}
+      <p class="status"><strong>Previous evaluation:</strong> {{ latest_teach_back.evaluation }} — {{ latest_teach_back.feedback }}</p>
+    {% endwith %}
+  {% endif %}
+  <form method="post" data-disable-on-submit>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="teach_back">
+    {{ teach_back_form.non_field_errors }}
+    {% for field in teach_back_form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}
+    <button type="submit">Save Teach-Back</button>
+  </form>
+</section>
+{% elif current_stage == 'transfer' %}
+<section class="panel" id="transfer-check">
+  <h2>5. Transfer Check</h2>
+  <p><strong>New task:</strong> {{ exercise.transfer_prompt }}</p>
+  <p class="locked-note">AI and all hints are locked for this unassisted check.</p>
+  <form method="post" data-disable-on-submit>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="transfer">
+    {{ transfer_form.non_field_errors }}
+    <label>{{ transfer_form.source_code.label }}{{ transfer_form.source_code }}{{ transfer_form.source_code.errors }}</label>
+    <label>{{ transfer_form.reasoning.label }}{{ transfer_form.reasoning }}{{ transfer_form.reasoning.errors }}</label>
+    {% include "components/confidence_selector.html" with form=transfer_form %}
+    <button type="submit">Submit Transfer Check</button>
+  </form>
+</section>
+{% else %}
+<section class="panel result-panel" id="completed">
+  <h2>Learning session completed</h2>
+  <p><strong>{{ final_result_message }}</strong></p>
+  {% if review_recommendation %}<p><strong>Recommended next step:</strong> {{ review_recommendation }}</p>{% endif %}
+  <p>You can review your evidence below or start the demo again.</p>
+</section>
+{% endif %}
+
+{% if current_stage != 'transfer' %}<section class="panel">
+  <h2>Your saved work</h2>
+  {% if first_attempt %}
+    <details><summary>First attempt</summary><pre><code>{{ first_attempt.answer }}</code></pre><p>{{ first_attempt.reasoning }}</p></details>
+  {% endif %}
+  {% for attempt in attempts %}
+    {% if attempt.revision_number %}
+      <details><summary>Revision {{ attempt.revision_number }}</summary><pre><code>{{ attempt.answer }}</code></pre><p>{{ attempt.reasoning }}</p></details>
+    {% endif %}
+  {% endfor %}
+  {% if not attempts %}<p>No formal attempt has been stored yet.</p>{% endif %}
+</section>{% endif %}
+
+{% if current_stage == 'completed' %}
+<section class="panel evidence-history">
+  <h2>Learning evidence</h2>
+  {% if diagnosis_records %}<h3>Diagnosis</h3>{% for record in diagnosis_records %}<p>{{ record.evidence }}</p>{% endfor %}{% endif %}
+  {% if hint_usage %}<h3>Hints used</h3><ol>{% for hint in hint_usage %}<li>Level {{ hint.level }}: {{ hint.content }}</li>{% endfor %}</ol>{% endif %}
+  {% if teach_back_attempts %}<h3>Teach-Back evaluations</h3><ol>{% for item in teach_back_attempts %}<li>{{ item.evaluation }} — {{ item.feedback }}</li>{% endfor %}</ol>{% endif %}
+  {% if transfer_attempt %}<h3>Transfer Check</h3><p>Status: {{ transfer_attempt.evaluation.status }} — {{ transfer_attempt.evaluation.message }}</p><p>Confidence: {{ transfer_attempt.confidence }}; assistance used: {{ transfer_attempt.used_assistance|yesno:"yes,no" }}</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="panel ai-status">
+  <h2>Support status</h2>
+  <p><strong>AI Coach:</strong> {% if ai_configured and ai_enabled %}Available{% else %}Not configured. The curated workflow remains available.{% endif %}</p>
+  <p><strong>Code runner:</strong> {% if latest_evaluation.status == 'NOT_EXECUTED' %}Not configured. Code is stored but never executed in Django.{% else %}Results are accepted only through the isolated runner gateway.{% endif %}</p>
+  {% if current_stage == 'transfer' %}<p><strong>Hints:</strong> Locked during Transfer Check.</p>{% endif %}
+</section>
+
+<script>
+  document.querySelectorAll('[data-disable-on-submit]').forEach((form) => {
+    form.addEventListener('submit', () => {
+      form.querySelectorAll('button[type="submit"]').forEach((button) => {
+        window.setTimeout(() => { button.disabled = true; }, 0);
+      });
+    });
+  });
+</script>
 {% endblock %}

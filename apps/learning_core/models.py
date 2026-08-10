@@ -146,4 +146,5 @@ class TransferAttempt(models.Model):
     )
     used_assistance = models.BooleanField(default=False)
     passed = models.BooleanField(default=False)
+    evaluation = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

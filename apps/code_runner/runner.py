@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 
+from django.conf import settings
+from django.utils.module_loading import import_string
+
 from .validators import validate_execution_request
 
 
@@ -42,3 +45,18 @@ class UnavailableCodeExecutionGateway:
             status=ExecutionStatus.NOT_EXECUTED,
             message='No isolated execution service is configured; the submission was not run.',
         )
+
+
+def get_code_execution_gateway():
+    gateway_path = getattr(settings, 'CODE_RUNNER_GATEWAY_CLASS', '')
+    if gateway_path:
+        return import_string(gateway_path)()
+    base_url = getattr(settings, 'CODE_RUNNER_URL', '')
+    if base_url:
+        from .http_gateway import HttpCodeExecutionGateway
+
+        return HttpCodeExecutionGateway(
+            base_url=base_url,
+            auth_token=getattr(settings, 'CODE_RUNNER_AUTH_TOKEN', ''),
+        )
+    return UnavailableCodeExecutionGateway()

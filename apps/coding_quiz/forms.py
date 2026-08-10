@@ -22,8 +22,38 @@ class CodingAttemptForm(forms.Form):
     )
 
 
+class DiagnosisForm(forms.Form):
+    diagnosis_answer = forms.CharField(
+        label='Your answer',
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+
+
+class RevisionForm(CodingAttemptForm):
+    pass
+
+
 class TeachBackForm(forms.Form):
-    explanation = forms.CharField(widget=forms.Textarea(attrs={'rows': 6}))
+    original_issue = forms.CharField(
+        label='What was wrong or uncertain in your first attempt?',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    failure_reason = forms.CharField(
+        label='Why did the original approach fail?',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    correction = forms.CharField(
+        label='What did you change, and why?',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    concept = forms.CharField(
+        label='What programming concept did you learn?',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+    prevention = forms.CharField(
+        label='How will you avoid a similar mistake next time?',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
 
 
 class TransferAttemptForm(CodingAttemptForm):
