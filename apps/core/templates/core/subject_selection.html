@@ -1,6 +1,18 @@
 <section class="subject-grid" aria-label="Learning areas">
-  <a class="card" href="{% url 'math_quiz:home' %}"><h2>Mathematics</h2><p>Reason through calculations, formulas, and concepts.</p></a>
-  <a class="card" href="{% url 'coding_quiz:home' %}"><h2>Coding</h2><p>Plan, write, diagnose, revise, teach back, and transfer.</p></a>
-  <a class="card" href="{% url 'lang_quiz:home' %}"><h2>Languages</h2><p>Practice vocabulary, grammar, reading, and written responses.</p></a>
-  <a class="card" href="{% url 'other_quiz:home' %}"><h2>Other Subjects</h2><p>Use rubrics and evidence for broader learning tasks.</p></a>
+  <a class="card" href="{% url 'math_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 4 4 20 20 20"></polyline><polyline points="7 16 11 11 14 14 19 7"></polyline></svg>
+    <h2>Mathematics</h2><p>Reason through calculations, formulas, and concepts.</p>
+  </a>
+  <a class="card" href="{% url 'coding_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 8 4 12 9 16"></polyline><polyline points="15 8 20 12 15 16"></polyline></svg>
+    <h2>Coding</h2><p>Plan, write, diagnose, revise, teach back, and transfer.</p>
+  </a>
+  <a class="card" href="{% url 'lang_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v10H9l-4 4v-4H4z"></path></svg>
+    <h2>Languages</h2><p>Practice vocabulary, grammar, reading, and written responses.</p>
+  </a>
+  <a class="card" href="{% url 'other_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"></rect><rect x="13" y="4" width="7" height="7" rx="1"></rect><rect x="4" y="13" width="7" height="7" rx="1"></rect><rect x="13" y="13" width="7" height="7" rx="1"></rect></svg>
+    <h2>Other Subjects</h2><p>Use rubrics and evidence for broader learning tasks.</p>
+  </a>
 </section>
