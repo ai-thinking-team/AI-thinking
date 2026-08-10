@@ -9,6 +9,7 @@ from apps.learning_core.models import LearnerAttempt
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState
 
+from .models import CodingExercise
 from .services import (
     begin_teach_back,
     begin_transfer_check,
@@ -24,6 +25,16 @@ class CodingRouteTests(TestCase):
     def test_pages_load(self):
         self.assertEqual(self.client.get(reverse('coding_quiz:home')).status_code, 200)
         self.assertEqual(self.client.get(reverse('coding_quiz:exercise')).status_code, 200)
+
+    def test_exercise_is_loaded_from_database(self):
+        response = self.client.get(reverse('coding_quiz:exercise'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CodingExercise.objects.count(), 1)
+
+        exercise = CodingExercise.objects.select_related('activity').get()
+        self.assertEqual(response.context['exercise'], exercise)
+        self.assertContains(response, exercise.activity.title)
 
     def test_complete_first_attempt_is_stored_and_sent_to_gateway(self):
         response = self.client.post(reverse('coding_quiz:exercise'), {

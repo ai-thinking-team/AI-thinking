@@ -14,20 +14,14 @@ def home(request):
 
 
 def exercise(request):
+    demo_exercise = ensure_demo_exercise()
     form = CodingAttemptForm(request.POST or None)
     result = None
-    exercise_data = {
-        'title': 'Double every number',
-        'prompt': 'Write a function that returns a new list containing twice each input number.',
-        'starter_code': 'def double_numbers(numbers):\n    result = []\n    # Add your loop here\n    return result',
-        'public_test_description': 'double_numbers([1, 3]) should return [2, 6].',
-    }
     learning_session = None
 
     if request.method == 'POST' and form.is_valid():
         if request.session.session_key is None:
             request.session.create()
-        demo_exercise = ensure_demo_exercise()
         learning_session, _ = get_demo_session(
             browser_session_key=request.session.session_key,
             exercise=demo_exercise,
@@ -46,7 +40,7 @@ def exercise(request):
 
     return render(request, 'coding_quiz/exercise.html', {
         'form': form,
-        'exercise': exercise_data,
+        'exercise': demo_exercise,
         'execution_result': result,
         'ai_enabled': bool(learning_session and ai_assistance_allowed(learning_session.current_state)),
     })

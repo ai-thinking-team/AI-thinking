@@ -3,11 +3,11 @@
 {% block title %}Coding exercise{% endblock %}
 
 {% block content %}
-<h1>{{ exercise.title }}</h1>
+<h1>{{ exercise.activity.title }}</h1>
 {% include "components/progress_bar.html" %}
 <section class="panel">
   <h2>Understand and plan</h2>
-  <p>{{ exercise.prompt }}</p>
+  <p>{{ exercise.activity.prompt }}</p>
   <p><strong>Public test:</strong> {{ exercise.public_test_description }}</p>
   <pre><code>{{ exercise.starter_code }}</code></pre>
 </section>
