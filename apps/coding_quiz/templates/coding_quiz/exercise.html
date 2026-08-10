@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Coding exercise{% endblock %}
+
+{% block content %}
+<h1>{{ exercise.title }}</h1>
+{% include "components/progress_bar.html" %}
+<section class="panel">
+  <h2>Understand and plan</h2>
+  <p>{{ exercise.prompt }}</p>
+  <p><strong>Public test:</strong> {{ exercise.public_test_description }}</p>
+  <pre><code>{{ exercise.starter_code }}</code></pre>
+</section>
+
+<section class="panel">
+  <h2>Think-First submission</h2>
+  <p>AI support remains locked until code, reasoning, and confidence are stored.</p>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label>{{ form.source_code.label }}{{ form.source_code }}{{ form.source_code.errors }}</label>
+    <label>{{ form.reasoning.label }}{{ form.reasoning }}{{ form.reasoning.errors }}</label>
+    {% include "components/confidence_selector.html" %}
+    <button type="submit">Store first attempt</button>
+  </form>
+</section>
+
+{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status }} — {{ execution_result.message }}</p>{% endif %}
+<section class="subject-grid">
+  <article class="panel"><h2>Diagnosis</h2><p>One focused question examines a possible misconception before direct help.</p></article>
+  <article class="panel"><h2>Revision</h2><p>Each hint must be followed by a new code or reasoning action.</p></article>
+  <article class="panel"><h2>Teach-Back</h2><p>Explain the original error, correction, concept, and prevention strategy.</p></article>
+  <article class="panel"><h2>Transfer Check</h2><p>Solve a parallel Python task with AI and hints disabled.</p></article>
+</section>
+{% include "components/hint_panel.html" %}
+<p><strong>AI support:</strong> {% if ai_enabled %}Available for a focused diagnostic question.{% else %}Locked by the server-controlled workflow.{% endif %}</p>
+{% endblock %}

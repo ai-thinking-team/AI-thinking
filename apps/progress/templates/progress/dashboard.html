@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Learning progress{% endblock %}
+
+{% block content %}
+<h1>Learning progress</h1>
+<p>This dashboard reports evidence from this browser session, not only quiz scores.</p>
+{% if learning_sessions %}
+  <ul class="session-list">
+  {% for session in learning_sessions %}
+    <li><strong>{{ session.topic.subject.name }} — {{ session.topic.name }}</strong>: {{ session.get_current_state_display }}</li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <p>No learning evidence has been recorded in this browser yet.</p>
+{% endif %}
+{% endblock %}

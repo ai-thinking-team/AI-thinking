@@ -25,7 +25,7 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ['SECRET_KEY']
+SECRET_KEY = os.environ.get('SECRET_KEY') or 'unsafe-local-demo-only'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -42,6 +42,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'apps.core.apps.CoreConfig',
+    'apps.ai_engine.apps.AiEngineConfig',
+    'apps.learning_core.apps.LearningCoreConfig',
+    'apps.progress.apps.ProgressConfig',
+    'apps.math_quiz.apps.MathQuizConfig',
+    'apps.coding_quiz.apps.CodingQuizConfig',
+    'apps.code_runner.apps.CodeRunnerConfig',
+    'apps.lang_quiz.apps.LangQuizConfig',
+    'apps.other_quiz.apps.OtherQuizConfig',
 ]
 
 MIDDLEWARE = [
@@ -59,7 +68,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -120,6 +129,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # Email
