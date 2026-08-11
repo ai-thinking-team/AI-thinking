@@ -1,11 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Languages{% endblock %}
+
+{% block title %}言語学習ハブ{% endblock %}
+
 {% block content %}
-<h1>Languages</h1>
-<p>This general scaffold covers vocabulary, grammar, reading comprehension, and written answers.</p>
-<p>Audio and pronunciation are intentionally deferred.</p>
-<div class="subject-grid">
-  <article class="panel"><h2>Diagnose the gap</h2><p>Separate vocabulary, grammar, and context misunderstandings.</p></article>
-  <article class="panel"><h2>Explain and transfer</h2><p>Teach the rule back, then apply it in a new sentence or passage without hints.</p></article>
-</div>
+<section class="language-hero">
+  <div>
+    <span class="hero-badge">AI Language Studio</span>
+    <h1>ことばを、使える知識に。</h1>
+    <p>5つのセクションから学び方を選択。毎回新しい10問と、間違いに合わせて変化する5段階ヒントで学習できます。</p>
+  </div>
+  <a class="diagnostic-button" href="{% url 'lang_quiz:start_quiz' 'diagnostic' %}">
+    <span>現在地をチェック</span>
+    <strong>診断テストを始める →</strong>
+    <small>毎回リセット・10問</small>
+  </a>
+</section>
+
+{% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+<section class="language-section-grid" aria-label="言語学習セクション">
+  <a class="language-section-card vocab-card" href="{% url 'lang_quiz:material_setup' 'vocabulary' %}">
+    <span class="section-icon">Aa</span>
+    <span class="section-kicker">WORDS & MEANING</span>
+    <h2>Vocabulary</h2>
+    <p>教材からの作問、または10問コースを選んで語彙を強化。</p>
+    <span class="card-arrow">選択する →</span>
+  </a>
+  <a class="language-section-card reading-card" href="{% url 'lang_quiz:start_quiz' 'reading' %}">
+    <span class="section-icon">¶</span>
+    <span class="section-kicker">READ & INFER</span>
+    <h2>Reading</h2>
+    <p>短文の要点、因果関係、書かれている根拠を読み解く10問。</p>
+    <span class="card-arrow">ランダム10問 →</span>
+  </a>
+  <a class="language-section-card grammar-card" href="{% url 'lang_quiz:start_quiz' 'grammar' %}">
+    <span class="section-icon">{ }</span>
+    <span class="section-kicker">RULES & PATTERNS</span>
+    <h2>Grammar</h2>
+    <p>時制・比較・関係詞などの文法パターンを毎回違う組み合わせで。</p>
+    <span class="card-arrow">ランダム10問 →</span>
+  </a>
+  <a class="language-section-card myself-card" href="{% url 'lang_quiz:material_setup' 'myself' %}">
+    <span class="section-icon">＋</span>
+    <span class="section-kicker">YOUR MATERIALS</span>
+    <h2>Myself</h2>
+    <p>自分のファイルと作問リクエストから、オリジナル問題を作成。</p>
+    <span class="card-arrow">教材を追加 →</span>
+  </a>
+  <a class="language-section-card missing-card" href="{% url 'lang_quiz:start_quiz' 'missing' %}">
+    <span class="section-icon">↻</span>
+    <span class="section-kicker">RETRY & MASTER</span>
+    <h2>Missing <span class="missing-count">{{ missing_count }}</span></h2>
+    <p>間違えた問題をまとめて復習。正解した問題は自動で消えます。</p>
+    <span class="card-arrow">復習する →</span>
+  </a>
+</section>
+
+<section class="how-it-works">
+  <div><strong>01</strong><span>10問に挑戦</span></div>
+  <div><strong>02</strong><span>誤答でヒント更新</span></div>
+  <div><strong>03</strong><span>解説と次の学習へ</span></div>
+</section>
 {% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}{% if section == 'vocabulary' %}Vocabulary{% else %}Myself{% endif %} - 問題作成{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <a href="{% url 'lang_quiz:home' %}" class="back-link">← 言語学習ハブ</a>
+  <span class="hero-badge">{% if section == 'vocabulary' %}VOCABULARY LAB{% else %}MY MATERIALS{% endif %}</span>
+  <h1>{% if section == 'vocabulary' %}Vocabulary の学び方を選ぶ{% else %}自分の教材から10問を作る{% endif %}</h1>
+  <p>{% if section == 'vocabulary' %}用意されたコース、ランダム問題、自分の教材の3通りから選べます。{% else %}ファイルと作問方法を送ると、その内容を使った問題を作成します。{% endif %}</p>
+</div>
+
+{% if section == 'vocabulary' %}
+<section class="setup-section">
+  <div class="section-heading-row">
+    <div><span class="section-kicker">CURATED COURSES</span><h2>10問コース</h2></div>
+    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'vocabulary' %}">ランダム10問</a>
+  </div>
+  <div class="course-grid">
+    {% for course in courses %}
+      <article class="course-card {% if course.completed %}course-complete{% endif %}">
+        <div class="course-topline"><span>10 QUESTIONS</span>{% if course.completed %}<strong>Complete!</strong>{% endif %}</div>
+        <h3>{{ course.title }}</h3>
+        <p>{{ course.description }}</p>
+        <div class="course-progress"><span style="width: {{ course.score_percent }}%"></span></div>
+        <div class="course-footer"><strong>{{ course.score_percent }}%</strong><a href="{% url 'lang_quiz:start_course' course.slug %}">始める →</a></div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="setup-section upload-studio">
+  <div>
+    <span class="section-kicker">UPLOAD & GENERATE</span>
+    <h2>{% if section == 'vocabulary' %}自分の単語教材から作る{% else %}教材をアップロード{% endif %}</h2>
+    <p>TXT / Markdown / CSV / JSON / PDF。複数ファイルをまとめて選択できます。</p>
+    <p class="micro-note">フォルダを使う場合は、フォルダ内の対象ファイルをまとめて選択してください。</p>
+  </div>
+  <form method="post" enctype="multipart/form-data" action="{% url 'lang_quiz:start_material_quiz' section %}" class="material-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-group">{{ form.files.label_tag }}{{ form.files }}{{ form.files.errors }}</div>
+    <div class="form-group">
+      <label for="folder-files">または教材フォルダ</label>
+      <input id="folder-files" type="file" name="files" multiple webkitdirectory directory accept=".txt,.md,.csv,.json,.pdf">
+    </div>
+    <div class="form-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
+    <button type="submit" class="btn btn-primary btn-lg">10問を作成する →</button>
+  </form>
+</section>
+{% endblock %}

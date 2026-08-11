@@ -1,6 +1,41 @@
 <section class="subject-grid" aria-label="Learning areas">
-  <a class="card" href="{% url 'math_quiz:home' %}"><h2>Mathematics</h2><p>Reason through calculations, formulas, and concepts.</p></a>
-  <a class="card" href="{% url 'coding_quiz:home' %}"><h2>Coding</h2><p>Plan, write, diagnose, revise, teach back, and transfer.</p></a>
-  <a class="card" href="{% url 'lang_quiz:home' %}"><h2>Languages</h2><p>Practice vocabulary, grammar, reading, and written responses.</p></a>
-  <a class="card" href="{% url 'other_quiz:home' %}"><h2>Other Subjects</h2><p>Use rubrics and evidence for broader learning tasks.</p></a>
+  <a class="card {% if 'mathematics' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'math_quiz:home' %}">
+    <div class="card-header">
+      <h2>Mathematics</h2>
+      {% if 'mathematics' in mastered_subjects %}
+        <span class="badge badge-mastered">🌟 Mastered!</span>
+      {% endif %}
+    </div>
+    <p>Reason through calculations, formulas, and concepts.</p>
+  </a>
+
+  <a class="card {% if 'coding' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'coding_quiz:home' %}">
+    <div class="card-header">
+      <h2>Coding</h2>
+      {% if 'coding' in mastered_subjects %}
+        <span class="badge badge-mastered">🌟 Mastered!</span>
+      {% endif %}
+    </div>
+    <p>Plan, write, diagnose, revise, teach back, and transfer.</p>
+  </a>
+
+  <a class="card {% if 'languages' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'lang_quiz:home' %}">
+    <div class="card-header">
+      <h2>Languages (言語)</h2>
+      {% if 'languages' in mastered_subjects %}
+        <span class="badge badge-mastered">🌟 Mastered!</span>
+      {% endif %}
+    </div>
+    <p>Practice vocabulary, grammar, reading, file-based AI quizzes, and transfer checks.</p>
+  </a>
+
+  <a class="card {% if 'other-subjects' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'other_quiz:home' %}">
+    <div class="card-header">
+      <h2>Other Subjects</h2>
+      {% if 'other-subjects' in mastered_subjects %}
+        <span class="badge badge-mastered">🌟 Mastered!</span>
+      {% endif %}
+    </div>
+    <p>Use rubrics and evidence for broader learning tasks.</p>
+  </a>
 </section>

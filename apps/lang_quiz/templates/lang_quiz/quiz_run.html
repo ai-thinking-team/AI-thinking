@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section_label }} - 10問クイズ{% endblock %}
+
+{% block content %}
+<div class="quiz-shell">
+  <header class="quiz-topbar">
+    <a href="{% url 'lang_quiz:home' %}" class="back-link">← 終了して戻る</a>
+    <div class="quiz-title"><span>{{ section_label }}</span>{% if run.course_slug %}<strong>{{ run.course_slug }}</strong>{% endif %}</div>
+    {% if not run.finished %}<div class="quiz-counter">{{ question_number }} <span>/ {{ total_questions }}</span></div>{% endif %}
+  </header>
+
+  {% if run.finished %}
+    <section class="result-summary">
+      <span class="result-eyebrow">SESSION COMPLETE</span>
+      <div class="score-ring" style="--score: {{ score_percent }}"><strong>{{ score_percent }}%</strong><span>{{ run.correct_count }} / {{ total_questions }}</span></div>
+      <h1>10問、おつかれさまでした。</h1>
+      {% if score_percent == 100 %}<div class="complete-banner">Complete!</div>{% endif %}
+      <p>間違えた問題は Missing に保存しました。正解済みの問題は Missing から自動で削除されています。</p>
+      {% if recommendations %}
+        <div class="recommendation-grid">
+          {% for recommendation in recommendations %}
+            <article><span>AI FEEDBACK</span><h3>{{ recommendation.title }}</h3><p>{{ recommendation.detail }}</p></article>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="result-actions">
+        {% if run.mode == 'course' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_course' run.course_slug %}">同じコースに再挑戦</a>
+        {% elif run.mode == 'upload' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">別の教材で10問作る</a>
+        {% else %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_quiz' run.section %}">新しい10問に挑戦</a>
+        {% endif %}
+        <a class="btn btn-secondary btn-lg" href="{% url 'lang_quiz:home' %}">学習ハブへ</a>
+      </div>
+    </section>
+  {% else %}
+    <div class="quiz-progress"><span style="width: {% widthratio question_number total_questions 100 %}%"></span></div>
+    <main class="question-stage">
+      <section class="question-main">
+        <div class="question-meta"><span>QUESTION {{ question_number|stringformat:'02d' }}</span><span>{{ section_label }}</span></div>
+        <h1>{{ question.prompt }}</h1>
+
+        {% if question.resolved %}
+          <div class="answer-result {% if question.is_correct %}answer-correct{% else %}answer-wrong{% endif %}">
+            <span>{% if question.is_correct %}CORRECT{% else %}REVIEW{% endif %}</span>
+            <h2>{{ question.last_feedback }}</h2>
+            <div class="answer-reveal"><small>正解</small><strong>{{ question.answer }}</strong></div>
+            <h3>解説</h3><p>{{ question.explanation }}</p>
+            <h3>次に取り組むこと</h3><p>{{ question.next_step }}</p>
+          </div>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="next"><button class="btn btn-primary btn-lg btn-full" type="submit">{% if question_number == total_questions %}結果を見る{% else %}次の問題へ →{% endif %}</button></form>
+        {% else %}
+          {% if question.last_feedback %}<div class="alert alert-warning">{{ question.last_feedback }}</div>{% endif %}
+          <form method="post" class="quiz-answer-form">
+            {% csrf_token %}<input type="hidden" name="action" value="answer">
+            {{ form.answer.label_tag }}{{ form.answer }}{{ form.answer.errors }}
+            <button type="submit" class="btn btn-primary btn-lg">回答する</button>
+          </form>
+        {% endif %}
+      </section>
+
+      <aside class="smart-hint">
+        <div class="hint-heading"><span>SMART HINT</span><strong>LEVEL {{ question.hint_level }} / 5</strong></div>
+        <div class="hint-levels">{% for hint in question.hints %}<i class="{% if forloop.counter <= question.hint_level %}active{% endif %}"></i>{% endfor %}</div>
+        <p>{{ question.hints|slice:question.hint_level|last }}</p>
+        <small>間違えるたびにヒントが具体的になります。</small>
+        {% if question.hint_level == 5 and not question.resolved %}
+          <form method="post" class="give-up-form">{% csrf_token %}<input type="hidden" name="action" value="give_up"><button type="submit" class="text-button">レベル5でも分からない</button></form>
+        {% endif %}
+      </aside>
+    </main>
+  {% endif %}
+</div>
+{% endblock %}
