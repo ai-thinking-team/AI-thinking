@@ -101,6 +101,14 @@ a { color: var(--color-primary); }
   margin-bottom: 1.25rem;
 }
 .card p, .panel p { color: var(--color-muted-fg); margin-bottom: 0; font-size: .92rem; }
+.card-progress {
+  margin: .6rem 0 0;
+  padding-top: .6rem;
+  border-top: 1px solid var(--color-border);
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
 
 label { display: block; margin: 1rem 0; font-weight: 600; }
 input, textarea, select {
@@ -145,6 +153,27 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .workflow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.25rem; }
 .hint-panel { margin-top: 1.5rem; padding: 1rem; border-left: .3rem solid var(--color-accent); background: #fff7ea; }
 .status { padding: 1rem; background: var(--color-muted); border-radius: .5rem; }
+
+.topic-list { list-style: none; padding: 0; margin: 0; }
+.topic-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.topic-list li:last-child { border-bottom: none; }
+.topic-list li strong { flex: 1; }
+.topic-list li span { color: var(--color-muted-fg); font-size: .88rem; }
+.review-flag {
+  background: #fff3e0;
+  color: var(--color-accent);
+  font-size: .78rem;
+  font-weight: 700;
+  padding: .25rem .6rem;
+  border-radius: 999px;
+}
 
 /* Home page: split hero panel (mirrors design_prototype/home-variants/variant-14-indigo-block.html) */
 .home-split {

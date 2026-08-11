@@ -2,15 +2,27 @@
 
 {% block title %}Learning progress{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Progress" subject_icon="progress" %}{% endblock %}
+
 {% block content %}
 <h1>Learning progress</h1>
 <p>This dashboard reports evidence from this browser session, not only quiz scores.</p>
-{% if learning_sessions %}
-  <ul class="session-list">
-  {% for session in learning_sessions %}
-    <li><strong>{{ session.topic.subject.name }} — {{ session.topic.name }}</strong>: {{ session.get_current_state_display }}</li>
+
+{% if subjects %}
+  {% for entry in subjects %}
+  <section class="panel">
+    <h2>{{ entry.subject.name }}</h2>
+    <ul class="topic-list">
+      {% for topic in entry.topics %}
+        <li>
+          <strong>{{ topic.name }}</strong>
+          <span>{{ topic.state_label }}</span>
+          {% if topic.is_review_item %}<span class="review-flag">Needs review</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
   {% endfor %}
-  </ul>
 {% else %}
   <p>No learning evidence has been recorded in this browser yet.</p>
 {% endif %}
