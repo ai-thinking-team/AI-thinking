@@ -289,3 +289,23 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .show-more-link { display: inline-block; margin-top: .8rem; font-size: .85rem; font-weight: 600; color: var(--color-primary); text-decoration: none; }
 .show-more-link:hover { text-decoration: underline; }
 
+.empty-state {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: .9rem;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+.empty-state h2 { margin: 0 0 .5rem; }
+.empty-state p { color: var(--color-muted-fg); margin: 0 0 1.5rem; }
+.empty-state .button-link {
+  display: inline-block;
+  padding: .7rem 1.3rem;
+  border-radius: .4rem;
+  background: var(--color-primary);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+.empty-state .button-link:hover { background: var(--color-primary-hover); }
+
