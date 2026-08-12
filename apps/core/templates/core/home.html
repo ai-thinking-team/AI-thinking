@@ -2,11 +2,22 @@
 
 {% block title %}Choose a learning area{% endblock %}
 
+{% block navbar %}{% endblock %}
+
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">Local learning demo</p>
-  <h1>Think first. Use support deliberately. Prove what you learned.</h1>
-  <p>Choose an area to begin. No account is required; this demo uses your browser session.</p>
-</section>
-{% include "core/subject_selection.html" %}
+<div class="home-split">
+  <div class="home-bg-block">
+    <span class="home-orb home-orb-1"></span>
+    <span class="home-orb home-orb-2"></span>
+  </div>
+  <div class="home-main">
+    <div class="home-hero-text">
+      <h1>The AI tutor that makes you think before it helps.</h1>
+      <p>Answer first, get a hint only when you're stuck, then prove you really understood — across Math, Coding, Languages, and more.</p>
+    </div>
+    <div class="home-cards-panel">
+      {% include "core/subject_selection.html" %}
+    </div>
+  </div>
+</div>
 {% endblock %}
