@@ -8,10 +8,7 @@
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/coding.html" %}</svg>
     <h2>Coding</h2><p>Write, diagnose, transfer.</p>
     <p class="card-progress">
-      {% if progress_summary.coding.mastered %}{{ progress_summary.coding.mastered }} mastered
-      {% elif progress_summary.coding.needs_review %}{{ progress_summary.coding.needs_review }} to review
-      {% elif progress_summary.coding.in_progress %}In progress
-      {% else %}Not started yet{% endif %}
+      {% if progress_summary.coding %}{{ progress_summary.coding.badge }}{% else %}Not started yet{% endif %}
     </p>
   </a>
   <a class="card" href="{% url 'lang_quiz:home' %}">
@@ -25,3 +22,20 @@
     <p class="card-progress">Coming soon</p>
   </a>
 </section>
+
+<div class="overall-summary style-plain">
+  <div class="summary-top">
+    <span class="summary-title">{{ overall_progress.mastered|add:overall_progress.needs_review|add:overall_progress.in_progress }} topics started</span>
+    <a href="{% url 'progress:dashboard' %}">View progress →</a>
+  </div>
+  <div class="stack-track">
+    <span style="flex-grow: {{ overall_progress.mastered }}; background: var(--color-success)"></span>
+    <span style="flex-grow: {{ overall_progress.needs_review }}; background: var(--color-accent)"></span>
+    <span style="flex-grow: {{ overall_progress.in_progress }}; background: var(--color-primary)"></span>
+  </div>
+  <div class="stack-legend">
+    <span><i style="background: var(--color-success)"></i>{{ overall_progress.mastered }} Mastered</span>
+    <span><i style="background: var(--color-accent)"></i>{{ overall_progress.needs_review }} Needs review</span>
+    <span><i style="background: var(--color-primary)"></i>{{ overall_progress.in_progress }} In progress</span>
+  </div>
+</div>

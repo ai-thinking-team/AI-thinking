@@ -8,21 +8,21 @@
 <h1>Learning progress</h1>
 <p>This dashboard reports evidence from this browser session, not only quiz scores.</p>
 
-{% if subjects %}
-  {% for entry in subjects %}
-  <section class="panel">
-    <h2>{{ entry.subject.name }}</h2>
-    <ul class="topic-list">
-      {% for topic in entry.topics %}
-        <li>
-          <strong>{{ topic.name }}</strong>
-          <span>{{ topic.state_label }}</span>
-          {% if topic.is_review_item %}<span class="review-flag">Needs review</span>{% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endfor %}
+{% if focused_subject %}
+  <a class="back-link" href="{% url 'progress:dashboard' %}">← All subjects</a>
+  {% include "progress/_subject_card.html" with entry=focused_subject topics=focused_subject.topics focused=True %}
+{% elif subjects %}
+  <div class="overall-summary style-plain stats-row">
+    <div class="stat"><div class="num">{{ overall_progress.mastered }}</div><div class="label">Mastered</div></div>
+    <div class="stat"><div class="num">{{ overall_progress.needs_review }}</div><div class="label">Needs review</div></div>
+    <div class="stat"><div class="num">{{ overall_progress.in_progress }}</div><div class="label">In progress</div></div>
+  </div>
+
+  <div class="progress-grid">
+    {% for entry in subjects %}
+      {% include "progress/_subject_card.html" with entry=entry topics=entry.preview_topics focused=False %}
+    {% endfor %}
+  </div>
 {% else %}
   <p>No learning evidence has been recorded in this browser yet.</p>
 {% endif %}
