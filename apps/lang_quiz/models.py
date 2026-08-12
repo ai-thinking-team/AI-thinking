@@ -19,6 +19,7 @@ class LanguageQuestion(models.Model):
         blank=True,
     )
     prompt = models.TextField()
+    title_ja = models.CharField(max_length=255, blank=True)  # Japanese title for UI headings
     question_type = models.CharField(max_length=20, choices=QuestionType.choices)
     reference_answer = models.TextField(blank=True)
     rubric = models.JSONField(default=dict, blank=True)

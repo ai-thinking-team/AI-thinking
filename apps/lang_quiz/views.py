@@ -78,7 +78,7 @@ def start_quiz(request, section):
     if section == 'missing':
         questions = missing_questions(session_key)
         if not questions:
-            messages.info(request, 'Missing に復習する問題はありません。')
+            messages.info(request, 'You have no questions to review in Missing.')
             return redirect('lang_quiz:home')
     else:
         questions = generate_section_questions(section, count=10)
@@ -98,14 +98,18 @@ def start_course(request, course_slug):
 
 
 def start_material_quiz(request, section):
-    if section not in {'myself', 'vocabulary'}:
+    """Handle file upload for reading/grammar/vocabulary/myself sections.
+
+    When section is 'reading': generates 10 reading comprehension questions from the uploaded file.
+    When section is 'grammar': generates 10 grammar questions from the uploaded file.
+    """
+    if section not in {'myself', 'vocabulary', 'reading', 'grammar'}:
         raise Http404('Unknown upload section')
     if request.method != 'POST':
         return redirect('lang_quiz:material_setup', section=section)
     form = MaterialQuizForm(request.POST, request.FILES)
     if not form.is_valid():
-        template = 'lang_quiz/material_setup.html'
-        return render(request, template, {'form': form, 'section': section}, status=400)
+        return render(request, 'lang_quiz/material_setup.html', {'form': form, 'section': section}, status=400)
     try:
         questions, source_name = generate_uploaded_questions(
             form.cleaned_data['files'],
@@ -127,7 +131,7 @@ def start_material_quiz(request, section):
 
 
 def material_setup(request, section):
-    if section not in {'myself', 'vocabulary'}:
+    if section not in {'myself', 'vocabulary', 'reading', 'grammar'}:
         raise Http404('Unknown upload section')
     return render(request, 'lang_quiz/material_setup.html', {
         'form': MaterialQuizForm(),
@@ -163,19 +167,22 @@ def quiz_run(request, run_id):
                 if correct:
                     question['resolved'] = True
                     question['is_correct'] = True
-                    question['last_feedback'] = '正解です！'
+                    question['last_feedback'] = 'Correct!'
                     run.correct_count += 1
                     resolve_missing(session_key, question)
                     update_course_progress(session_key, run.course_slug, question)
                 elif question.get('hint_level', 1) >= 5:
                     question['resolved'] = True
                     question['is_correct'] = False
-                    question['last_feedback'] = 'レベル5まで取り組んだため、この問題は不正解として Missing に保存しました。'
+                    question['last_feedback'] = (
+                        'You reached hint level 5. '
+                        'This question has been saved to Missing for later review.'
+                    )
                     remember_missing(session_key, question)
                 else:
                     question['attempt_count'] = question.get('attempt_count', 0) + 1
                     question['hint_level'] = question.get('hint_level', 1) + 1
-                    question['last_feedback'] = f'まだ正解ではありません。ヒントをレベル{question["hint_level"]}に更新しました。'
+                    question['last_feedback'] = f'Not quite. Hint updated to level {question["hint_level"]}.'
                 questions[run.current_index] = question
                 run.questions = questions
                 run.save()
@@ -197,8 +204,10 @@ def quiz_run(request, run_id):
 
 
 def exercise(request):
+    """Demo exercise view following the full Think-First → Evaluate → Hint → Teach-Back → Transfer workflow."""
     question = ensure_demo_question()
     evaluation = None
+    recommended_courses = []
 
     if request.session.session_key is None:
         request.session.create()
@@ -211,100 +220,21 @@ def exercise(request):
     if learning_session.current_state == WorkflowState.TOPIC_SELECTED:
         transition_session(learning_session, WorkflowState.DIAGNOSTIC_QUIZ)
 
+    action = request.POST.get('action') if request.method == 'POST' else None
     form = LanguageAttemptForm(request.POST or None)
-    teach_back_form = TeachBackForm(request.POST or None if request.POST and request.POST.get('action') == 'submit_teach_back' else None)
-    transfer_form = TransferAttemptForm(request.POST or None if request.POST and request.POST.get('action') == 'submit_transfer' else None)
-    file_form = FileUploadForm(request.POST or None, request.FILES or None if request.POST and request.POST.get('action') == 'upload_file' else None)
+    teach_back_form = TeachBackForm(
+        request.POST or None if action == 'submit_teach_back' else None
+    )
+    transfer_form = TransferAttemptForm(
+        request.POST or None if action == 'submit_transfer' else None
+    )
+    file_form = FileUploadForm(
+        request.POST or None,
+        request.FILES or None if action == 'upload_file' else None,
+    )
 
     if request.method == 'POST':
-        action = request.POST.get('action', 'submit_attempt')
-
-        if action == 'upload_file':
-            if file_form.is_valid():
-                created = create_questions_from_file_upload(file_form.cleaned_data['file'])
-                if created:
-                    messages.success(request, f'取り込んだファイルから AI が {len(created)} 件の単元確認問題を生成しました！')
-                    learning_session.current_state = WorkflowState.DIAGNOSTIC_QUIZ
-                    learning_session.save()
-                    return redirect('lang_quiz:exercise')
-
-        elif action == 'reset_session':
-            learning_session.current_state = WorkflowState.DIAGNOSTIC_QUIZ
-            learning_session.score_percent = 0
-            learning_session.mastered = False
-            learning_session.save()
-            messages.success(request, 'セッションをリセットし、診断クイズを再開しました。')
-            return redirect('lang_quiz:exercise')
-
-        elif action == 'request_hint':
-            try:
-                hint = request_curated_hint(learning_session=learning_session)
-                messages.info(request, f'ヒント Level {hint.level}: {hint.content}')
-            except Exception as exc:
-                messages.error(request, str(exc))
-
-        elif action == 'submit_teach_back':
-            if teach_back_form.is_valid():
-                try:
-                    tb_attempt = submit_teach_back(
-                        learning_session=learning_session,
-                        response=teach_back_form.cleaned_data['response'],
-                    )
-                    if tb_attempt.evaluation == 'CLEAR_UNDERSTANDING':
-                        begin_transfer_check(
-                            learning_session=learning_session,
-                            teach_back_evaluation='CLEAR_UNDERSTANDING',
-                        )
-                        messages.success(request, '自分の言葉での説明（Teach-Back）が確認されました！応用問題（Transfer Check）に進みます。')
-                    else:
-                        messages.warning(request, '説明がやや不十分です。より詳しく概念を説明してください。')
-                except ValidationError as exc:
-                    teach_back_form.add_error(None, exc)
-                except Exception as exc:
-                    messages.error(request, str(exc))
-
-        elif action == 'submit_transfer':
-            if transfer_form.is_valid():
-                try:
-                    raw_answer = transfer_form.cleaned_data['answer'].strip().lower()
-                    ref_answer = (question.reference_answer or 'accept').strip().lower()
-                    passed = raw_answer == ref_answer or ref_answer in raw_answer
-
-                    submit_transfer_attempt(
-                        learning_session=learning_session,
-                        question=question,
-                        response=transfer_form.cleaned_data['answer'],
-                        reasoning=transfer_form.cleaned_data['reasoning'],
-                        confidence=transfer_form.cleaned_data['confidence'],
-                        passed=passed,
-                    )
-
-                    target_state = complete_transfer_check(
-                        learning_session=learning_session,
-                        original_passed=True,
-                        teach_back_clear=True,
-                        transfer_passed=passed,
-                        used_assistance=False,
-                        misconception_repeated=False,
-                    )
-                    if target_state == WorkflowState.MASTERED:
-                        learning_session.score_percent = 100
-                        learning_session.mastered = True
-                        learning_session.correct_count = 1
-                        learning_session.total_questions = 1
-                        learning_session.save()
-                        messages.success(request, 'おめでとうございます！正答率 100% でこのコースを「Mastered! (習得済み)」として完了しました。')
-                    else:
-                        learning_session.score_percent = 50
-                        learning_session.mastered = False
-                        learning_session.save()
-                        messages.warning(request, '応用問題の検証結果に基づき、「Needs Review（復習が必要）」として記録されました。')
-                except ValidationError as exc:
-                    transfer_form.add_error(None, exc)
-                except Exception as exc:
-                    messages.error(request, str(exc))
-
-        else:
+        if action in (None, 'submit_answer'):
             if form.is_valid():
                 try:
                     if learning_session.current_state == WorkflowState.DIAGNOSTIC_QUIZ:
@@ -321,15 +251,110 @@ def exercise(request):
                         )
                     if evaluation:
                         if evaluation.get('is_correct'):
-                            messages.success(request, '正解です！Teach-Back（自分の言葉で説明する）段階に進みます。')
+                            messages.success(
+                                request,
+                                'Correct! Moving on to the Teach-Back stage — explain the concept in your own words.',
+                            )
                         else:
-                            gap = evaluation.get("gap_type")
-                            messages.info(request, f'誤り検出: {gap} — ヒントを活用して再回答してください。')
+                            gap = evaluation.get('gap_type', 'unknown')
+                            messages.info(request, f'Error detected: {gap} — use the hints and try again.')
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 except Exception as exc:
                     messages.error(request, str(exc))
 
+        elif action == 'request_hint':
+            try:
+                request_curated_hint(learning_session=learning_session)
+            except Exception as exc:
+                messages.error(request, str(exc))
+
+        elif action == 'submit_teach_back':
+            if teach_back_form.is_valid():
+                try:
+                    teach_back_attempt = submit_teach_back(
+                        learning_session=learning_session,
+                        response=teach_back_form.cleaned_data['response'],
+                    )
+                    if teach_back_attempt.evaluation == 'CLEAR_UNDERSTANDING':
+                        messages.success(request, 'Great explanation! Proceeding to the Transfer Task.')
+                        begin_transfer_check(
+                            learning_session=learning_session,
+                            original_passed=True,
+                        )
+                    else:
+                        messages.warning(request, 'Provide more detail in your explanation to demonstrate understanding.')
+                except Exception as exc:
+                    messages.error(request, str(exc))
+
+        elif action == 'submit_transfer':
+            if transfer_form.is_valid():
+                try:
+                    attempt = submit_transfer_attempt(
+                        learning_session=learning_session,
+                        question=question,
+                        **transfer_form.cleaned_data,
+                    )
+                    passed = attempt.passed
+                    complete_transfer_check(
+                        learning_session=learning_session,
+                        original_passed=True,
+                        teach_back_clear=True,
+                        transfer_passed=passed,
+                        used_assistance=False,
+                        misconception_repeated=False,
+                    )
+                    if passed:
+                        messages.success(request, 'Excellent! Concept marked as Mastered.')
+                    else:
+                        messages.warning(request, 'Keep practising — this concept has been marked for review.')
+                except Exception as exc:
+                    messages.error(request, str(exc))
+
+    # Build recommended courses based on the latest evaluation gap type
+    if evaluation:
+        gap = evaluation.get('gap_type')
+        if gap == 'grammar_misconception':
+            recommended_courses = [
+                {
+                    'title': 'Grammar Error Patterns — Intensive Review',
+                    'tag': 'Needs Review: Grammar Gap',
+                    'description': 'Focused drills on tense, passive voice, and relative clauses.',
+                },
+                {
+                    'title': 'Sentence Structure Essentials',
+                    'tag': 'Needs Review: Grammar Gap',
+                    'description': 'Step-by-step exercises on subject-verb agreement and clause building.',
+                },
+            ]
+        elif gap == 'context_misunderstanding':
+            recommended_courses = [
+                {
+                    'title': 'Context Clues and Pronoun Reference',
+                    'tag': 'Needs Review: Context Gap',
+                    'description': 'Practice tracing pronoun references and following discourse flow.',
+                },
+                {
+                    'title': 'Paragraph Reading Fundamentals',
+                    'tag': 'Needs Review: Context Gap',
+                    'description': 'Identify topic sentences and key supporting details quickly.',
+                },
+            ]
+        else:
+            recommended_courses = [
+                {
+                    'title': 'Core Vocabulary in Context',
+                    'tag': 'Needs Review: Vocabulary Gap',
+                    'description': 'Review commonly confused words with targeted example sentences.',
+                },
+                {
+                    'title': 'Best-Word Selection Training',
+                    'tag': 'Needs Review: Vocabulary Gap',
+                    'description': 'Fill-in-the-blank exercises focused on contextual word choice.',
+                },
+            ]
+
+    # Gather hint history for the latest attempt
     recent_hints = []
     active_hint_level = 0
     if learning_session:
@@ -340,31 +365,6 @@ def exercise(request):
                 active_hint_level = recent_hints[-1].level
             if not evaluation and latest_attempt.evaluation:
                 evaluation = latest_attempt.evaluation
-
-    recommended_courses = []
-    if learning_session.current_state == WorkflowState.MASTERED:
-        recommended_courses = [
-            {'title': '【発展コース 1】 高度な文脈表現とビジネス英語 (Advanced Business Vocabulary)', 'tag': 'Mastered!おすすめ', 'description': '実践的なビジネストラブルや専門用語の使い分けを学ぶ上級単元。'},
-            {'title': '【発展コース 2】 英語イディオム・慣用句コロケーションマスター', 'tag': 'Mastered!おすすめ', 'description': 'ネイティブが頻用する慣用句や句動詞のニュアンスを深く理解する単元。'},
-            {'title': '【発展コース 3】 実践長文読解と筆者の意図推測', 'tag': 'Mastered!おすすめ', 'description': '長文の論理構造を正確に捉え、行間を読み解く応用読解コース。'},
-        ]
-    elif learning_session.current_state in (WorkflowState.NEEDS_REVIEW, WorkflowState.GUIDED_REVISION):
-        gap = evaluation.get('gap_type') if evaluation else 'vocabulary_gap'
-        if gap == 'grammar_misconception':
-            recommended_courses = [
-                {'title': '【復習コース 1】 英文法ルールの基礎総点検コース', 'tag': '要復習: 文法ギャップ', 'description': '品詞・時制・関係代詞の基本原則を振り返り基礎を固めるおすすめ単元。'},
-                {'title': '【復習コース 2】 構文パターンと主語・動詞の対応集中講座', 'tag': '要復習: 文法ギャップ', 'description': '文構造の読み違いを防ぐ基本構文チェックコース。'},
-            ]
-        elif gap == 'context_misunderstanding':
-            recommended_courses = [
-                {'title': '【復習コース 1】 文脈捉え直しと指示語・代名詞確認コース', 'tag': '要復習: 文脈理解ギャップ', 'description': '前後の文章の流れや指示語が指す具体的な内容を追うステップ講座。'},
-                {'title': '【復習コース 2】 パラグラフリーディング基礎入門', 'tag': '要復習: 文脈理解ギャップ', 'description': '段落ごとのトピック文と要点を素早く把握するトレーニング。'},
-            ]
-        else:
-            recommended_courses = [
-                {'title': '【復習コース 1】 必須英単語・類義語のニュアンス使い分けコース', 'tag': '要復習: 語彙ギャップ', 'description': '混同しやすい重要単語の定義と例文を丁寧に見直す単元。'},
-                {'title': '【復習コース 2】 文脈別ベスト単語選択トレーニング', 'tag': '要復習: 語彙ギャップ', 'description': '空欄前後の状況にぴったりの単語を選ぶ集中穴埋め問題。'},
-            ]
 
     return render(request, 'lang_quiz/exercise.html', {
         'form': form,

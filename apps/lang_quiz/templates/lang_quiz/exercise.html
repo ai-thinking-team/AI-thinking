@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}言語学習 - 診断クイズ & 9段階学習プロセス{% endblock %}
+{% block title %}Language Learning - Diagnostic Quiz &amp; 9-Stage Process{% endblock %}
 
 {% block content %}
 <div class="exercise-header">
-  <a href="{% url 'lang_quiz:home' %}" class="back-link">&larr; 言語学習トップへ</a>
-  <h1>言語 (Languages) 診断クイズ</h1>
-  <p class="subtitle">トピック: <strong>{{ question.activity.concept.topic.name }}</strong> / 概念: <strong>{{ question.activity.concept.name }}</strong></p>
+  <a href="{% url 'lang_quiz:home' %}" class="back-link">&larr; Back to Language Hub</a>
+  <h1>Languages — Diagnostic Quiz</h1>
+  <p class="subtitle">Topic: <strong>{{ question.activity.concept.topic.name }}</strong> / Concept: <strong>{{ question.activity.concept.name }}</strong></p>
 </div>
 
 <!-- Workflow State Bar -->
 <div class="workflow-stepper">
-  <div class="step-pill {% if learning_session.current_state == 'DIAGNOSTIC_QUIZ' or learning_session.current_state == 'FIRST_ATTEMPT' %}active{% endif %}">1. 診断クイズ・自力解答</div>
-  <div class="step-pill {% if learning_session.current_state == 'RESPONSE_EVALUATION' or learning_session.current_state == 'DIAGNOSIS' or learning_session.current_state == 'GUIDED_REVISION' %}active{% endif %}">2. 誤り評価 & ヒント支援</div>
-  <div class="step-pill {% if learning_session.current_state == 'TEACH_BACK' %}active{% endif %}">3. Teach-Back (自分の言葉で説明)</div>
-  <div class="step-pill {% if learning_session.current_state == 'TRANSFER_TASK' %}active{% endif %}">4. 応用問題 (Transfer Check)</div>
-  <div class="step-pill {% if learning_session.current_state == 'MASTERED' or learning_session.current_state == 'NEEDS_REVIEW' %}completed{% endif %}">5. 学習進捗更新</div>
+  <div class="step-pill {% if learning_session.current_state == 'DIAGNOSTIC_QUIZ' or learning_session.current_state == 'FIRST_ATTEMPT' %}active{% endif %}">1. Diagnostic Quiz &amp; Self-Answer</div>
+  <div class="step-pill {% if learning_session.current_state == 'RESPONSE_EVALUATION' or learning_session.current_state == 'DIAGNOSIS' or learning_session.current_state == 'GUIDED_REVISION' %}active{% endif %}">2. Error Evaluation &amp; Guided Hints</div>
+  <div class="step-pill {% if learning_session.current_state == 'TEACH_BACK' %}active{% endif %}">3. Teach-Back (Explain in your own words)</div>
+  <div class="step-pill {% if learning_session.current_state == 'TRANSFER_TASK' %}active{% endif %}">4. Transfer Check (Apply the knowledge)</div>
+  <div class="step-pill {% if learning_session.current_state == 'MASTERED' or learning_session.current_state == 'NEEDS_REVIEW' %}completed{% endif %}">5. Progress Update</div>
 </div>
 
 {% if messages %}
@@ -32,26 +32,26 @@
     
     {% if learning_session.current_state == 'MASTERED' or learning_session.current_state == 'NEEDS_REVIEW' %}
       <section class="panel result-card {% if learning_session.current_state == 'MASTERED' %}mastered-bg{% else %}needs-review-bg{% endif %}">
-        <h2>🎉 学習完了</h2>
+        <h2>🎉 Learning Complete</h2>
         {% if learning_session.current_state == 'MASTERED' %}
-          <div class="badge badge-success">🌟 Status: Mastered! (正答率 100% 習得済み)</div>
-          <p>素晴らしい！問題の正解、概念の Teach-Back 説明、およびサポートなしの応用問題を全てクリアしました。</p>
+          <div class="badge badge-success">🌟 Status: Mastered! (100% — fully acquired)</div>
+          <p>Excellent! You answered the question correctly, explained the concept in Teach-Back, and completed the transfer task without assistance.</p>
         {% else %}
-          <div class="badge badge-warning">⚠️ Status: Needs Review (復習が必要)</div>
-          <p>応用問題の検証結果に基づき、復習が推奨されます。再度挑戦して理解を深めましょう。</p>
+          <div class="badge badge-warning">⚠️ Status: Needs Review</div>
+          <p>Based on the transfer check, a review is recommended. Try again to deepen your understanding.</p>
         {% endif %}
         
         <form method="post" style="margin-top: 1.5rem;">
           {% csrf_token %}
           <input type="hidden" name="action" value="reset_session">
-          <button type="submit" class="btn btn-secondary">もう一度診断クイズを受ける</button>
+          <button type="submit" class="btn btn-secondary">Take the diagnostic quiz again</button>
         </form>
       </section>
 
       {% if recommended_courses %}
         <section class="panel recommendations-section" style="margin-top: 1.5rem;">
-          <h3>🎯 次のおすすめ関連コース提案 (Adaptive Recommendations)</h3>
-          <p class="small-text">あなたの回答結果に基づき、AIが最適な学習コースを提案しています。</p>
+          <h3>🎯 Recommended Next Courses (Adaptive Recommendations)</h3>
+          <p class="small-text">AI-selected courses based on your performance in this session.</p>
           <div class="grid-container" style="margin-top: 1rem;">
             {% for rec in recommended_courses %}
               <div class="process-card">
@@ -67,12 +67,12 @@
     {% elif learning_session.current_state == 'TRANSFER_TASK' %}
       <!-- Step 8: Transfer Check -->
       <section class="panel">
-        <div class="section-tag">ステップ 8: 応用問題 (Transfer Check)</div>
-        <h2>応用問題に取り組む</h2>
-        <p class="instruction-text">AIサポートやヒントを使用せずに、類似の応用問題に回答してください。</p>
+        <div class="section-tag">Step 8: Transfer Check</div>
+        <h2>Apply your knowledge</h2>
+        <p class="instruction-text">Answer a similar question without AI support or hints.</p>
         
         <div class="question-box">
-          <span class="question-type">応用問題 (Unassisted)</span>
+          <span class="question-type">Transfer Task (Unassisted)</span>
           <p class="question-prompt">{{ question.transfer_prompt }}</p>
         </div>
 
@@ -99,20 +99,20 @@
             {{ transfer_form.confidence.errors }}
           </div>
 
-          <button type="submit" class="btn btn-primary">応用問題の回答を提出</button>
+          <button type="submit" class="btn btn-primary">Submit transfer answer</button>
         </form>
       </section>
 
     {% elif learning_session.current_state == 'TEACH_BACK' %}
       <!-- Step 7: Teach-Back -->
       <section class="panel">
-        <div class="section-tag">ステップ 7: Teach-Back (自分の言葉で説明)</div>
-        <h2>学んだ概念を自分の言葉で説明する</h2>
-        <p class="instruction-text">問題に正解しました！暗記ではなく本当に理解しているか確認するため、解き方や根拠となるルールを自分の言葉で説明してください。</p>
+        <div class="section-tag">Step 7: Teach-Back (Explain in your own words)</div>
+        <h2>Explain what you learned in your own words</h2>
+        <p class="instruction-text">You answered correctly! To confirm genuine understanding (not just memorisation), explain the solution and the underlying rule in your own words.</p>
         
         <div class="question-box">
-          <p><strong>元の問題:</strong> {{ question.prompt }}</p>
-          <p><strong>正解:</strong> <code>{{ question.reference_answer }}</code></p>
+          <p><strong>Original question:</strong> {{ question.prompt }}</p>
+          <p><strong>Correct answer:</strong> <code>{{ question.reference_answer }}</code></p>
         </div>
 
         <form method="post" class="attempt-form">
@@ -126,7 +126,7 @@
             {{ teach_back_form.response.errors }}
           </div>
 
-          <button type="submit" class="btn btn-primary">Teach-Back 説明を提出</button>
+          <button type="submit" class="btn btn-primary">Submit Teach-Back explanation</button>
         </form>
       </section>
 
@@ -135,12 +135,12 @@
       <section class="panel">
         <div class="section-tag">
           {% if learning_session.current_state == 'GUIDED_REVISION' %}
-            ステップ 6: 回答の修正 (Guided Revision)
+            Step 6: Revise your answer (Guided Revision)
           {% else %}
-            ステップ 3: AIのサポートを受ける前に自分で考える (Think-First Gate)
+            Step 3: Think it through before AI support (Think-First Gate)
           {% endif %}
         </div>
-        <h2>診断問題</h2>
+        <h2>Diagnostic Question</h2>
         
         <div class="question-box">
           <span class="question-type">{{ question.get_question_type_display }}</span>
@@ -149,8 +149,8 @@
 
         {% if evaluation and not evaluation.is_correct %}
           <div class="diagnosis-banner">
-            <h3>🔍 誤りの自動診断結果</h3>
-            <p>検出された誤り分類: <strong>{{ evaluation.gap_type }}</strong></p>
+            <h3>🔍 Automatic Error Diagnosis</h3>
+            <p>Detected error type: <strong>{{ evaluation.gap_type }}</strong></p>
             <p class="small-text">{{ evaluation.explanation }}</p>
           </div>
         {% endif %}
@@ -180,9 +180,9 @@
 
           <button type="submit" class="btn btn-primary">
             {% if learning_session.current_state == 'GUIDED_REVISION' %}
-              修正回答を提出
+              Submit revised answer
             {% else %}
-              自力回答を提出 (Think-First)
+              Submit my answer (Think-First)
             {% endif %}
           </button>
         </form>
@@ -191,8 +191,8 @@
 
     <!-- External File Upload Section -->
     <section class="panel file-upload-panel" style="margin-top: 1.5rem;">
-      <h3>📁 外部ファイルを取り込んで問題自動作成 (AI File Import)</h3>
-      <p class="small-text">教材テキスト (.txt, .md, .json, .csv, .pdf) をアップロードすると、AIが内容を分析して診断問題をランダム生成します。</p>
+      <h3>📁 Upload a file to auto-generate questions (AI File Import)</h3>
+      <p class="small-text">Upload a material file (.txt, .md, .json, .csv, .pdf) and AI will analyse the content to generate diagnostic questions.</p>
       
       <form method="post" enctype="multipart/form-data" class="file-form" style="margin-top: 1rem;">
         {% csrf_token %}
@@ -201,7 +201,7 @@
           {{ file_form.file.label_tag }}
           {{ file_form.file }}
         </div>
-        <button type="submit" class="btn btn-secondary">ファイルを読み込んで問題生成</button>
+        <button type="submit" class="btn btn-secondary">Upload file &amp; generate questions</button>
       </form>
     </section>
   </div>
@@ -209,33 +209,33 @@
   <!-- Right Side: Dynamic Tiered Support & Workflow Rules Sidebar -->
   <div class="sidebar-column">
     <aside class="panel hint-section">
-      <h3>💡 5. 段階的なサポート (4-Level Hint Ladder)</h3>
+      <h3>💡 5. Tiered Support (4-Level Hint Ladder)</h3>
       
       <div class="active-level-indicator" style="margin: 0.5rem 0 1rem; padding: 0.5rem; background: #e0f2fe; border-radius: 0.35rem; border-left: 4px solid #0284c7;">
-        <span class="small-text" style="color: #0369a1; font-weight: 700;">現在のヒントレベル:</span>
+        <span class="small-text" style="color: #0369a1; font-weight: 700;">Current hint level:</span>
         <strong style="color: #0c4a6e;">
           {% if active_hint_level > 0 %}
-            レベル {{ active_hint_level }} 表示中
+            Level {{ active_hint_level }} active
           {% else %}
-            未開放 (自力回答提出後に利用可能)
+            Locked (submit an attempt to unlock)
           {% endif %}
         </strong>
       </div>
 
       <ol class="hint-ladder-list">
-        <li class="{% if active_hint_level == 1 %}active-hint{% endif %}">レベル1: 考える方向を示す質問</li>
-        <li class="{% if active_hint_level == 2 %}active-hint{% endif %}">レベル2: 関連する概念や知識のヒント</li>
-        <li class="{% if active_hint_level == 3 %}active-hint{% endif %}">レベル3: 関連する例題</li>
-        <li class="{% if active_hint_level == 4 %}active-hint{% endif %}">レベル4: 解き方の一部を提示</li>
+        <li class="{% if active_hint_level == 1 %}active-hint{% endif %}">Level 1: A guiding question to focus your thinking</li>
+        <li class="{% if active_hint_level == 2 %}active-hint{% endif %}">Level 2: A related concept or rule hint</li>
+        <li class="{% if active_hint_level == 3 %}active-hint{% endif %}">Level 3: A similar worked example</li>
+        <li class="{% if active_hint_level == 4 %}active-hint{% endif %}">Level 4: Partial solution revealed</li>
       </ol>
-      <p class="micro-note">※完全な答えは「最後の手段」としてのみ提示されます。</p>
+      <p class="micro-note">* The full answer is only shown as a last resort.</p>
 
       {% if hints %}
         <div class="unlocked-hints">
-          <h4>解放されたヒント一覧:</h4>
+          <h4>Unlocked hints:</h4>
           {% for hint in hints %}
             <div class="hint-card {% if hint.level == active_hint_level %}current-hint-card{% endif %}">
-              <span class="hint-level">Level {{ hint.level }} {% if hint.level == active_hint_level %}(最新表示中){% endif %}</span>
+              <span class="hint-level">Level {{ hint.level }} {% if hint.level == active_hint_level %}(currently shown){% endif %}</span>
               <p>{{ hint.content }}</p>
             </div>
           {% endfor %}
@@ -246,31 +246,31 @@
         <form method="post" style="margin-top: 1rem;">
           {% csrf_token %}
           <input type="hidden" name="action" value="request_hint">
-          <button type="submit" class="btn btn-secondary btn-full">ヒントをリクエスト (レベル {{ active_hint_level|add:1 }})</button>
+          <button type="submit" class="btn btn-secondary btn-full">Request hint (Level {{ active_hint_level|add:1 }})</button>
         </form>
       {% else %}
         <div class="hint-disabled-note">
           {% if learning_session.current_state == 'TRANSFER_TASK' %}
-            🔒 応用問題 (Transfer Check) 中はヒントが無効化されます。
+            🔒 Hints are disabled during the Transfer Check.
           {% else %}
-            🔒 自力回答提出後にヒントが有効になります。
+            🔒 Hints become available after you submit your first attempt.
           {% endif %}
         </div>
       {% endif %}
     </aside>
 
     <aside class="panel workflow-info">
-      <h3>📋 PDF仕様ワークフロー</h3>
+      <h3>📋 9-Stage Learning Workflow</h3>
       <ul class="workflow-checklist">
-        <li class="checked">1. 教科・トピック選択</li>
-        <li class="checked">2. 診断クイズ受講</li>
-        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">3. 自分で考える (回答・理由・自信度)</li>
-        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">4. 回答評価 & 誤り特定</li>
-        <li class="{% if hints %}checked{% endif %}">5. 段階的サポート提供</li>
-        <li class="{% if learning_session.current_state == 'TEACH_BACK' or learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">6. 回答修正</li>
-        <li class="{% if learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">7. Teach-Back (言葉で説明)</li>
-        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">8. 応用問題取り組み</li>
-        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">9. 学習進捗更新 (Mastered)</li>
+        <li class="checked">1. Select subject &amp; topic</li>
+        <li class="checked">2. Take the diagnostic quiz</li>
+        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">3. Think it through (answer, reasoning, confidence)</li>
+        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">4. Evaluate response &amp; identify errors</li>
+        <li class="{% if hints %}checked{% endif %}">5. Tiered support provided</li>
+        <li class="{% if learning_session.current_state == 'TEACH_BACK' or learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">6. Revise answer</li>
+        <li class="{% if learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">7. Teach-Back (explain in your own words)</li>
+        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">8. Transfer task (apply independently)</li>
+        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">9. Progress update (Mastered)</li>
       </ul>
     </aside>
   </div>

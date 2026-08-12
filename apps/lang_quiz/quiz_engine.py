@@ -29,6 +29,7 @@ SECTION_LABELS = {
 AI_QUESTION_SCHEMA = [{
     'prompt': 'string',
     'answer': 'string',
+    'skill_focus': 'string',
     'explanation': 'string',
     'next_step': 'string',
     'hints': ['string'],
@@ -37,11 +38,11 @@ AI_QUESTION_SCHEMA = [{
 
 def _question(key, prompt, answer, explanation, next_step, *, section, hints=None):
     hints = hints or [
-        '問題文の中心語と、空欄の前後に注目しましょう。',
-        f'これは {SECTION_LABELS.get(section, section)} の基本事項を確認する問題です。',
-        '答えの品詞、時制、または文脈上の役割を絞り込みましょう。',
-        f'答えの最初の文字は「{str(answer)[:1]}」です。',
-        f'答えは「{answer}」です。入力できなければ「わからない」を選びましょう。',
+        'Focus on the key word in the question and the context around the blank.',
+        f'This is a {SECTION_LABELS.get(section, section)} question — recall the core rule or meaning.',
+        'Narrow down the part of speech, tense, or contextual role of the answer.',
+        f'The first letter of the answer is "{str(answer)[:1]}".',
+        f'The answer is "{answer}". If you cannot type it, select "Give up".',
     ]
     return {
         'key': key,
@@ -78,33 +79,33 @@ VOCABULARY_DATA = [
 ]
 
 GRAMMAR_DATA = [
-    ('g1', 'She ____ to school every day. (go)', 'goes', '三人称単数の現在形なので goes です。'),
-    ('g2', 'I have lived here ____ 2020.', 'since', '開始時点には since を使います。'),
-    ('g3', 'If I ____ more time, I would travel.', 'had', '仮定法過去では if 節を過去形にします。'),
-    ('g4', 'This book ____ by many students.', 'is read', '受動態は be動詞 + 過去分詞です。'),
-    ('g5', 'He is taller ____ his brother.', 'than', '比較級の比較対象は than で結びます。'),
-    ('g6', 'There ____ two apples on the table.', 'are', '複数名詞 two apples に合わせて are を使います。'),
-    ('g7', 'I enjoy ____ music. (listen)', 'listening to', 'enjoy の後は動名詞、listen は to を伴います。'),
-    ('g8', 'She asked me ____ I was ready.', 'whether', '「〜かどうか」は whether で表せます。'),
-    ('g9', 'By next year, they ____ the project.', 'will have completed', '未来の時点までの完了には未来完了形を使います。'),
-    ('g10', 'The man ____ lives next door is a doctor.', 'who', '人を先行詞とする主格の関係代名詞は who です。'),
-    ('g11', 'Neither answer ____ correct.', 'is', 'neither は単数扱いです。'),
-    ('g12', 'I wish I ____ speak French.', 'could', '現在の実現困難な願望には過去形 could を使います。'),
+    ('g1', 'She ____ to school every day. (go)', 'goes', 'Third-person singular present tense requires "goes".'),
+    ('g2', 'I have lived here ____ 2020.', 'since', 'Use "since" to indicate the starting point of an action.'),
+    ('g3', 'If I ____ more time, I would travel.', 'had', 'Subjunctive past: the if-clause uses the past tense form.'),
+    ('g4', 'This book ____ by many students.', 'is read', 'Passive voice = be verb + past participle.'),
+    ('g5', 'He is taller ____ his brother.', 'than', 'Comparative adjectives are followed by "than".'),
+    ('g6', 'There ____ two apples on the table.', 'are', 'The plural noun "two apples" requires the plural verb "are".'),
+    ('g7', 'I enjoy ____ music. (listen)', 'listening to', '"enjoy" is followed by a gerund; "listen" requires "to".'),
+    ('g8', 'She asked me ____ I was ready.', 'whether', '"whether" introduces an indirect yes/no question.'),
+    ('g9', 'By next year, they ____ the project.', 'will have completed', 'Future perfect expresses an action completed before a future point.'),
+    ('g10', 'The man ____ lives next door is a doctor.', 'who', '"who" is the subject relative pronoun for people.'),
+    ('g11', 'Neither answer ____ correct.', 'is', '"Neither" is treated as singular and takes a singular verb.'),
+    ('g12', 'I wish I ____ speak French.', 'could', 'Use "could" (past form) to express an unattainable present wish.'),
 ]
 
 READING_DATA = [
-    ('r1', 'Mina missed the bus, so she walked to school. How did Mina get to school?', 'walked', 'バスに乗れなかったため、歩いたと明記されています。'),
-    ('r2', 'The library closes at six, but Ken arrived at six thirty. Why could he not enter?', 'it was closed', '到着時刻が閉館時刻より後だからです。'),
-    ('r3', 'Aya took an umbrella because dark clouds covered the sky. What weather did she expect?', 'rain', '暗い雲と傘から雨を予想したと推測できます。'),
-    ('r4', 'The blue whale is larger than any other animal. Which animal is the largest?', 'blue whale', '比較表現 larger than any other animal が根拠です。'),
-    ('r5', 'Tom studied all week and passed the exam. What helped Tom pass?', 'studying', '一週間勉強したことが合格につながっています。'),
-    ('r6', 'Plants use sunlight to make food. What energy source do plants use?', 'sunlight', '本文に sunlight と直接書かれています。'),
-    ('r7', 'The café was crowded, yet we found one empty table. Was seating available?', 'yes', 'one empty table があったため、席は利用可能でした。'),
-    ('r8', 'Lena whispered because the baby was sleeping. Why did Lena speak quietly?', 'the baby was sleeping', 'because 以下が理由を示しています。'),
-    ('r9', 'After the storm, several roads were flooded. What caused the road closures?', 'flooding', '嵐の後に道路が冠水したことが原因です。'),
-    ('r10', 'The recipe serves four people. We have eight guests. How many batches are needed?', 'two', '8 ÷ 4 = 2 なので2回分必要です。'),
-    ('r11', 'Although the task was difficult, Rui finished it. Did difficulty stop Rui?', 'no', 'although は逆接で、実際には完了しています。'),
-    ('r12', 'The museum is free on Sundays. Today is Sunday. What is today’s admission cost?', 'free', '日曜日は無料と明記されています。'),
+    ('r1', 'Mina missed the bus, so she walked to school. How did Mina get to school?', 'walked', 'The text explicitly states she walked because she missed the bus.'),
+    ('r2', 'The library closes at six, but Ken arrived at six thirty. Why could he not enter?', 'it was closed', 'Ken arrived 30 minutes after closing time, so the library was shut.'),
+    ('r3', 'Aya took an umbrella because dark clouds covered the sky. What weather did she expect?', 'rain', 'Dark clouds and an umbrella signal she expected rain.'),
+    ('r4', 'The blue whale is larger than any other animal. Which animal is the largest?', 'blue whale', 'The comparative phrase "larger than any other animal" identifies the blue whale as the largest.'),
+    ('r5', 'Tom studied all week and passed the exam. What helped Tom pass?', 'studying', 'Studying all week is the cause directly linked to passing the exam.'),
+    ('r6', 'Plants use sunlight to make food. What energy source do plants use?', 'sunlight', 'The text states "sunlight" directly as the energy source.'),
+    ('r7', 'The café was crowded, yet we found one empty table. Was seating available?', 'yes', 'One empty table was found, so seating was available.'),
+    ('r8', 'Lena whispered because the baby was sleeping. Why did Lena speak quietly?', 'the baby was sleeping', 'The "because" clause directly gives the reason for whispering.'),
+    ('r9', 'After the storm, several roads were flooded. What caused the road closures?', 'flooding', 'Flooding after the storm caused the road closures.'),
+    ('r10', 'The recipe serves four people. We have eight guests. How many batches are needed?', 'two', '8 ÷ 4 = 2, so two batches are needed.'),
+    ('r11', 'Although the task was difficult, Rui finished it. Did difficulty stop Rui?', 'no', '"Although" signals contrast — Rui completed the task despite the difficulty.'),
+    ('r12', 'The museum is free on Sundays. Today is Sunday. What is today\'s admission cost?', 'free', 'The text states the museum is free on Sundays.'),
 ]
 
 
@@ -112,8 +113,8 @@ def _vocabulary_questions(prefix='vocab'):
     return [
         _question(
             f'{prefix}-{word}', prompt, word,
-            f'「{word}」は「{meaning}」という意味で、この文脈に適合します。',
-            f'次は「{word}」を使って自分の例文を1つ作りましょう。', section='vocabulary',
+            f'"{word}" means "{meaning}" and fits naturally in this context.',
+            f'Now write one original sentence using "{word}".', section='vocabulary',
         )
         for word, meaning, prompt in VOCABULARY_DATA
     ]
@@ -121,14 +122,14 @@ def _vocabulary_questions(prefix='vocab'):
 
 def _grammar_questions():
     return [
-        _question(key, prompt, answer, explanation, '同じ文法ルールを使う例文を1つ作りましょう。', section='grammar')
+        _question(key, prompt, answer, explanation, 'Write one original sentence using the same grammar rule.', section='grammar')
         for key, prompt, answer, explanation in GRAMMAR_DATA
     ]
 
 
 def _reading_questions():
     return [
-        _question(key, prompt, answer, explanation, '答えの根拠となる本文の語句を確認しましょう。', section='reading')
+        _question(key, prompt, answer, explanation, 'Identify the exact words in the passage that support your answer.', section='reading')
         for key, prompt, answer, explanation in READING_DATA
     ]
 
@@ -136,17 +137,17 @@ def _reading_questions():
 COURSES = {
     'daily-english': {
         'title': 'Daily English Essentials',
-        'description': '日常会話で頻出する基本語彙を文脈で学びます。',
+        'description': 'Learn essential everyday vocabulary in context.',
         'questions': _vocabulary_questions('daily')[:10],
     },
     'academic-words': {
         'title': 'Academic Word Builder',
-        'description': 'レポートや発表に役立つアカデミック語彙コースです。',
+        'description': 'Build academic vocabulary for reports and presentations.',
         'questions': _vocabulary_questions('academic')[3:13],
     },
     'business-context': {
         'title': 'Business Vocabulary',
-        'description': '仕事の場面で使う語彙を実践的な例文で確認します。',
+        'description': 'Practice business vocabulary with real-world example sentences.',
         'questions': _vocabulary_questions('business')[5:15],
     },
 }
@@ -184,15 +185,18 @@ def _questions_from_ai(specs, section, count):
             f"ai|{section}|{spec['prompt']}|{spec['answer']}|{index}".encode('utf-8')
         ).hexdigest()[:24]
         item_section = ('vocabulary', 'grammar', 'reading')[index % 3] if section == 'diagnostic' else section
-        questions.append(_question(
+        q = _question(
             key,
             str(spec['prompt']),
             str(spec['answer']),
             str(spec['explanation']),
-            str(spec.get('next_step') or '同じ知識を使う例文を1つ作りましょう。'),
+            str(spec.get('next_step') or 'Write one original sentence using the same concept.'),
             section=item_section,
             hints=hints,
-        ))
+        )
+        # Carry the skill_focus label into the question dict for display in the UI
+        q['skill_focus'] = str(spec.get('skill_focus') or '')
+        questions.append(q)
     return questions
 
 
@@ -201,10 +205,14 @@ def generate_section_questions(section, *, count=10):
         try:
             specs = generate_ai_response(
                 system_prompt=(
-                    'You create accurate language-learning quizzes for Japanese-speaking learners. '
-                    'Return exactly the requested number of independent questions. Each question needs '
-                    'a short unambiguous answer, Japanese explanation, next study step, and exactly five '
-                    'Japanese hints from subtle level 1 to answer-revealing level 5.'
+                    'You are an expert English language teacher creating quiz questions. '
+                    'Return exactly the requested number of well-crafted questions. Each question must have: '
+                    'prompt (the question text), '
+                    'answer (short, unambiguous correct answer), '
+                    'skill_focus (the specific language skill tested, e.g. "Past Tense", "Inference", "Vocabulary in Context"), '
+                    'explanation (clear English explanation of why the answer is correct and what rule/principle applies), '
+                    'next_step (one actionable study task in English for the learner to practise further), '
+                    'hints (exactly 5 English hints progressing from a gentle nudge at level 1 to revealing the full answer at level 5).'
                 ),
                 user_prompt=(
                     f'Section: {section}. Create {count} fresh questions. '
@@ -235,13 +243,48 @@ def generate_section_questions(section, *, count=10):
 def get_course_questions(course_slug):
     course = COURSES.get(course_slug)
     if course is None:
-        raise ValueError('選択されたコースが見つかりません。')
+        raise ValueError('The selected course was not found.')
     return [dict(question) for question in course['questions']]
 
 
-def _decode_upload(upload):
+def _extract_pdf_text(data: bytes) -> str:
+    """Extract plain text from PDF bytes using pypdf. Returns empty string on failure."""
+    try:
+        import io as _io
+        from pypdf import PdfReader
+        reader = PdfReader(_io.BytesIO(data))
+        pages = []
+        for page in reader.pages:
+            text = page.extract_text() or ''
+            if text.strip():
+                pages.append(text)
+        return '\n'.join(pages)
+    except Exception:
+        return ''
+
+
+def _decode_upload(upload) -> str:
+    """Read an uploaded file and return its plain text content.
+
+    Handles PDF via pypdf, JSON/CSV/text via encoding detection.
+    Falls back to latin-1 byte decoding as a last resort for unknown formats.
+    """
     data = upload.read()
-    for encoding in ('utf-8-sig', 'utf-16', 'shift-jis'):
+    name = upload.name.lower()
+
+    # PDF: use a proper PDF parser — never decode binary PDF as text
+    if name.endswith('.pdf'):
+        text = _extract_pdf_text(data)
+        if text.strip():
+            return text
+        # PDF has no extractable text (e.g. scanned image-only PDF)
+        raise ValueError(
+            'The PDF appears to be a scanned image with no extractable text. '
+            'Please upload a text-based PDF, TXT, or Markdown file.'
+        )
+
+    # Plain text files: try common encodings
+    for encoding in ('utf-8-sig', 'utf-8', 'utf-16', 'shift-jis'):
         try:
             return data.decode(encoding)
         except (UnicodeDecodeError, UnicodeError):
@@ -249,8 +292,75 @@ def _decode_upload(upload):
     return data.decode('latin-1', errors='ignore')
 
 
+_UPLOAD_SYSTEM_PROMPTS = {
+    'reading': (
+        'You are an expert English reading teacher designing questions for language learners. '
+        'Create questions STRICTLY based on the supplied passage. '
+        'Distribute the questions across these reading skill levels (Bloom\'s Taxonomy): '
+        '- 2 LITERAL questions: ask who/what/where/when using exact words from the text. '
+        '- 3 INFERENCE questions: ask why/how/what-does-this-imply — answer must be derived from clues in the text, not stated directly. '
+        '- 2 MAIN IDEA questions: ask about the central message, topic, or purpose of a paragraph. '
+        '- 2 VOCABULARY-IN-CONTEXT questions: ask what a specific word or phrase means AS USED in the passage (not a dictionary definition). '
+        '- 1 CAUSE-AND-EFFECT question: ask what caused X, or what was the result of Y. '
+        'Rules: '
+        '(1) Every answer must be a short phrase (1–6 words). '
+        '(2) Answers must be clearly supported by the text. '
+        '(3) skill_focus must be one of: Literal Detail, Inference, Main Idea, Vocabulary in Context, Cause and Effect. '
+        '(4) explanation must quote the relevant sentence from the passage and explain why that answer is correct. '
+        '(5) next_step must ask the learner to find and quote the supporting sentence from the text. '
+        '(6) hints must be exactly 5, progressing: '
+        '  hint1=point to the relevant paragraph, '
+        '  hint2=point to the relevant sentence, '
+        '  hint3=give a conceptual clue about the answer type, '
+        '  hint4=give the first word of the answer, '
+        '  hint5=state the full answer. '
+        'Return exactly the requested count as a JSON array.'
+    ),
+    'grammar': (
+        'You are an expert English grammar teacher designing questions for language learners. '
+        'Create questions STRICTLY based on sentences from the supplied text. '
+        'Mix these question types evenly: '
+        '- FILL-IN-THE-BLANK: take a sentence from the text, remove one grammatical element, ask the learner to fill it in. '
+        '- ERROR CORRECTION: take a sentence from the text, introduce one grammatical error, ask the learner to identify and correct it. '
+        '- SENTENCE TRANSFORMATION: give a sentence from the text and ask the learner to rewrite it in another form (e.g., active→passive, affirmative→negative, present→past). '
+        'Target grammar points present in the material such as: verb tenses, subject-verb agreement, articles (a/an/the), '
+        'prepositions, passive voice, relative clauses, conditionals, modal verbs, gerunds vs infinitives, '
+        'comparatives/superlatives, reported speech, conjunctions. '
+        'Rules: '
+        '(1) skill_focus must name the exact grammar rule being tested, e.g. "Present Perfect Tense", "Passive Voice", "Third Conditional". '
+        '(2) prompt must clearly show the question type (e.g., start with "Fill in the blank:", "Correct the error:", "Transform the sentence:"). '
+        '(3) answer must be the corrected or completed text (short phrase or full clause). '
+        '(4) explanation must state the grammar RULE explicitly (e.g., "The present perfect uses have/has + past participle to...") and then show why the answer applies. '
+        '(5) next_step must ask the learner to write one original sentence using the same grammar rule. '
+        '(6) hints must be exactly 5, progressing: '
+        '  hint1=name the grammar category (e.g., "Think about verb tense here."), '
+        '  hint2=state the grammar rule in simple terms, '
+        '  hint3=give the sentence structure/formula (e.g., "Subject + have/has + past participle"), '
+        '  hint4=give the first word(s) of the answer, '
+        '  hint5=state the full answer. '
+        'Return exactly the requested count as a JSON array.'
+    ),
+    'vocabulary': (
+        'You are an expert English vocabulary teacher. '
+        'Create vocabulary questions ONLY from the supplied learning material. '
+        'Follow the learner instruction. '
+        'For each question: skill_focus must name the vocabulary strategy used '
+        '(e.g., "Context Clues", "Word Form", "Collocations", "Synonyms/Antonyms"). '
+        'Return exactly the requested count. Each item must have one concise answer, '
+        'a clear English explanation showing why that word fits, a next study step, '
+        'and exactly five English hints that progress from subtle to answer-revealing at level 5.'
+    ),
+    'myself': (
+        'You create language-learning questions only from the supplied learning material. '
+        'Follow the learner instruction. Return exactly the requested count. Each item must '
+        'have one concise answer, a clear English explanation, next study step, skill_focus label, '
+        'and exactly five English hints that progress from subtle to revealing the answer at level 5.'
+    ),
+}
+
+
 def generate_uploaded_questions(files, instruction, *, section='myself', count=10):
-    """Create deterministic local questions from user material (AI adapter-ready fallback)."""
+    """Create questions from user-uploaded material using section-aware AI prompts."""
     chunks = []
     names = []
     for upload in files:
@@ -267,18 +377,18 @@ def generate_uploaded_questions(files, instruction, *, section='myself', count=1
         chunks.extend(line.strip() for line in text.splitlines() if line.strip())
 
     if not chunks:
-        raise ValueError('ファイルから問題に使える文字を読み取れませんでした。')
+        raise ValueError('No readable text could be extracted from the uploaded file(s).')
 
     material = '\n'.join(chunks)[:16000]
+    system_prompt = _UPLOAD_SYSTEM_PROMPTS.get(section, _UPLOAD_SYSTEM_PROMPTS['myself'])
     try:
         specs = generate_ai_response(
-            system_prompt=(
-                'You create language-learning questions only from supplied learning material. '
-                'Follow the learner instruction. Return exactly the requested count. Each item must '
-                'have one concise answer, a Japanese explanation, next study step, and exactly five '
-                'Japanese hints that progress from subtle to revealing the answer at level 5.'
+            system_prompt=system_prompt,
+            user_prompt=(
+                f'Learner instruction: {instruction}\n'
+                f'Question count: {count}\n'
+                f'Material:\n{material}'
             ),
-            user_prompt=f'Learner instruction: {instruction}\nQuestion count: {count}\nMaterial:\n{material}',
             response_schema=AI_QUESTION_SCHEMA,
         )
         generated = _questions_from_ai(specs, section, count)
@@ -287,33 +397,157 @@ def generate_uploaded_questions(files, instruction, *, section='myself', count=1
     except AIEngineError:
         pass
 
-    random.shuffle(chunks)
+    # --- Smart rule-based fallback (when AI is unavailable) ---
+    # Pick the longest, most content-rich sentences as source material
+    sentences = [
+        s.strip() for s in re.split(r'(?<=[.!?])\s+', '\n'.join(chunks))
+        if len(s.strip()) > 40
+    ]
+    if not sentences:
+        sentences = [c for c in chunks if len(c) > 20] or chunks
+
+    random.shuffle(sentences)
     questions = []
+
     for index in range(count):
-        line = chunks[index % len(chunks)]
-        pair = re.split(r'\s*(?:,|:|=|\t| - )\s*', line, maxsplit=1)
-        if len(pair) == 2 and pair[0] and pair[1]:
-            answer, context = pair[0].strip(), pair[1].strip()
-            prompt = f'「{context[:140]}」に対応する語句を答えてください。'
-        else:
-            tokens = re.findall(r"[\wÀ-ỹぁ-んァ-ヶ一-龯'-]+", line, flags=re.UNICODE)
-            answer = max(tokens, key=len) if tokens else line[:30]
-            prompt = line.replace(answer, '____', 1)
-            prompt = f'教材の空欄を補ってください: {prompt[:180]}'
-        key = hashlib.sha256(f'{line}|{index}|{instruction}'.encode('utf-8')).hexdigest()[:20]
+        sentence = sentences[index % len(sentences)]
+        words = re.findall(r'\b[A-Za-z]{4,}\b', sentence)
+        key = hashlib.sha256(f'{sentence}|{index}|{section}'.encode('utf-8')).hexdigest()[:20]
+
+        if section == 'reading':
+            # Reading fallback: ask a genuine comprehension question about the sentence
+            skill_types = [
+                'main_idea', 'detail', 'inference', 'vocab', 'cause_effect'
+            ]
+            skill = skill_types[index % len(skill_types)]
+
+            if skill == 'main_idea':
+                q_prompt = f'What is the main idea expressed in this sentence from the passage?\n\n"{sentence}"'
+                q_answer = words[-1].lower() if words else sentence.split()[-1].lower()
+                skill_label = 'Main Idea'
+                explanation = f'The sentence "{ sentence }" expresses its central point through the word "{q_answer}".'
+                next_step_text = 'Re-read the surrounding paragraph and identify which sentence best supports this idea.'
+                hints = [
+                    'Read the full sentence carefully and identify its subject.',
+                    'Ask yourself: what is this sentence primarily about?',
+                    f'Focus on the final part of the sentence: "...{sentence[-50:]}"',
+                    f'The answer is a word found near the end of the sentence.',
+                    f'The answer is "{q_answer}".'
+                ]
+            elif skill == 'detail':
+                target = words[0] if words else sentence.split()[0]
+                q_prompt = f'According to the passage, complete the detail: "{sentence.replace(target, "____", 1)}"'
+                q_answer = target.lower()
+                skill_label = 'Literal Detail'
+                explanation = f'The text states this directly: "{sentence}". The missing word is "{target}".'
+                next_step_text = 'Find and quote the exact sentence from the passage that confirms this detail.'
+                hints = [
+                    'Look at the beginning of the sentence for context.',
+                    'The answer is a specific word used directly in the passage.',
+                    f'The sentence starts with: "{sentence[:40]}..."',
+                    f'The answer has {len(target)} letters and starts with "{target[0]}".'
+                    f' The answer is "{q_answer}".'
+                ]
+            elif skill == 'vocab':
+                target = max(words, key=len) if words else 'word'
+                q_prompt = f'What does the word "{target}" mean as used in this sentence?\n\n"{sentence}"'
+                q_answer = target.lower()
+                skill_label = 'Vocabulary in Context'
+                explanation = f'In context, "{target}" refers to the concept described in the sentence: "{sentence}".'
+                next_step_text = f'Use "{target}" in a new sentence with a different subject.'
+                hints = [
+                    f'Read the whole sentence and think about what "{target}" is doing grammatically.',
+                    'Is it a noun, verb, or adjective? That helps narrow the meaning.',
+                    f'Look at the words before and after "{target}" for clues.',
+                    f'The answer is the word itself: it starts with "{target[0]}".'
+                    f' The answer is "{q_answer}".'
+                ]
+            elif skill == 'cause_effect':
+                q_prompt = f'What is the likely cause or result described in this sentence?\n\n"{sentence}"'
+                q_answer = (words[-1] if words else 'result').lower()
+                skill_label = 'Cause and Effect'
+                explanation = f'The sentence "{sentence}" describes a cause-and-effect relationship. The key outcome is "{q_answer}".'
+                next_step_text = 'Find another sentence in the passage that shows a cause-and-effect relationship.'
+                hints = [
+                    'Look for signal words like "because", "therefore", "as a result", "so".'
+                    ' These words mark cause-effect relationships.',
+                    'Identify what happened and why it happened in the sentence.',
+                    f'Focus on the second half of the sentence: "...{sentence[-60:]}"',
+                    f'The key term starts with "{q_answer[0]}".'
+                    f' The answer is "{q_answer}".'
+                ]
+            else:  # inference
+                q_prompt = f'Based on this sentence, what can you infer about the topic?\n\n"{sentence}"'
+                q_answer = (words[len(words) // 2] if words else 'implied').lower()
+                skill_label = 'Inference'
+                explanation = f'Although not stated directly, the sentence "{sentence}" implies that "{q_answer}" is a key concept.'
+                next_step_text = 'Explain in one sentence why you think this inference is supported by the text.'
+                hints = [
+                    'Inferences are not stated directly — you need to "read between the lines".',
+                    'Think about what the author assumes the reader already knows.',
+                    f'Look at the whole sentence and consider its broader context.',
+                    f'The implied concept starts with "{q_answer[0]}".'
+                    f' The answer is "{q_answer}".'
+                ]
+
+        else:  # grammar section
+            # Grammar fallback: create fill-in-the-blank on actual grammatical words
+            # Target prepositions, auxiliary verbs, articles, conjunctions — real grammar words
+            grammar_targets = re.findall(
+                r'\b(is|are|was|were|has|have|had|will|would|could|should|may|might'
+                r'|be|been|being|do|does|did'
+                r'|a|an|the'
+                r'|in|on|at|by|for|with|about|from|to|of|into|through|during|before|after'
+                r'|because|although|however|therefore|since|while|when|if|unless|until'
+                r'|which|who|that|whose)\b',
+                sentence, flags=re.IGNORECASE
+            )
+            if grammar_targets:
+                target = grammar_targets[0]
+                blanked = re.sub(r'\b' + re.escape(target) + r'\b', '____', sentence, count=1, flags=re.IGNORECASE)
+                q_prompt = f'Fill in the blank with the correct word:\n\n"{blanked}"'
+                q_answer = target.lower()
+                skill_label = 'Grammar: Function Word'
+                explanation = (
+                    f'The correct word is "{target}". In the sentence "{sentence}", '
+                    f'it functions as a grammatical element that connects or qualifies other parts of the sentence.'
+                )
+                next_step_text = f'Write a new sentence using "{target}" in the same grammatical role.'
+                hints = [
+                    'Focus on the grammatical structure of the sentence — what type of word is missing? (preposition, article, conjunction, auxiliary verb)',
+                    'Look at what comes before and after the blank to determine the word type needed.',
+                    f'The sentence structure suggests a {"preposition" if target.lower() in "in on at by for with about from to of into through during before after" else "function word"} is needed.',
+                    f'The answer starts with "{target[0]}" and has {len(target)} letters.',
+                    f'The answer is "{q_answer}".'
+                ]
+            else:
+                # Last-resort: find a content word to blank
+                target = max(words, key=len) if words else 'concept'
+                blanked = sentence.replace(target, '____', 1)
+                q_prompt = f'Fill in the blank with the correct word from the passage:\n\n"{blanked}"'
+                q_answer = target.lower()
+                skill_label = 'Grammar: Vocabulary'
+                explanation = f'The word "{target}" completes the sentence correctly: "{sentence}"'
+                next_step_text = f'Use "{target}" in a new sentence that demonstrates the same meaning.'
+                hints = [
+                    'Read the full sentence and think about what part of speech fits in the blank.',
+                    f'The sentence context is: "{sentence[:60]}..."',
+                    f'The answer has {len(target)} letters.',
+                    f'The answer starts with "{target[0]}".'
+                    f' The answer is "{q_answer}".'
+                ]
+
         questions.append(_question(
-            f'upload-{key}', prompt, answer,
-            f'アップロード教材では「{answer}」が対応する内容です。',
-            '教材の同じ段落を読み直し、この語句を別の文脈でも使ってみましょう。',
+            f'upload-{key}',
+            q_prompt,
+            q_answer,
+            explanation,
+            next_step_text,
             section=section,
-            hints=[
-                'アップロードした教材の該当箇所を思い出しましょう。',
-                f'作問リクエストは「{instruction[:80]}」です。',
-                f'答えは {len(answer)} 文字前後です。',
-                f'答えの最初の文字は「{answer[:1]}」です。',
-                f'答えは「{answer}」です。',
-            ],
+            hints=hints[:5],
         ))
+        questions[-1]['skill_focus'] = skill_label
+
     return questions, ', '.join(names)
 
 
@@ -323,7 +557,8 @@ def missing_questions(session_key, *, count=10):
     return [
         _question(
             record.fingerprint, record.prompt, record.reference_answer,
-            record.explanation, record.next_step, section='missing', hints=record.hints,
+            record.explanation, record.next_step, section='missing',
+            hints=record.hints if record.hints else None,
         )
         for record in records[:count]
     ]
@@ -391,17 +626,17 @@ def diagnostic_recommendations(questions):
             wrong_sections[section] = wrong_sections.get(section, 0) + 1
     if not wrong_sections:
         return [
-            {'title': 'Academic Word Builder', 'detail': '基礎は安定しています。より高度な語彙へ進みましょう。'},
-            {'title': '長文読解への発展', 'detail': '根拠を短時間で見つける練習がおすすめです。'},
+            {'title': 'Academic Word Builder', 'detail': 'Your foundations look solid — try advancing to higher-level vocabulary.'},
+            {'title': 'Long-form Reading', 'detail': 'Practice finding supporting evidence quickly in longer passages.'},
         ]
     weakest = max(wrong_sections, key=wrong_sections.get)
     mapping = {
-        'vocabulary': ('Vocabulary', 'Missing と語彙コースで、意味と例文をセットで復習しましょう。'),
-        'grammar': ('Grammar', '間違えた文法規則を例文にしてから再挑戦しましょう。'),
-        'reading': ('Reading', '接続詞と根拠文に印を付ける読解練習がおすすめです。'),
+        'vocabulary': ('Vocabulary', 'Review words alongside example sentences in Missing and the Vocabulary courses.'),
+        'grammar': ('Grammar', 'Turn each incorrect grammar rule into an example sentence and try again.'),
+        'reading': ('Reading', 'Practice marking conjunctions and evidence sentences while reading.'),
     }
     title, detail = mapping.get(weakest, mapping['vocabulary'])
     return [
-        {'title': f'おすすめ: {title}', 'detail': detail},
-        {'title': '関連学習: Missing', 'detail': '今回間違えた問題は Missing に保存されています。正解すると自動で消えます。'},
+        {'title': f'Recommended: {title}', 'detail': detail},
+        {'title': 'Related: Missing', 'detail': 'Questions you got wrong this session are saved in Missing. They disappear once you answer correctly.'},
     ]

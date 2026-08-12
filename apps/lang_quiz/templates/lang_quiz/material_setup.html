@@ -1,20 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}{% if section == 'vocabulary' %}Vocabulary{% else %}Myself{% endif %} - 問題作成{% endblock %}
+{% block title %}{% if section == 'reading' %}Reading{% elif section == 'grammar' %}Grammar{% elif section == 'vocabulary' %}Vocabulary{% else %}My Materials{% endif %} - Upload & Generate{% endblock %}
 
 {% block content %}
 <div class="page-heading">
-  <a href="{% url 'lang_quiz:home' %}" class="back-link">← 言語学習ハブ</a>
-  <span class="hero-badge">{% if section == 'vocabulary' %}VOCABULARY LAB{% else %}MY MATERIALS{% endif %}</span>
-  <h1>{% if section == 'vocabulary' %}Vocabulary の学び方を選ぶ{% else %}自分の教材から10問を作る{% endif %}</h1>
-  <p>{% if section == 'vocabulary' %}用意されたコース、ランダム問題、自分の教材の3通りから選べます。{% else %}ファイルと作問方法を送ると、その内容を使った問題を作成します。{% endif %}</p>
+  <a href="{% url 'lang_quiz:home' %}" class="back-link">← Language Learning Hub</a>
+  <span class="hero-badge">
+    {% if section == 'vocabulary' %}VOCABULARY LAB
+    {% elif section == 'reading' %}READING COMPREHENSION
+    {% elif section == 'grammar' %}GRAMMAR PRACTICE
+    {% else %}MY MATERIALS
+    {% endif %}
+  </span>
+  <h1>
+    {% if section == 'vocabulary' %}Choose how to study Vocabulary
+    {% elif section == 'reading' %}Generate 10 Reading Comprehension Questions
+    {% elif section == 'grammar' %}Generate 10 Grammar Questions
+    {% else %}Create 10 Questions from Your Own Material
+    {% endif %}
+  </h1>
+  <p>
+    {% if section == 'vocabulary' %}Pick from curated courses, random questions, or upload your own material.
+    {% elif section == 'reading' %}Upload a passage or PDF and AI will generate 10 reading comprehension questions based on the content.
+    {% elif section == 'grammar' %}Upload text or a PDF and AI will generate 10 grammar questions — fill-in-the-blank and error correction.
+    {% else %}Upload a file and describe the kind of questions you want, then AI will create them for you.
+    {% endif %}
+  </p>
 </div>
 
 {% if section == 'vocabulary' %}
 <section class="setup-section">
   <div class="section-heading-row">
-    <div><span class="section-kicker">CURATED COURSES</span><h2>10問コース</h2></div>
-    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'vocabulary' %}">ランダム10問</a>
+    <div><span class="section-kicker">CURATED COURSES</span><h2>10-Question Courses</h2></div>
+    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'vocabulary' %}">Random 10 questions</a>
   </div>
   <div class="course-grid">
     {% for course in courses %}
@@ -23,30 +41,54 @@
         <h3>{{ course.title }}</h3>
         <p>{{ course.description }}</p>
         <div class="course-progress"><span style="width: {{ course.score_percent }}%"></span></div>
-        <div class="course-footer"><strong>{{ course.score_percent }}%</strong><a href="{% url 'lang_quiz:start_course' course.slug %}">始める →</a></div>
+        <div class="course-footer"><strong>{{ course.score_percent }}%</strong><a href="{% url 'lang_quiz:start_course' course.slug %}">Start →</a></div>
       </article>
     {% endfor %}
   </div>
 </section>
 {% endif %}
 
+{% if section == 'reading' %}
+<section class="setup-section info-section">
+  <div class="section-heading-row">
+    <div><span class="section-kicker">QUICK START</span><h2>No file? Try random questions</h2></div>
+    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'reading' %}">Random 10 Reading Questions</a>
+  </div>
+</section>
+{% endif %}
+
+{% if section == 'grammar' %}
+<section class="setup-section info-section">
+  <div class="section-heading-row">
+    <div><span class="section-kicker">QUICK START</span><h2>No file? Try random questions</h2></div>
+    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'grammar' %}">Random 10 Grammar Questions</a>
+  </div>
+</section>
+{% endif %}
+
 <section class="setup-section upload-studio">
   <div>
-    <span class="section-kicker">UPLOAD & GENERATE</span>
-    <h2>{% if section == 'vocabulary' %}自分の単語教材から作る{% else %}教材をアップロード{% endif %}</h2>
-    <p>TXT / Markdown / CSV / JSON / PDF。複数ファイルをまとめて選択できます。</p>
-    <p class="micro-note">フォルダを使う場合は、フォルダ内の対象ファイルをまとめて選択してください。</p>
+    <span class="section-kicker">UPLOAD &amp; GENERATE</span>
+    <h2>
+      {% if section == 'vocabulary' %}Generate from your vocabulary material
+      {% elif section == 'reading' %}Upload your reading passage
+      {% elif section == 'grammar' %}Upload your grammar material
+      {% else %}Upload your material
+      {% endif %}
+    </h2>
+    <p>Supported formats: TXT / Markdown / CSV / JSON / PDF. You can select multiple files at once.</p>
+    <p class="micro-note">If using a folder, select all target files inside the folder together.</p>
   </div>
   <form method="post" enctype="multipart/form-data" action="{% url 'lang_quiz:start_material_quiz' section %}" class="material-form">
     {% csrf_token %}
     {{ form.non_field_errors }}
     <div class="form-group">{{ form.files.label_tag }}{{ form.files }}{{ form.files.errors }}</div>
     <div class="form-group">
-      <label for="folder-files">または教材フォルダ</label>
+      <label for="folder-files">Or select a material folder</label>
       <input id="folder-files" type="file" name="files" multiple webkitdirectory directory accept=".txt,.md,.csv,.json,.pdf">
     </div>
     <div class="form-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
-    <button type="submit" class="btn btn-primary btn-lg">10問を作成する →</button>
+    <button type="submit" class="btn btn-primary btn-lg">Generate 10 Questions →</button>
   </form>
 </section>
 {% endblock %}

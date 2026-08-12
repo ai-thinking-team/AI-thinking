@@ -25,10 +25,10 @@ from apps.learning_core.validators import validate_first_attempt
 LANGUAGE_GAP_TYPES = ('vocabulary_gap', 'grammar_misconception', 'context_misunderstanding')
 
 CURATED_HINTS = (
-    '文脈や文章全体の中で、どの要素に注目すべきか考えてみましょう。',
-    '該当する語彙や文法ルールの基本定義を振り返ってみましょう。',
-    '類似の例文での使い方を参考に、自分の回答と比較してみてください。',
-    '解答の手がかりとなる構文やキーワードの一部を確認しましょう。',
+    'Consider which element in the overall sentence or context you should focus on.',
+    'Review the basic definition of the relevant vocabulary or grammar rule.',
+    'Compare your answer to how the same word or structure is used in similar example sentences.',
+    'Check the syntax or keyword in the prompt that gives you a clue to the answer.',
 )
 
 
@@ -74,8 +74,14 @@ def ensure_demo_question():
 
 @transaction.atomic
 def create_questions_from_file_upload(file_obj):
-    """Extract text from an uploaded file and generate LanguageQuestion instances."""
-    import re
+    """Extract text from an uploaded file and generate 10 reading + 10 grammar LanguageQuestion instances.
+
+    Uses pypdf for PDF files to extract clean text.
+    Reading section: 10 AI-generated reading comprehension questions in English.
+    Grammar section: 10 AI-generated grammar questions in English.
+    Each section has a Japanese heading stored in title_ja (リーディング質問 / 文法質問).
+    """
+    import io as _io
     from apps.ai_engine.client import generate_questions_from_text
 
     filename = file_obj.name.lower()
@@ -83,17 +89,55 @@ def create_questions_from_file_upload(file_obj):
     try:
         content_bytes = file_obj.read()
         if filename.endswith('.pdf'):
-            raw_text = re.sub(r'[^\x20-\x7E\n\r\t]', ' ', content_bytes.decode('latin-1', errors='ignore'))
-        else:
+            # Use pypdf to properly extract text from PDF binary
             try:
-                raw_text = content_bytes.decode('utf-8')
-            except UnicodeDecodeError:
-                raw_text = content_bytes.decode('shift-jis', errors='ignore')
+                from pypdf import PdfReader
+                reader = PdfReader(_io.BytesIO(content_bytes))
+                pages = []
+                for page in reader.pages:
+                    page_text = page.extract_text() or ''
+                    if page_text.strip():
+                        pages.append(page_text)
+                raw_text = '\n'.join(pages)
+            except Exception:
+                raw_text = ''
+            if not raw_text.strip():
+                raise ValueError(
+                    'The PDF appears to be a scanned image with no extractable text. '
+                    'Please upload a text-based PDF, TXT, or Markdown file.'
+                )
+        else:
+            for enc in ('utf-8-sig', 'utf-8', 'utf-16', 'shift-jis'):
+                try:
+                    raw_text = content_bytes.decode(enc)
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            else:
+                raw_text = content_bytes.decode('latin-1', errors='ignore')
+    except ValueError:
+        raise
     except Exception:
-        raw_text = 'Uploaded material content for English vocabulary and grammar.'
+        raw_text = ''
 
-    generated_specs = generate_questions_from_text(raw_text, count=5)
-    if not generated_specs:
+    if not raw_text.strip():
+        return []
+
+    # Generate 10 reading comprehension questions and 10 grammar questions separately
+    reading_specs = generate_questions_from_text(raw_text, count=10, section='reading')
+    grammar_specs = generate_questions_from_text(raw_text, count=10, section='grammar')
+
+    # Tag each spec with its section type and Japanese heading
+    for spec in reading_specs:
+        spec['question_type'] = LanguageQuestion.QuestionType.READING
+        spec['title_ja'] = 'リーディング質問'  # Japanese: "Reading Questions"
+
+    for spec in grammar_specs:
+        spec['question_type'] = LanguageQuestion.QuestionType.GRAMMAR
+        spec['title_ja'] = '文法質問'  # Japanese: "Grammar Questions"
+
+    all_specs = reading_specs + grammar_specs
+    if not all_specs:
         return []
 
     subject, _ = Subject.objects.get_or_create(
@@ -102,31 +146,32 @@ def create_questions_from_file_upload(file_obj):
     topic, _ = Topic.objects.get_or_create(
         subject=subject,
         slug='uploaded-file-quiz',
-        defaults={'name': 'ファイル読み込み問題', 'description': '取り込んだ教材ファイルに基づく問題'},
+        defaults={'name': 'Uploaded File Questions', 'description': 'Questions generated from uploaded learning material'},
     )
     concept, _ = Concept.objects.get_or_create(
         topic=topic,
         slug='file-concepts',
-        defaults={'name': 'ファイル解析概念', 'description': 'AIが生成した問題'},
+        defaults={'name': 'File-based Concepts', 'description': 'AI-generated questions from uploaded files'},
     )
 
     created_questions = []
-    for spec in generated_specs:
+    for spec in all_specs:
         activity = LearningActivity.objects.create(
             concept=concept,
             title=f'File Quiz: {spec["reference_answer"]}',
             activity_type='language',
             prompt=spec['prompt'],
             reference_answer=spec['reference_answer'],
-            rubric=spec['rubric'],
+            rubric=spec.get('rubric', {}),
         )
         question = LanguageQuestion.objects.create(
             activity=activity,
             prompt=spec['prompt'],
             question_type=spec['question_type'],
+            title_ja=spec['title_ja'],
             reference_answer=spec['reference_answer'],
-            rubric=spec['rubric'],
-            transfer_prompt=spec['transfer_prompt'],
+            rubric=spec.get('rubric', {}),
+            transfer_prompt=spec.get('transfer_prompt', ''),
             active=True,
         )
         created_questions.append(question)

@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}言語学習ハブ{% endblock %}
+{% block title %}Language Learning Hub{% endblock %}
 
 {% block content %}
 <section class="language-hero">
   <div>
     <span class="hero-badge">AI Language Studio</span>
     <h1>ことばを、使える知識に。</h1>
-    <p>5つのセクションから学び方を選択。毎回新しい10問と、間違いに合わせて変化する5段階ヒントで学習できます。</p>
+    <p>Choose from five sections. Each session delivers 10 fresh questions with a 5-level adaptive hint system tailored to your mistakes.</p>
   </div>
   <a class="diagnostic-button" href="{% url 'lang_quiz:start_quiz' 'diagnostic' %}">
-    <span>現在地をチェック</span>
-    <strong>診断テストを始める →</strong>
-    <small>毎回リセット・10問</small>
+    <span>Check your current level</span>
+    <strong>Start Diagnostic Test →</strong>
+    <small>Resets every time · 10 questions</small>
   </a>
 </section>
 
@@ -22,47 +22,47 @@
   </div>
 {% endif %}
 
-<section class="language-section-grid" aria-label="言語学習セクション">
+<section class="language-section-grid" aria-label="Language Learning Sections">
   <a class="language-section-card vocab-card" href="{% url 'lang_quiz:material_setup' 'vocabulary' %}">
     <span class="section-icon">Aa</span>
-    <span class="section-kicker">WORDS & MEANING</span>
+    <span class="section-kicker">WORDS &amp; MEANING</span>
     <h2>Vocabulary</h2>
-    <p>教材からの作問、または10問コースを選んで語彙を強化。</p>
-    <span class="card-arrow">選択する →</span>
+    <p>Upload your own material or pick a curated 10-question course to build vocabulary.</p>
+    <span class="card-arrow">Choose →</span>
   </a>
-  <a class="language-section-card reading-card" href="{% url 'lang_quiz:start_quiz' 'reading' %}">
+  <a class="language-section-card reading-card" href="{% url 'lang_quiz:material_setup' 'reading' %}">
     <span class="section-icon">¶</span>
-    <span class="section-kicker">READ & INFER</span>
+    <span class="section-kicker">READ &amp; INFER</span>
     <h2>Reading</h2>
-    <p>短文の要点、因果関係、書かれている根拠を読み解く10問。</p>
-    <span class="card-arrow">ランダム10問 →</span>
+    <p>Upload a passage or PDF and get 10 comprehension questions based on its content.</p>
+    <span class="card-arrow">Upload &amp; Generate →</span>
   </a>
-  <a class="language-section-card grammar-card" href="{% url 'lang_quiz:start_quiz' 'grammar' %}">
+  <a class="language-section-card grammar-card" href="{% url 'lang_quiz:material_setup' 'grammar' %}">
     <span class="section-icon">{ }</span>
-    <span class="section-kicker">RULES & PATTERNS</span>
+    <span class="section-kicker">RULES &amp; PATTERNS</span>
     <h2>Grammar</h2>
-    <p>時制・比較・関係詞などの文法パターンを毎回違う組み合わせで。</p>
-    <span class="card-arrow">ランダム10問 →</span>
+    <p>Upload text and get 10 grammar questions — fill-in-the-blank and error correction.</p>
+    <span class="card-arrow">Upload &amp; Generate →</span>
   </a>
   <a class="language-section-card myself-card" href="{% url 'lang_quiz:material_setup' 'myself' %}">
     <span class="section-icon">＋</span>
     <span class="section-kicker">YOUR MATERIALS</span>
     <h2>Myself</h2>
-    <p>自分のファイルと作問リクエストから、オリジナル問題を作成。</p>
-    <span class="card-arrow">教材を追加 →</span>
+    <p>Upload your own files and a custom instruction to generate original questions.</p>
+    <span class="card-arrow">Add material →</span>
   </a>
   <a class="language-section-card missing-card" href="{% url 'lang_quiz:start_quiz' 'missing' %}">
     <span class="section-icon">↻</span>
-    <span class="section-kicker">RETRY & MASTER</span>
+    <span class="section-kicker">RETRY &amp; MASTER</span>
     <h2>Missing <span class="missing-count">{{ missing_count }}</span></h2>
-    <p>間違えた問題をまとめて復習。正解した問題は自動で消えます。</p>
-    <span class="card-arrow">復習する →</span>
+    <p>Review questions you got wrong. Correct answers are removed automatically.</p>
+    <span class="card-arrow">Review →</span>
   </a>
 </section>
 
 <section class="how-it-works">
-  <div><strong>01</strong><span>10問に挑戦</span></div>
-  <div><strong>02</strong><span>誤答でヒント更新</span></div>
-  <div><strong>03</strong><span>解説と次の学習へ</span></div>
+  <div><strong>01</strong><span>Answer 10 questions</span></div>
+  <div><strong>02</strong><span>Hints unlock on wrong answers</span></div>
+  <div><strong>03</strong><span>Review explanation &amp; next step</span></div>
 </section>
 {% endblock %}
