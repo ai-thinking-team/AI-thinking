@@ -23,7 +23,7 @@
       </li>
     {% endfor %}
   </ul>
-  {% if entry.more_count > 0 %}
+  {% if not focused %}
     <a class="show-more-link" href="?subject={{ entry.subject.slug }}">Show more →</a>
   {% endif %}
 </section>
