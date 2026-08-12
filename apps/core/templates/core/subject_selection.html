@@ -1,6 +1,18 @@
 <section class="subject-grid" aria-label="Learning areas">
-  <a class="card" href="{% url 'math_quiz:home' %}"><h2>Mathematics</h2><p>Reason through calculations, formulas, and concepts.</p></a>
-  <a class="card" href="{% url 'coding_quiz:home' %}"><h2>Coding</h2><p>Plan, write, diagnose, revise, teach back, and transfer.</p></a>
-  <a class="card" href="{% url 'lang_quiz:home' %}"><h2>Languages</h2><p>Practice vocabulary, grammar, reading, and written responses.</p></a>
-  <a class="card" href="{% url 'other_quiz:home' %}"><h2>Other Subjects</h2><p>Use rubrics and evidence for broader learning tasks.</p></a>
+  <a class="card" href="{% url 'math_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/math.html" %}</svg>
+    <h2>Mathematics</h2><p>Calculations &amp; concepts.</p>
+  </a>
+  <a class="card" href="{% url 'coding_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/coding.html" %}</svg>
+    <h2>Coding</h2><p>Write, diagnose, transfer.</p>
+  </a>
+  <a class="card" href="{% url 'lang_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/languages.html" %}</svg>
+    <h2>Languages</h2><p>Vocabulary &amp; grammar.</p>
+  </a>
+  <a class="card" href="{% url 'other_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/other.html" %}</svg>
+    <h2>Other Subjects</h2><p>Rubrics &amp; evidence.</p>
+  </a>
 </section>
