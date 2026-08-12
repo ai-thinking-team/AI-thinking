@@ -62,6 +62,15 @@ class HttpCodeExecutionGatewayTests(SimpleTestCase):
 
         self.assertEqual(result.status, ExecutionStatus.NOT_EXECUTED)
 
-    @override_settings(CODE_RUNNER_URL='http://127.0.0.1:8765', CODE_RUNNER_GATEWAY_CLASS='')
+    @override_settings(
+        CODE_RUNNER_URL='http://127.0.0.1:8765',
+        CODE_RUNNER_AUTH_TOKEN='runner-token',
+        CODE_RUNNER_TIMEOUT_SECONDS=17,
+        CODE_RUNNER_GATEWAY_CLASS='',
+    )
     def test_factory_uses_http_gateway_when_url_is_configured(self):
-        self.assertIsInstance(get_code_execution_gateway(), HttpCodeExecutionGateway)
+        gateway = get_code_execution_gateway()
+
+        self.assertIsInstance(gateway, HttpCodeExecutionGateway)
+        self.assertEqual(gateway.auth_token, 'runner-token')
+        self.assertEqual(gateway.timeout, 17)

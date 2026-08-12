@@ -47,15 +47,51 @@
 {% elif current_stage == 'diagnosis' %}
 <section class="panel" id="diagnosis">
   <h2>2. Diagnosis</h2>
-  <p>Your First Attempt is already saved. This browser is continuing from the next required step.</p>
-  <p class="question">{{ diagnostic_question }}</p>
-  <form method="post" data-disable-on-submit>
-    {% csrf_token %}
-    <input type="hidden" name="action" value="diagnosis">
-    {{ diagnosis_form.non_field_errors }}
-    <label>{{ diagnosis_form.diagnosis_answer.label }}{{ diagnosis_form.diagnosis_answer }}{{ diagnosis_form.diagnosis_answer.errors }}</label>
-    <button type="submit">Save answer and continue</button>
-  </form>
+  <p>Your First Attempt is already saved. You must show the core idea or complete the progressive Hint Ladder before Revision opens.</p>
+  <div class="hint-panel">
+    <strong>Diagnosis Hint Ladder:</strong> current level {{ diagnostic_hint_level }} of 4
+    <ol>
+      <li>Guiding question</li>
+      <li>Concept reminder</li>
+      <li>Related example</li>
+      <li>Partial method, followed by the correct explanation only if still needed</li>
+    </ol>
+  </div>
+  {% if diagnosis_solution_revealed %}
+    <div class="solution-reveal">
+      <strong>Correct conceptual answer:</strong>
+      <p>{{ diagnostic_question }}</p>
+    </div>
+    <form method="post" data-disable-on-submit>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="acknowledge_diagnosis_solution">
+      <button type="submit">I reviewed the answer — continue to Revision</button>
+    </form>
+  {% else %}
+    <p class="question">{{ diagnostic_question }}</p>
+    {% if diagnostic_source %}<p class="locked-note"><strong>Question source:</strong> {{ diagnostic_source }}</p>{% endif %}
+    <form method="post" data-disable-on-submit>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="diagnosis">
+      {{ diagnosis_form.non_field_errors }}
+      <label>{{ diagnosis_form.diagnosis_answer.label }}{{ diagnosis_form.diagnosis_answer }}{{ diagnosis_form.diagnosis_answer.errors }}</label>
+      <button type="submit">Check my answer</button>
+    </form>
+  {% endif %}
+  {% if diagnosis_interactions|length > 1 %}
+    <details>
+      <summary>Diagnosis attempts and unlocked hints</summary>
+      <ol>
+        {% for item in diagnosis_interactions %}
+          <li>
+            <strong>Level {{ item.response.hint_level|default:1 }}:</strong> {{ item.response.message }}
+            {% if item.learner_response %}<br><strong>Your answer:</strong> {{ item.learner_response.response }}{% endif %}
+            {% if item.response.feedback %}<br><strong>Evaluation:</strong> {{ item.response.feedback }}{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </details>
+  {% endif %}
 </section>
 {% elif current_stage == 'revision' %}
 <section class="panel" id="revision">
@@ -78,25 +114,52 @@
 {% elif current_stage == 'teach_back' %}
 <section class="panel" id="teach-back">
   <h2>4. Teach-Back</h2>
-  <p>Explain the change in your own words. A transparent rubric checks specificity and the target loop concept; incomplete responses remain at this step.</p>
+  <p>Explain the change in your own words. Incomplete responses unlock progressively easier questions; the final conceptual answer appears only after level 4.</p>
   {% if teach_back_attempts %}
     {% with latest_teach_back=teach_back_attempts|last %}
       <p class="status"><strong>Previous evaluation:</strong> {{ latest_teach_back.evaluation }} — {{ latest_teach_back.feedback }}</p>
+      <p class="evaluation-source"><small>Evaluation source: {{ latest_teach_back.rubric_evidence.evaluation_source|default:"CURATED_FALLBACK" }}</small></p>
+      {% if latest_teach_back.rubric_evidence.hint_level %}<p><strong>Teach-Back Hint Ladder:</strong> level {{ latest_teach_back.rubric_evidence.hint_level }} of 4</p>{% endif %}
+      {% if latest_teach_back.follow_up_question %}<p class="question"><strong>Focused follow-up:</strong> {{ latest_teach_back.follow_up_question }}</p>{% endif %}
+      {% if latest_teach_back.evaluation == 'ASSISTED_COMPLETION' %}
+        <div class="solution-reveal"><strong>Correct conceptual answer:</strong><p>{{ latest_teach_back.feedback }}</p></div>
+        <form method="post" data-disable-on-submit>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="acknowledge_teach_back_solution">
+          <button type="submit">I reviewed the answer — continue to Transfer Check</button>
+        </form>
+      {% else %}
+        <form method="post" data-disable-on-submit>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="teach_back">
+          {{ teach_back_form.non_field_errors }}
+          {% for field in teach_back_form %}
+            <label{% if field.errors %} class="answer-needs-revision"{% endif %}>{{ field.label }}{{ field }}{{ field.errors }}</label>
+          {% endfor %}
+          <button type="submit">Save Teach-Back</button>
+        </form>
+      {% endif %}
     {% endwith %}
+  {% else %}
+    <form method="post" data-disable-on-submit>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="teach_back">
+      {{ teach_back_form.non_field_errors }}
+      {% for field in teach_back_form %}
+        <label{% if field.errors %} class="answer-needs-revision"{% endif %}>{{ field.label }}{{ field }}{{ field.errors }}</label>
+      {% endfor %}
+      <button type="submit">Save Teach-Back</button>
+    </form>
   {% endif %}
-  <form method="post" data-disable-on-submit>
-    {% csrf_token %}
-    <input type="hidden" name="action" value="teach_back">
-    {{ teach_back_form.non_field_errors }}
-    {% for field in teach_back_form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}
-    <button type="submit">Save Teach-Back</button>
-  </form>
 </section>
 {% elif current_stage == 'transfer' %}
 <section class="panel" id="transfer-check">
   <h2>5. Transfer Check</h2>
   <p><strong>New task:</strong> {{ exercise.transfer_prompt }}</p>
   <p class="locked-note">AI and all hints are locked for this unassisted check.</p>
+  {% if transfer_attempt and transfer_attempt.evaluation.status == 'NOT_EXECUTED' %}
+    <p class="status"><strong>Previous submission:</strong> NOT_EXECUTED — {{ transfer_attempt.evaluation.message }} You may retry without losing the saved attempt.</p>
+  {% endif %}
   <form method="post" data-disable-on-submit>
     {% csrf_token %}
     <input type="hidden" name="action" value="transfer">
@@ -132,10 +195,12 @@
 {% if current_stage == 'completed' %}
 <section class="panel evidence-history">
   <h2>Learning evidence</h2>
-  {% if diagnosis_records %}<h3>Diagnosis</h3>{% for record in diagnosis_records %}<p>{{ record.evidence }}</p>{% endfor %}{% endif %}
+  {% if coach_interactions %}<h3>AI Coach interactions</h3><ol>{% for interaction in coach_interactions %}<li><strong>{{ interaction.get_source_display }}:</strong> {{ interaction.response.message }}{% if interaction.learner_response %}<br><strong>Learner response:</strong> {{ interaction.learner_response.response }}{% endif %}</li>{% endfor %}</ol>{% endif %}
+  {% if diagnosis_records %}<h3>Misconception history</h3>{% for record in diagnosis_records %}<p><strong>{{ record.code }} — {{ record.get_status_display }}:</strong> {{ record.evidence }}</p>{% endfor %}{% endif %}
   {% if hint_usage %}<h3>Hints used</h3><ol>{% for hint in hint_usage %}<li>Level {{ hint.level }}: {{ hint.content }}</li>{% endfor %}</ol>{% endif %}
-  {% if teach_back_attempts %}<h3>Teach-Back evaluations</h3><ol>{% for item in teach_back_attempts %}<li>{{ item.evaluation }} — {{ item.feedback }}</li>{% endfor %}</ol>{% endif %}
+  {% if teach_back_attempts %}<h3>Teach-Back evaluations</h3><ol>{% for item in teach_back_attempts %}<li>{{ item.evaluation }} — {{ item.feedback }}{% if item.follow_up_question %}<br><strong>Follow-up:</strong> {{ item.follow_up_question }}{% endif %}</li>{% endfor %}</ol>{% endif %}
   {% if transfer_attempt %}<h3>Transfer Check</h3><p>Status: {{ transfer_attempt.evaluation.status }} — {{ transfer_attempt.evaluation.message }}</p><p>Confidence: {{ transfer_attempt.confidence }}; assistance used: {{ transfer_attempt.used_assistance|yesno:"yes,no" }}</p>{% endif %}
+  {% if mastery_record %}<h3>Mastery decision</h3><p>{{ mastery_record.get_status_display }} — {{ mastery_record.reason }}</p>{% endif %}
 </section>
 {% endif %}
 

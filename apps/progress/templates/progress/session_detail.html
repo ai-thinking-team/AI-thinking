@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Session history{% endblock %}
+
+{% block content %}
+<p><a href="{% url 'progress:dashboard' %}">← Back to progress</a></p>
+<h1>{{ learning_session.activity.title|default:learning_session.topic.name }}</h1>
+<p>
+  {{ learning_session.get_current_state_display }} ·
+  started {{ learning_session.started_at|date:"Y-m-d H:i" }} ·
+  {% if learning_session.ended_at %}ended {{ learning_session.ended_at|date:"Y-m-d H:i" }}{% else %}active{% endif %}
+</p>
+
+<section class="panel">
+  <h2>Code attempts</h2>
+  {% for attempt in learning_session.attempts.all %}
+    <article class="history-entry">
+      <h3>Revision {{ attempt.revision_number }} · {{ attempt.created_at|date:"Y-m-d H:i:s" }}</h3>
+      <pre><code>{{ attempt.answer }}</code></pre>
+      <p><strong>Reasoning:</strong> {{ attempt.reasoning }}</p>
+      <p>
+        <strong>Confidence:</strong> {{ attempt.confidence }}/5 ·
+        <strong>Evaluation:</strong> {{ attempt.evaluation.status|default:"not evaluated" }}
+        {% if attempt.evaluation.message %} — {{ attempt.evaluation.message }}{% endif %}
+      </p>
+      {% if attempt.hint_usage.all %}
+        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #fff7e8; border-radius: 0.25rem;">
+          <strong>Unlocked Hints:</strong>
+          <ul>
+            {% for hint in attempt.hint_usage.all %}
+              <li><strong>Level {{ hint.level }}:</strong> {{ hint.content }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </article>
+  {% empty %}<p>No code attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel">
+  <h2>Coach Interactions</h2>
+  {% for interaction in learning_session.coach_interactions.all %}
+    <article class="history-entry">
+      <p>
+        <span class="badge {% if interaction.source == 'AI' %}badge-ai{% else %}badge-fallback{% endif %}">
+          {{ interaction.get_source_display }}
+        </span>
+        <strong>{{ interaction.get_interaction_type_display }}</strong> ·
+        {{ interaction.created_at|date:"Y-m-d H:i:s" }}
+        {% if interaction.failure_code %}
+          <span class="badge badge-warning">Fallback code: {{ interaction.failure_code }}</span>
+        {% endif %}
+      </p>
+      {% if interaction.response.message %}
+        <div class="interaction-entry">
+          <p><strong>Coach Question/Hint:</strong> {{ interaction.response.message }}</p>
+          {% if interaction.response.hint_level %}
+            <p><small>Hint level: {{ interaction.response.hint_level }}</small></p>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if interaction.learner_response %}
+        <p style="margin-top: 0.5rem;">
+          <strong>Learner Response:</strong> {{ interaction.learner_response.response }}
+        </p>
+      {% endif %}
+    </article>
+  {% empty %}<p>No coach interactions recorded.</p>{% endfor %}
+</section>
+
+<section class="panel">
+  <h2>Teach-Back attempts</h2>
+  {% for attempt in learning_session.teach_back_attempts.all %}
+    <article class="history-entry">
+      <p>
+        <span class="badge {% if attempt.evaluation == 'CLEAR_UNDERSTANDING' %}badge-success{% else %}badge-warning{% endif %}">
+          {{ attempt.evaluation|default:"Pending" }}
+        </span> · {{ attempt.created_at|date:"Y-m-d H:i:s" }}
+      </p>
+      <p><strong>Response:</strong> {{ attempt.response }}</p>
+      {% if attempt.feedback %}<p><strong>Feedback:</strong> {{ attempt.feedback }}</p>{% endif %}
+      {% if attempt.follow_up_question %}<p><strong>Follow-up:</strong> {{ attempt.follow_up_question }}</p>{% endif %}
+    </article>
+  {% empty %}<p>No Teach-Back attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel">
+  <h2>Transfer attempts</h2>
+  {% for attempt in learning_session.transfer_attempts.all %}
+    <article class="history-entry">
+      <p>
+        <span class="badge {% if attempt.passed %}badge-success{% else %}badge-danger{% endif %}">
+          {% if attempt.passed %}Passed{% else %}Not passed{% endif %}
+        </span> · {{ attempt.created_at|date:"Y-m-d H:i:s" }}
+      </p>
+      <pre><code>{{ attempt.response }}</code></pre>
+      <p><strong>Reasoning:</strong> {{ attempt.reasoning }}</p>
+      <p><strong>Confidence:</strong> {{ attempt.confidence }}/5 · <strong>Assisted:</strong> {{ attempt.used_assistance|yesno:"Yes,No" }}</p>
+    </article>
+  {% empty %}<p>No Transfer attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel">
+  <h2>Misconception history</h2>
+  {% for record in learning_session.misconceptions.all %}
+    <p>
+      <span class="badge {% if record.status == 'CONFIRMED' %}badge-danger{% elif record.status == 'RESOLVED' %}badge-success{% else %}badge-warning{% endif %}">
+        {{ record.get_status_display }}
+      </span>
+      <strong>{{ record.code }}</strong> — {{ record.evidence }}
+    </p>
+  {% empty %}<p>No misconception evidence recorded.</p>{% endfor %}
+</section>
+
+<section class="panel">
+  <h2>Mastery decisions</h2>
+  {% for record in learning_session.mastery_records.all %}
+    <article class="history-entry">
+      <p>
+        <span class="badge {% if record.status == 'MASTERED' %}badge-success{% else %}badge-danger{% endif %}">
+          {{ record.get_status_display }}
+        </span> · {{ record.created_at|date:"Y-m-d H:i:s" }}
+      </p>
+      <p><strong>Reason:</strong> {{ record.reason }}</p>
+      {% if record.recommendation %}<p><strong>Recommendation:</strong> {{ record.recommendation }}</p>{% endif %}
+    </article>
+  {% empty %}<p>No mastery decision recorded.</p>{% endfor %}
+</section>
+{% endblock %}

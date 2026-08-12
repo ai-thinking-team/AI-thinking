@@ -4,11 +4,22 @@
 
 {% block content %}
 <h1>Learning progress</h1>
-<p>This dashboard reports evidence from this browser session, not only quiz scores.</p>
+<p>This dashboard reports durable evidence from this browser session, not only quiz scores.</p>
 {% if learning_sessions %}
   <ul class="session-list">
   {% for session in learning_sessions %}
-    <li><strong>{{ session.topic.subject.name }} — {{ session.topic.name }}</strong>: {{ session.get_current_state_display }}</li>
+    <li class="panel">
+      <strong>{{ session.activity.title|default:session.topic.name }}</strong>
+      <span>— {{ session.get_current_state_display }}</span>
+      {% if session.ended_at %}<span class="status-muted">(ended)</span>{% else %}<span>(active)</span>{% endif %}
+      <div class="evidence-summary">
+        Started {{ session.started_at|date:"Y-m-d H:i" }} ·
+        {{ session.attempts.count }} code attempt{{ session.attempts.count|pluralize }} ·
+        {{ session.teach_back_attempts.count }} Teach-Back attempt{{ session.teach_back_attempts.count|pluralize }} ·
+        {{ session.transfer_attempts.count }} Transfer attempt{{ session.transfer_attempts.count|pluralize }}
+      </div>
+      <a href="{% url 'progress:session_detail' session.pk %}">Review evidence</a>
+    </li>
   {% endfor %}
   </ul>
 {% else %}

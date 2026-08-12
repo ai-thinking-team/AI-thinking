@@ -1,8 +1,11 @@
+import json
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseBadRequest
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
+from apps.ai_engine.client import ai_provider_configured
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowed
 
@@ -13,9 +16,10 @@ from .forms import (
     TeachBackForm,
     TransferAttemptForm,
 )
+from .models import CodingExercise
 from .services import (
-    DIAGNOSTIC_QUESTION,
-    ensure_demo_exercise,
+    acknowledge_diagnosis_solution,
+    acknowledge_teach_back_solution,
     get_demo_session,
     recover_interrupted_first_attempt,
     request_curated_hint,
@@ -54,27 +58,26 @@ CODING_SESSION_TRACKING_KEY = 'coding_demo_learning_session_id'
 
 
 def home(request):
-    return render(request, 'coding_quiz/home.html')
+    exercises = CodingExercise.objects.filter(active=True).select_related(
+        'activity__concept__topic'
+    )
+    return render(request, 'coding_quiz/home.html', {'exercises': exercises})
 
 
-def _browser_learning_session(request, demo_exercise):
+def _session_tracking_key(exercise):
+    if exercise.slug == 'double-numbers':
+        return CODING_SESSION_TRACKING_KEY
+    return f'{CODING_SESSION_TRACKING_KEY}:{exercise.slug}'
+
+
+def _browser_learning_session(request, exercise):
     if request.session.session_key is None:
         request.session.create()
-    learning_session, created = get_demo_session(
+    learning_session, _ = get_demo_session(
         browser_session_key=request.session.session_key,
-        exercise=demo_exercise,
+        exercise=exercise,
     )
-    tracked_session_id = request.session.get(CODING_SESSION_TRACKING_KEY)
-    if not created and tracked_session_id != learning_session.pk:
-        reset_demo_session(
-            browser_session_key=request.session.session_key,
-            exercise=demo_exercise,
-        )
-        learning_session, _ = get_demo_session(
-            browser_session_key=request.session.session_key,
-            exercise=demo_exercise,
-        )
-    request.session[CODING_SESSION_TRACKING_KEY] = learning_session.pk
+    request.session[_session_tracking_key(exercise)] = learning_session.pk
     if learning_session.current_state == WorkflowState.TOPIC_SELECTED:
         transition_session(learning_session, WorkflowState.DIAGNOSTIC_QUIZ)
     recover_interrupted_first_attempt(learning_session=learning_session)
@@ -86,7 +89,7 @@ def _bound_form(request, form_class, action, *, prefix=None, initial=None):
     return form_class(request.POST if is_action else None, prefix=prefix, initial=initial)
 
 
-def _handle_action(request, learning_session, demo_exercise, forms):
+def _handle_action(request, learning_session, exercise, forms):
     action = request.POST.get('action', '')
     form = forms.get(action)
     if form is not None and not form.is_valid():
@@ -95,7 +98,7 @@ def _handle_action(request, learning_session, demo_exercise, forms):
     if action == 'first_attempt':
         _, result = submit_first_attempt(
             learning_session=learning_session,
-            exercise=demo_exercise,
+            exercise=exercise,
             **form.cleaned_data,
         )
         messages.info(request, f'{result.status.value}: {result.message}')
@@ -104,14 +107,29 @@ def _handle_action(request, learning_session, demo_exercise, forms):
             learning_session=learning_session,
             answer=form.cleaned_data['diagnosis_answer'],
         )
-        messages.success(request, 'Your diagnosis answer was saved. You can now revise your work.')
+        if learning_session.current_state == WorkflowState.GUIDED_REVISION:
+            messages.success(request, 'Your answer shows the core idea. You can now revise your work.')
+        else:
+            latest_interaction = learning_session.coach_interactions.order_by(
+                '-created_at', '-pk'
+            ).first()
+            if latest_interaction and latest_interaction.response.get('should_reveal_solution'):
+                messages.warning(request, 'The final guided answer is now available. Review it before continuing.')
+            else:
+                messages.warning(request, 'Not clear yet. A more concrete hint has been unlocked.')
+    elif action == 'acknowledge_diagnosis_solution':
+        acknowledge_diagnosis_solution(learning_session=learning_session)
+        messages.info(request, 'The guided answer was recorded as assistance. Continue with your own revision.')
     elif action == 'hint':
         hint = request_curated_hint(learning_session=learning_session)
-        messages.success(request, f'Hint level {hint.level} was unlocked.')
+        if getattr(hint, 'solution_revealed', False):
+            messages.warning(request, 'The final Revision solution was unlocked. Study it, then submit a passing revision.')
+        else:
+            messages.success(request, f'Hint level {hint.level} was unlocked.')
     elif action in {'save_revision', 'finish_revision'}:
         _, result = submit_revision(
             learning_session=learning_session,
-            exercise=demo_exercise,
+            exercise=exercise,
             finish=action == 'finish_revision',
             **form.cleaned_data,
         )
@@ -131,38 +149,71 @@ def _handle_action(request, learning_session, demo_exercise, forms):
         if teach_back.evaluation == 'CLEAR_UNDERSTANDING':
             messages.success(request, 'Teach-Back is clear. Complete the unassisted Transfer Check.')
         else:
+            for field_evaluation in teach_back.rubric_evidence.get('field_evaluations', []):
+                field_name = field_evaluation.get('field')
+                if (
+                    not field_evaluation.get('understood', False)
+                    and field_name in form.fields
+                ):
+                    form.add_error(field_name, field_evaluation.get('feedback') or 'Please revise this answer.')
             messages.warning(request, f'Teach-Back needs revision: {teach_back.feedback}')
+            # Render the same bound form so the learner can edit without re-entering answers.
+            return None
+    elif action == 'acknowledge_teach_back_solution':
+        acknowledge_teach_back_solution(learning_session=learning_session)
+        messages.warning(request, (
+            'The assisted Teach-Back was recorded. Complete the unassisted Transfer Check; '
+            'this session cannot be mastered without a clear Teach-Back.'
+        ))
     elif action == 'transfer':
         _, result = submit_transfer_check(
             learning_session=learning_session,
-            exercise=demo_exercise,
+            exercise=exercise,
             **form.cleaned_data,
         )
-        messages.info(request, f'Transfer Check saved. {result.status.value}: {result.message}')
+        if result.status.value == 'NOT_EXECUTED':
+            messages.warning(request, (
+                f'Transfer Check saved but not evaluated: {result.message} '
+                'This step remains open so you can retry when the isolated runner is available.'
+            ))
+        else:
+            messages.info(request, f'Transfer Check saved. {result.status.value}: {result.message}')
     elif action == 'reset':
         reset_demo_session(
             browser_session_key=request.session.session_key,
-            exercise=demo_exercise,
+            exercise=exercise,
         )
-        request.session.pop(CODING_SESSION_TRACKING_KEY, None)
-        messages.success(request, 'This browser session was reset. Other learners were not affected.')
+        request.session.pop(_session_tracking_key(exercise), None)
+        messages.success(request, 'This learning session was ended and its evidence was preserved.')
     else:
         return HttpResponseBadRequest('This action is not available. Return to the current step and try again.')
-    return redirect('coding_quiz:exercise')
+    return redirect(request.path)
 
 
-def exercise(request):
-    demo_exercise = ensure_demo_exercise()
-    learning_session = _browser_learning_session(request, demo_exercise)
+def exercise(request, slug='double-numbers'):
+    selected_exercise = get_object_or_404(
+        CodingExercise.objects.select_related(
+            'activity__concept__topic', 'transfer_activity'
+        ),
+        slug=slug,
+        active=True,
+    )
+    learning_session = _browser_learning_session(request, selected_exercise)
     first_attempt = learning_session.attempts.filter(revision_number=0).first()
     latest_attempt = learning_session.attempts.order_by('-revision_number', '-created_at').first()
+    latest_transfer_attempt = learning_session.transfer_attempts.order_by('-created_at', '-pk').first()
+    latest_teach_back_attempt = learning_session.teach_back_attempts.order_by('-created_at', '-pk').first()
+    try:
+        latest_teach_back_response = json.loads(latest_teach_back_attempt.response) if latest_teach_back_attempt else {}
+    except (json.JSONDecodeError, TypeError):
+        latest_teach_back_response = {}
 
     forms = {
         'first_attempt': _bound_form(
             request,
             CodingAttemptForm,
             'first_attempt',
-            initial={'source_code': demo_exercise.starter_code},
+            initial={'source_code': selected_exercise.starter_code},
         ),
         'diagnosis': _bound_form(request, DiagnosisForm, 'diagnosis'),
         'save_revision': _bound_form(
@@ -171,7 +222,7 @@ def exercise(request):
             'save_revision',
             prefix='revision',
             initial={
-                'source_code': latest_attempt.answer if latest_attempt else demo_exercise.starter_code,
+                'source_code': latest_attempt.answer if latest_attempt else selected_exercise.starter_code,
                 'reasoning': latest_attempt.reasoning if latest_attempt else '',
                 'confidence': latest_attempt.confidence if latest_attempt else None,
             },
@@ -182,23 +233,34 @@ def exercise(request):
             'finish_revision',
             prefix='revision',
             initial={
-                'source_code': latest_attempt.answer if latest_attempt else demo_exercise.starter_code,
+                'source_code': latest_attempt.answer if latest_attempt else selected_exercise.starter_code,
                 'reasoning': latest_attempt.reasoning if latest_attempt else '',
                 'confidence': latest_attempt.confidence if latest_attempt else None,
             },
         ),
-        'teach_back': _bound_form(request, TeachBackForm, 'teach_back', prefix='teach'),
+        'teach_back': _bound_form(
+            request,
+            TeachBackForm,
+            'teach_back',
+            prefix='teach',
+            initial=latest_teach_back_response,
+        ),
         'transfer': _bound_form(
             request,
             TransferAttemptForm,
             'transfer',
             prefix='transfer',
+            initial={
+                'source_code': latest_transfer_attempt.response if latest_transfer_attempt else '',
+                'reasoning': latest_transfer_attempt.reasoning if latest_transfer_attempt else '',
+                'confidence': latest_transfer_attempt.confidence if latest_transfer_attempt else None,
+            },
         ),
     }
 
     if request.method == 'POST':
         try:
-            response = _handle_action(request, learning_session, demo_exercise, forms)
+            response = _handle_action(request, learning_session, selected_exercise, forms)
         except (ValidationError, PermissionDenied) as exc:
             error_text = '; '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
             messages.error(request, error_text)
@@ -229,22 +291,33 @@ def exercise(request):
     ]
     latest_evaluation = latest_attempt.evaluation if latest_attempt else None
     diagnosis_records = list(learning_session.misconceptions.order_by('created_at'))
+    coach_interactions = list(
+        learning_session.coach_interactions.order_by('created_at', 'pk')
+        .select_related('learner_attempt')
+    )
     teach_back_attempts = list(learning_session.teach_back_attempts.order_by('created_at'))
-    transfer_attempt = learning_session.transfer_attempts.order_by('-created_at').first()
-    if learning_session.current_state == WorkflowState.MASTERED:
-        final_result_message = 'Mastered: all required evidence was verified.'
-        review_recommendation = ''
-    elif transfer_attempt and transfer_attempt.evaluation.get('status') == 'NOT_EXECUTED':
-        final_result_message = 'Needs review: the Transfer Check could not be executed safely.'
-        review_recommendation = 'Configure an isolated runner, then repeat the loop-values Transfer Check.'
+    transfer_attempt = learning_session.transfer_attempts.order_by('-created_at', '-pk').first()
+    diagnosis_interactions = list(
+        learning_session.coach_interactions.filter(
+            interaction_type__in=('DIAGNOSTIC', 'HINT'),
+        ).order_by('created_at', 'pk')
+    )
+    diagnostic_interaction = diagnosis_interactions[-1] if diagnosis_interactions else None
+    mastery_record = learning_session.mastery_records.order_by('-created_at').first()
+    revision_solution_interaction = learning_session.coach_interactions.filter(
+        interaction_type='HINT',
+        request_context__phase='revision',
+        response__should_reveal_solution=True,
+    ).order_by('-created_at', '-pk').first()
+    if mastery_record:
+        final_result_message = f'{mastery_record.get_status_display()}: {mastery_record.reason}'
+        review_recommendation = mastery_record.recommendation
     else:
-        final_result_message = 'Needs review: the independent Transfer Check was not verified as passed.'
-        review_recommendation = (
-            'Review how a loop transforms each current item into a new result list, then try again.'
-        )
+        final_result_message = 'No mastery decision has been recorded yet.'
+        review_recommendation = ''
 
     return render(request, 'coding_quiz/exercise.html', {
-        'exercise': demo_exercise,
+        'exercise': selected_exercise,
         'learning_session': learning_session,
         'current_stage': current_stage,
         'current_stage_label': stage_labels[current_stage],
@@ -254,16 +327,33 @@ def exercise(request):
         'revision_form': forms['finish_revision'] if request.POST.get('action') == 'finish_revision' else forms['save_revision'],
         'teach_back_form': forms['teach_back'],
         'transfer_form': forms['transfer'],
-        'diagnostic_question': DIAGNOSTIC_QUESTION,
+        'diagnostic_question': (
+            diagnostic_interaction.response.get('message')
+            if diagnostic_interaction
+            else 'Which value changes during one iteration, and what should happen to it?'
+        ),
+        'diagnostic_source': diagnostic_interaction.source if diagnostic_interaction else '',
+        'diagnostic_hint_level': (
+            diagnostic_interaction.response.get('hint_level', 1)
+            if diagnostic_interaction else 1
+        ),
+        'diagnosis_solution_revealed': bool(
+            diagnostic_interaction
+            and diagnostic_interaction.response.get('should_reveal_solution')
+        ),
+        'diagnosis_interactions': diagnosis_interactions,
         'first_attempt': first_attempt,
         'attempts': attempts,
         'hint_usage': hint_usage,
         'latest_evaluation': latest_evaluation,
         'diagnosis_records': diagnosis_records,
+        'coach_interactions': coach_interactions,
         'teach_back_attempts': teach_back_attempts,
         'transfer_attempt': transfer_attempt,
+        'mastery_record': mastery_record,
         'final_result_message': final_result_message,
         'review_recommendation': review_recommendation,
+        'revision_solution_interaction': revision_solution_interaction,
         'ai_enabled': ai_assistance_allowed(learning_session.current_state),
-        'ai_configured': False,
+        'ai_configured': ai_provider_configured(),
     })

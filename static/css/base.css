@@ -28,13 +28,30 @@ button { padding: .7rem 1rem; border: 0; border-radius: .4rem; background: #244c
 .message { padding: 1rem; border-radius: .5rem; background: #eaf2ff; }
 .message.success { background: #dff4e8; }
 .errorlist { color: #a32222; margin: .35rem 0; }
+.answer-needs-revision { padding: .75rem; border-left: .3rem solid #b42318; background: #fff0ee; color: #7a1712; }
+.answer-needs-revision textarea { border: 2px solid #b42318; background: #fffafa; }
+.evaluation-source { color: #59647a; }
+.solution-reveal { margin: 1rem 0; padding: 1rem; border: .15rem solid #9a6700; border-radius: .5rem; background: #fff4ce; }
 .question, .locked-note { padding: 1rem; border-left: .3rem solid #244cc8; background: #eef3ff; }
 .button-row { display: flex; flex-wrap: wrap; gap: .75rem; }
 .button-secondary { background: #59647a; }
 button:disabled { opacity: .55; cursor: wait; }
+.session-list { display: grid; gap: 1rem; padding: 0; list-style: none; }
+.evidence-summary, .status-muted { color: #59647a; }
+.evidence-summary { margin: .5rem 0; }
+.history-entry + .history-entry { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #d8deeb; }
 pre { overflow-x: auto; padding: 1rem; border-radius: .5rem; background: #172033; color: #f7f8fc; }
 details { margin: .75rem 0; }
 @media (max-width: 760px) {
   .workflow { grid-template-columns: 1fr 1fr; }
   .page-header { display: block; }
 }
+
+.badge { display: inline-block; padding: .2rem .5rem; font-size: .8rem; border-radius: .25rem; background: #e5e9f2; color: #172033; font-weight: 600; }
+.badge.badge-ai { background: #eef3ff; color: #244cc8; border: 1px solid #cce0ff; }
+.badge.badge-fallback { background: #fff7e8; color: #9a6700; border: 1px solid #ffe6b3; }
+.badge.badge-success { background: #dff4e8; color: #155d37; }
+.badge.badge-warning { background: #fff4ce; color: #7a5200; }
+.badge.badge-danger { background: #fff0ee; color: #a32222; }
+.interaction-entry { margin-top: .75rem; padding: .85rem; border-left: 3px solid #244cc8; background: #f8fafc; border-radius: 0 .5rem .5rem 0; }
+

@@ -58,5 +58,6 @@ def get_code_execution_gateway():
         return HttpCodeExecutionGateway(
             base_url=base_url,
             auth_token=getattr(settings, 'CODE_RUNNER_AUTH_TOKEN', ''),
+            timeout=getattr(settings, 'CODE_RUNNER_TIMEOUT_SECONDS', 20),
         )
     return UnavailableCodeExecutionGateway()

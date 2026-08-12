@@ -7,8 +7,9 @@ RUN addgroup -g 10001 runner && adduser -D -u 10001 -G runner runner
 WORKDIR /runner
 COPY harness.py /runner/harness.py
 COPY worker.py /runner/worker.py
-RUN chown root:root /runner/harness.py /runner/worker.py \
-    && chmod 0400 /runner/harness.py \
+RUN chown root:runner /runner/harness.py /runner/worker.py \
+    && chmod 0550 /runner/harness.py \
     && chmod 0555 /runner/worker.py
 
+USER runner
 ENTRYPOINT ["python", "/runner/harness.py"]

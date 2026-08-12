@@ -38,6 +38,66 @@ TEST_CATALOG = {
         'expected': [1, 4, 6],
         'public': False,
     },
+    'square-public': {
+        'function': 'square_numbers',
+        'args': ([2, -3],),
+        'expected': [4, 9],
+        'public': True,
+    },
+    'empty-square': {
+        'function': 'square_numbers',
+        'args': ([],),
+        'expected': [],
+        'public': False,
+    },
+    'zero-square': {
+        'function': 'square_numbers',
+        'args': ([0, 4],),
+        'expected': [0, 16],
+        'public': False,
+    },
+    'empty-negate': {
+        'function': 'negate_numbers',
+        'args': ([],),
+        'expected': [],
+        'public': False,
+    },
+    'mixed-negate': {
+        'function': 'negate_numbers',
+        'args': ([-2, 0, 5],),
+        'expected': [2, 0, -5],
+        'public': False,
+    },
+    'increment-public': {
+        'function': 'increment_numbers',
+        'args': ([1, 3],),
+        'expected': [2, 4],
+        'public': True,
+    },
+    'empty-increment': {
+        'function': 'increment_numbers',
+        'args': ([],),
+        'expected': [],
+        'public': False,
+    },
+    'negative-increment': {
+        'function': 'increment_numbers',
+        'args': ([-2, 0],),
+        'expected': [-1, 1],
+        'public': False,
+    },
+    'empty-absolute': {
+        'function': 'absolute_numbers',
+        'args': ([],),
+        'expected': [],
+        'public': False,
+    },
+    'mixed-absolute': {
+        'function': 'absolute_numbers',
+        'args': ([-3, 0, 4],),
+        'expected': [3, 0, 4],
+        'public': False,
+    },
 }
 
 EXECUTION_SECONDS = 2
@@ -82,7 +142,7 @@ def _run_learner(source_code, test):
         'env': {'PATH': os.environ.get('PATH', ''), 'PYTHONDONTWRITEBYTECODE': '1'},
         'cwd': tempfile.gettempdir(),
     }
-    if os.name == 'posix':
+    if os.name == 'posix' and hasattr(os, 'geteuid') and os.geteuid() == 0:
         process_options.update(user=10001, group=10001)
     try:
         process = subprocess.run(
@@ -114,9 +174,10 @@ def execute(payload):
     try:
         compiled = compile(source_code, 'learner_submission.py', 'exec')
     except SyntaxError as exc:
+        clean_msg = str(exc.msg).replace('\n', ' ')[:160]
         return _result(
             'SYNTAX_ERROR',
-            f'Syntax error on line {exc.lineno}: {exc.msg}',
+            f'Syntax error on line {exc.lineno}: {clean_msg}',
         )
 
     _start_timeout()

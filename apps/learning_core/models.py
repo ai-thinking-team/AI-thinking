@@ -54,6 +54,13 @@ class LearningActivity(models.Model):
 class LearningSession(models.Model):
     browser_session_key = models.CharField(max_length=40, db_index=True)
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE, related_name='learning_sessions')
+    activity = models.ForeignKey(
+        LearningActivity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='learning_sessions',
+    )
     current_state = models.CharField(
         max_length=32,
         choices=WorkflowState.choices,
@@ -61,12 +68,14 @@ class LearningSession(models.Model):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    active_slot = models.BooleanField(default=True, null=True, editable=False)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=('browser_session_key', 'topic'),
-                name='unique_browser_topic_session',
+                fields=('browser_session_key', 'activity', 'active_slot'),
+                name='unique_active_browser_activity_session',
             )
         ]
 
@@ -100,7 +109,51 @@ class HintUsage(models.Model):
         ordering = ('created_at',)
 
 
+class CoachInteraction(models.Model):
+    class InteractionType(models.TextChoices):
+        DIAGNOSTIC = 'DIAGNOSTIC', 'Diagnostic question'
+        HINT = 'HINT', 'Hint'
+
+    class Source(models.TextChoices):
+        AI = 'AI', 'AI provider'
+        CURATED_FALLBACK = 'CURATED_FALLBACK', 'Curated fallback'
+
+    learning_session = models.ForeignKey(
+        LearningSession,
+        on_delete=models.CASCADE,
+        related_name='coach_interactions',
+    )
+    learner_attempt = models.ForeignKey(
+        LearnerAttempt,
+        on_delete=models.CASCADE,
+        related_name='coach_interactions',
+    )
+    interaction_type = models.CharField(max_length=20, choices=InteractionType.choices)
+    source = models.CharField(max_length=20, choices=Source.choices)
+    request_context = models.JSONField(default=dict)
+    response = models.JSONField(default=dict)
+    failure_code = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CoachLearnerResponse(models.Model):
+    interaction = models.OneToOneField(
+        CoachInteraction,
+        on_delete=models.CASCADE,
+        related_name='learner_response',
+    )
+    response = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class MisconceptionRecord(models.Model):
+    class Status(models.TextChoices):
+        HYPOTHESIS = 'HYPOTHESIS', 'Unconfirmed hypothesis'
+        CONFIRMED = 'CONFIRMED', 'Confirmed'
+        DISMISSED = 'DISMISSED', 'Dismissed'
+        RESOLVED = 'RESOLVED', 'Resolved'
+        REPEATED = 'REPEATED', 'Repeated in transfer check'
+
     learning_session = models.ForeignKey(
         LearningSession,
         on_delete=models.CASCADE,
@@ -109,8 +162,14 @@ class MisconceptionRecord(models.Model):
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='misconception_records')
     code = models.SlugField()
     evidence = models.TextField()
-    confirmed = models.BooleanField(default=False)
-    resolved_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.HYPOTHESIS)
+    supersedes = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='follow_up_records',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -123,6 +182,8 @@ class TeachBackAttempt(models.Model):
     response = models.TextField()
     evaluation = models.CharField(max_length=40, blank=True)
     feedback = models.TextField(blank=True)
+    follow_up_question = models.TextField(blank=True)
+    rubric_evidence = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -147,4 +208,22 @@ class TransferAttempt(models.Model):
     used_assistance = models.BooleanField(default=False)
     passed = models.BooleanField(default=False)
     evaluation = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ConceptMastery(models.Model):
+    class Status(models.TextChoices):
+        MASTERED = 'MASTERED', 'Mastered'
+        NEEDS_REVIEW = 'NEEDS_REVIEW', 'Needs review'
+
+    learning_session = models.ForeignKey(
+        LearningSession,
+        on_delete=models.CASCADE,
+        related_name='mastery_records',
+    )
+    concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='mastery_records')
+    status = models.CharField(max_length=20, choices=Status.choices)
+    reason = models.TextField()
+    recommendation = models.TextField(blank=True)
+    evidence = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)

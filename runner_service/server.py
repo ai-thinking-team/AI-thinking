@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import subprocess
@@ -10,13 +11,23 @@ PORT = int(os.environ.get('RUNNER_PORT', '8765'))
 IMAGE = os.environ.get('RUNNER_IMAGE', 'ai-thinking-code-runner:local')
 AUTH_TOKEN = os.environ.get('RUNNER_AUTH_TOKEN', '')
 MAX_REQUEST_BYTES = 25_000
-CONTAINER_TIMEOUT_SECONDS = 3
+CONTAINER_TIMEOUT_SECONDS = int(os.environ.get('RUNNER_CONTAINER_TIMEOUT_SECONDS', '15'))
 ALLOWED_TEST_IDS = {
     'double-public',
     'empty-list',
     'negative-values',
     'empty-words',
     'mixed-word-lengths',
+    'square-public',
+    'empty-square',
+    'zero-square',
+    'empty-negate',
+    'mixed-negate',
+    'increment-public',
+    'empty-increment',
+    'negative-increment',
+    'empty-absolute',
+    'mixed-absolute',
 }
 
 
@@ -35,8 +46,6 @@ def _docker_command(container_name):
         '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m',
         '--security-opt', 'no-new-privileges',
         '--cap-drop', 'ALL',
-        '--cap-add', 'SETUID',
-        '--cap-add', 'SETGID',
         '-i', IMAGE,
     ]
 
@@ -54,6 +63,8 @@ def _cleanup_container(container_name):
 
 
 def run_in_sandbox(payload):
+    if not isinstance(payload, dict):
+        return _not_executed('The execution request must be a JSON object.')
     test_case_ids = payload.get('test_case_ids')
     if payload.get('language') != 'python':
         return _not_executed('The runner supports Python only.')
@@ -64,11 +75,16 @@ def run_in_sandbox(payload):
     if any(test_id not in ALLOWED_TEST_IDS for test_id in test_case_ids):
         return _not_executed('The request contains an unknown test-case ID.')
 
+    sanitized_payload = {
+        'language': payload.get('language'),
+        'source_code': payload.get('source_code'),
+        'test_case_ids': test_case_ids,
+    }
     container_name = f'ai-thinking-run-{uuid.uuid4().hex}'
     try:
         process = subprocess.run(
             _docker_command(container_name),
-            input=json.dumps(payload),
+            input=json.dumps(sanitized_payload),
             capture_output=True,
             text=True,
             timeout=CONTAINER_TIMEOUT_SECONDS,
@@ -76,7 +92,13 @@ def run_in_sandbox(payload):
         )
     except subprocess.TimeoutExpired:
         _cleanup_container(container_name)
-        return {'status': 'TIMEOUT', 'message': 'Execution exceeded the 3-second container limit.', 'tests': []}
+        return {
+            'status': 'TIMEOUT',
+            'message': (
+                f'Execution exceeded the {CONTAINER_TIMEOUT_SECONDS}-second container limit.'
+            ),
+            'tests': [],
+        }
     except FileNotFoundError:
         return _not_executed('Docker is not installed or is not available on PATH.')
     except subprocess.SubprocessError:
@@ -116,7 +138,8 @@ class RunnerRequestHandler(BaseHTTPRequestHandler):
         if self.path != '/execute':
             self._send_json(404, {'error': 'not_found'})
             return
-        if AUTH_TOKEN and self.headers.get('X-Runner-Token') != AUTH_TOKEN:
+        token = self.headers.get('X-Runner-Token') or ''
+        if AUTH_TOKEN and not hmac.compare_digest(token, AUTH_TOKEN):
             self._send_json(403, {'error': 'forbidden'})
             return
         try:

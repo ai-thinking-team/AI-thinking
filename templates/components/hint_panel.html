@@ -1,14 +1,22 @@
 <aside class="hint-panel">
-  <h2>Four-level hint ladder</h2>
+  <h2>Revision Hint Ladder</h2>
   <ol><li>Guiding question</li><li>Concept reminder</li><li>Related example</li><li>Partial method</li></ol>
   {% if hint_usage %}
     <h3>Unlocked hints</h3>
     <ol>{% for hint in hint_usage %}<li><strong>Level {{ hint.level }}:</strong> {{ hint.content }}</li>{% endfor %}</ol>
   {% endif %}
-  <p>After a hint, save a new revision before requesting the next level.</p>
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="hint">
-    <button type="submit">Unlock next hint</button>
-  </form>
+  {% if revision_solution_interaction %}
+    <div class="solution-reveal">
+      <strong>Final Revision solution:</strong>
+      <pre>{{ revision_solution_interaction.response.message }}</pre>
+      <p>Study the solution, then submit a revision that passes the isolated tests. It is not accepted automatically.</p>
+    </div>
+  {% else %}
+    <p>After a hint, save a new revision before requesting the next level. If level 4 still does not help, one more failed revision unlocks the final solution.</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="hint">
+      <button type="submit">Unlock next hint</button>
+    </form>
+  {% endif %}
 </aside>

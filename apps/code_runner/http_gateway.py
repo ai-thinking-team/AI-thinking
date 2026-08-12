@@ -10,7 +10,7 @@ MAX_RESPONSE_BYTES = 64_000
 
 
 class HttpCodeExecutionGateway:
-    def __init__(self, *, base_url, auth_token='', timeout=5):
+    def __init__(self, *, base_url, auth_token='', timeout=20):
         self.execute_url = f'{base_url.rstrip("/")}/execute'
         self.auth_token = auth_token
         self.timeout = timeout

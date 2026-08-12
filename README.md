@@ -1,5 +1,8 @@
 # AI-thinking
 
+Production deployment and security settings are documented in [`PRODUCTION.md`](PRODUCTION.md).
+Coding exercise authoring and import are documented in [`CODING_CATALOG.md`](CODING_CATALOG.md).
+
 [日本語](#日本語) | [English](#english) | [Tiếng Việt](#tiếng-việt)
 
 ---
@@ -24,6 +27,7 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -38,6 +42,7 @@ python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -87,6 +92,7 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -101,6 +107,7 @@ python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -131,6 +138,67 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ### Local isolated Coding runner
 
 The Coding workflow requires a separate Docker-backed HTTP runner before a revision can be verified as `PASSED`. See [`runner_service/README.md`](runner_service/README.md). Without that service, submissions safely remain `NOT_EXECUTED` and cannot unlock Teach-Back or Mastery.
+
+### Coding exercise catalog and history
+
+`python manage.py migrate` creates and seeds the initial database-backed Coding catalog. The
+catalog currently contains `double-numbers`, `square-numbers`, and `increment-numbers`; prompts,
+rubrics, public/hidden runner IDs, and Transfer Check configuration are selected per exercise.
+Opening `/coding/` lists active exercises. Each browser can keep one active session per exercise,
+while Reset closes the current session instead of deleting it. Previous code attempts, Teach-Back
+evidence, misconceptions, Transfer Checks, and mastery decisions remain available under
+`/progress/`.
+
+### Use MySQL on Windows
+
+Install MySQL Server 8 on Windows, create an `utf8mb4` database and a dedicated user, then set:
+
+```env
+DB_ENGINE=mysql
+DB_NAME=ai_thinking
+DB_USER=ai_thinking_user
+DB_PASSWORD=replace_with_your_password
+DB_HOST=127.0.0.1
+DB_PORT=3306
+```
+
+Install dependencies and initialize the new database:
+
+```powershell
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe manage.py migrate
+venv\Scripts\python.exe manage.py check
+```
+
+The session uniqueness rule uses a nullable active slot instead of a conditional index, so it is
+enforced by MySQL while still allowing any number of ended sessions to remain as history.
+
+### Optional DeepSeek or Gemini AI Coach
+
+DeepSeek is the preferred fallback when Gemini quota is unavailable. Add a DeepSeek API key to
+`.env`; the adapter uses the OpenAI-compatible HTTP endpoint and requires no additional SDK:
+
+```env
+DEEPSEEK_API_KEY=your-key-here
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+AI_PROVIDER_CLASS=apps.ai_engine.providers.deepseek.DeepSeekProvider
+```
+
+Gemini remains available by configuration:
+
+```env
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-2.5-flash
+AI_PROVIDER_CLASS=apps.ai_engine.providers.gemini.GeminiProvider
+```
+
+Do not commit or paste either key into source code. When `AI_PROVIDER_CLASS` is omitted, Django
+selects DeepSeek when `DEEPSEEK_API_KEY` is present, otherwise Gemini when `GEMINI_API_KEY` is
+present. The Coding Diagnosis sends only privacy-minimized
+signals: the target concept, confidence, execution category, aggregate test counts, and boolean
+code-structure features. Raw learner source code and reasoning are not sent to the provider. Provider
+failure or invalid structured output falls back to the curated diagnostic question.
 
 ---
 

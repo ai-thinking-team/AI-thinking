@@ -6,5 +6,15 @@
 <h1>Coding</h1>
 <p>The first MVP supports beginner Python only. Passing tests is necessary, but Teach-Back and an unassisted Transfer Check are also required for mastery.</p>
 {% include "components/progress_bar.html" %}
-<a class="card" href="{% url 'coding_quiz:exercise' %}"><h2>Python loops: Double every number</h2><p>Open the detailed scaffold exercise.</p></a>
+<div class="subject-grid">
+  {% for exercise in exercises %}
+    <a class="card" href="{% url 'coding_quiz:exercise_detail' exercise.slug %}">
+      <p class="eyebrow">{{ exercise.difficulty }} · {{ exercise.activity.concept.name }}</p>
+      <h2>{{ exercise.activity.title }}</h2>
+      <p>{{ exercise.activity.prompt }}</p>
+    </a>
+  {% empty %}
+    <p>No active Coding exercises are available.</p>
+  {% endfor %}
+</div>
 {% endblock %}
