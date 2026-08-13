@@ -205,7 +205,7 @@ class CodingWorkflowBrowserTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 4)
+        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 6)
         exercise = CodingExercise.objects.select_related('activity').get(slug='double-numbers')
         self.assertEqual(response.context['exercise'], exercise)
         self.assertContains(response, 'Double every number')
@@ -218,10 +218,26 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertContains(response, 'Double every number')
         self.assertContains(response, 'Square every number')
         self.assertContains(response, 'Increment every number')
+        self.assertContains(response, 'Look up a dictionary value')
+        self.assertContains(response, 'Handle a zero denominator')
+        self.assertContains(response, 'Read the first list item safely')
         square_url = reverse('coding_quiz:exercise_detail', args=('square-numbers',))
         self.assertContains(response, square_url)
         square_page = self.client.get(square_url)
         self.assertContains(square_page, 'square_numbers([2, -3])')
+
+    def test_each_new_concept_uses_its_specialized_rubric(self):
+        expected = {
+            'lookup-dictionary-grade': ('dictionary_keys', 'dictionary-key-misuse'),
+            'safe-divide-function': ('function_parameters_and_return', 'function-parameter-misuse'),
+            'first-list-item': ('list_indexing', 'list-index-misuse'),
+        }
+        for slug, (concept, misconception) in expected.items():
+            with self.subTest(slug=slug):
+                exercise = CodingExercise.objects.select_related('activity').get(slug=slug)
+                rubric = exercise.activity.rubric
+                self.assertEqual(rubric['concept'], concept)
+                self.assertEqual(rubric['allowed_misconception_codes'], [misconception])
 
     def test_same_browser_has_independent_active_session_per_exercise(self):
         double_url = reverse('coding_quiz:exercise_detail', args=('double-numbers',))
@@ -257,7 +273,7 @@ class CodingWorkflowBrowserTests(TestCase):
     def test_catalog_validation_command_accepts_the_versioned_catalog(self):
         output = StringIO()
         call_command('validate_coding_catalog', stdout=output)
-        self.assertIn('Catalog valid: 4 exercise(s).', output.getvalue())
+        self.assertIn('Catalog valid: 6 exercise(s).', output.getvalue())
 
     def test_catalog_validation_rejects_unknown_runner_test_id(self):
         invalid_catalog = deepcopy(CODING_CATALOG)

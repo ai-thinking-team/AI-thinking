@@ -13,6 +13,10 @@ AUTH_TOKEN = os.environ.get('RUNNER_AUTH_TOKEN', '')
 MAX_REQUEST_BYTES = 25_000
 CONTAINER_TIMEOUT_SECONDS = int(os.environ.get('RUNNER_CONTAINER_TIMEOUT_SECONDS', '15'))
 ALLOWED_TEST_IDS = {
+    'divide-public', 'divide-by-zero', 'divide-negative',
+    'percentage-public', 'percentage-zero', 'percentage-other',
+    'first-item-public', 'first-item-empty', 'first-item-single',
+    'last-item-public', 'last-item-empty', 'last-item-other',
     'lookup-public',
     'lookup-missing-key',
     'lookup-other-key',

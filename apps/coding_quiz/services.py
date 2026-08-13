@@ -625,7 +625,9 @@ def _teach_back_rubric_for_attempt(activity_rubric, attempt):
         attempt.revision_number == 0
         and attempt.evaluation.get('status') == ExecutionStatus.PASSED.value
     )
-    if not passed_without_revision:
+    # The original-attempt variant is specific to the loop-values exercise.
+    # Keep specialized Dictionary/Function/List rubrics intact.
+    if not passed_without_revision or activity_rubric.get('concept') != 'loop_values':
         return rubric, 'REVISED_SOLUTION'
 
     correction = next(

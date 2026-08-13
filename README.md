@@ -143,7 +143,7 @@ The Coding workflow requires a separate Docker-backed HTTP runner before a revis
 
 `python manage.py migrate` creates and seeds the initial database-backed Coding catalog. The
 catalog currently contains `double-numbers`, `square-numbers`, `increment-numbers`, and
-`lookup-dictionary-grade`; prompts,
+`lookup-dictionary-grade`, `safe-divide-function`, and `first-list-item`; prompts,
 rubrics, public/hidden runner IDs, and Transfer Check configuration are selected per exercise.
 Opening `/coding/` lists active exercises. Each browser can keep one active session per exercise,
 while Reset closes the current session instead of deleting it. Previous code attempts, Teach-Back

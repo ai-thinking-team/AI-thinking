@@ -8,6 +8,18 @@ from pathlib import Path
 
 
 TEST_CATALOG = {
+    'divide-public': {'function': 'safe_divide', 'args': (6, 3), 'expected': 2.0, 'public': True},
+    'divide-by-zero': {'function': 'safe_divide', 'args': (9, 0), 'expected': 0, 'public': False},
+    'divide-negative': {'function': 'safe_divide', 'args': (-8, 2), 'expected': -4.0, 'public': False},
+    'percentage-public': {'function': 'safe_percentage', 'args': (1, 4), 'expected': 25.0, 'public': False},
+    'percentage-zero': {'function': 'safe_percentage', 'args': (5, 0), 'expected': 0, 'public': False},
+    'percentage-other': {'function': 'safe_percentage', 'args': (3, 5), 'expected': 60.0, 'public': False},
+    'first-item-public': {'function': 'first_item', 'args': ([4, 8],), 'expected': 4, 'public': True},
+    'first-item-empty': {'function': 'first_item', 'args': ([],), 'expected': None, 'public': False},
+    'first-item-single': {'function': 'first_item', 'args': ([99],), 'expected': 99, 'public': False},
+    'last-item-public': {'function': 'last_item', 'args': ([4, 8, 12],), 'expected': 12, 'public': False},
+    'last-item-empty': {'function': 'last_item', 'args': ([],), 'expected': None, 'public': False},
+    'last-item-other': {'function': 'last_item', 'args': (['a', 'b'],), 'expected': 'b', 'public': False},
     'lookup-public': {'function': 'lookup_grade', 'args': ({'Aki': 92, 'Mina': 85}, 'Mina'), 'expected': 85, 'public': True},
     'lookup-missing-key': {'function': 'lookup_grade', 'args': ({}, 'Mina'), 'expected': 0, 'public': False},
     'lookup-other-key': {'function': 'lookup_grade', 'args': ({'Aki': 92, 'Mina': 85, 'Ren': 78}, 'Ren'), 'expected': 78, 'public': False},

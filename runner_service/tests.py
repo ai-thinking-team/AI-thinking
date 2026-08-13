@@ -52,6 +52,14 @@ class HarnessTests(TestCase):
                 ['empty-negate', 'mixed-negate'],
             ),
             (
+                'def safe_divide(a, b):\n    return 0 if b == 0 else a / b',
+                ['divide-public', 'divide-by-zero', 'divide-negative'],
+            ),
+            (
+                'def first_item(items):\n    return items[0] if items else None',
+                ['first-item-public', 'first-item-empty', 'first-item-single'],
+            ),
+            (
                 'def absolute_numbers(numbers):\n    return [abs(number) for number in numbers]',
                 ['empty-absolute', 'mixed-absolute'],
             ),
