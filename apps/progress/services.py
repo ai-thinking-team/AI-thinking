@@ -1,4 +1,4 @@
-from apps.learning_core.models import LearningSession
+from apps.learning_core.models import LearningSession, Subject
 from apps.learning_core.state_machine import WorkflowState
 
 
@@ -81,8 +81,12 @@ def overall_progress_totals(summary):
 
 
 def subject_progress_detail(browser_session_key):
-    """Per-subject, per-topic breakdown for the Progress page."""
-    by_subject = {}
+    """Per-subject, per-topic breakdown for the Progress page. Subjects with
+    no sessions yet are still included, as an empty 'not started' entry."""
+    by_subject = {
+        subject.slug: {'subject': subject, 'topics': [], 'mastered': 0}
+        for subject in Subject.objects.order_by('name')
+    }
     for session in sessions_for_browser(browser_session_key):
         subject = session.topic.subject
         entry = by_subject.setdefault(subject.slug, {'subject': subject, 'topics': [], 'mastered': 0})

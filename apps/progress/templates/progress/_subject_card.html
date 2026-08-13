@@ -11,19 +11,21 @@
       </svg>
     </span>
     <h2>{{ entry.subject.name }}</h2>
-    <span class="subject-card-ratio">{{ entry.mastered }}/{{ entry.total }}</span>
+    <span class="subject-card-ratio">{% if entry.total %}{{ entry.mastered }}/{{ entry.total }}{% else %}Not started yet{% endif %}</span>
   </div>
-  <div class="bar-track"><div class="bar-fill" style="width: {% widthratio entry.mastered entry.total 100 %}%"></div></div>
-  <ul class="m-list">
-    {% for topic in topics %}
-      <li class="{% if topic.is_review_item %}review{% elif topic.is_mastered %}mastered{% else %}progress{% endif %}">
-        <span class="dot"></span>
-        <span class="name">{{ topic.name }}</span>
-        <span class="state">{{ topic.state_label }}</span>
-      </li>
-    {% endfor %}
-  </ul>
-  {% if not focused %}
-    <a class="show-more-link" href="?subject={{ entry.subject.slug }}">Show more →</a>
+  {% if entry.total %}
+    <div class="bar-track"><div class="bar-fill" style="width: {% widthratio entry.mastered entry.total 100 %}%"></div></div>
+    <ul class="m-list">
+      {% for topic in topics %}
+        <li class="{% if topic.is_review_item %}review{% elif topic.is_mastered %}mastered{% else %}progress{% endif %}">
+          <span class="dot"></span>
+          <span class="name">{{ topic.name }}</span>
+          <span class="state">{{ topic.state_label }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% if not focused %}
+      <a class="show-more-link" href="?subject={{ entry.subject.slug }}">Show more →</a>
+    {% endif %}
   {% endif %}
 </section>

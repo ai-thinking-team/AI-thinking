@@ -81,6 +81,17 @@ class SubjectFilterTests(TestCase):
         self.assertContains(response, 'Coding')
 
 
+class EmptySubjectTests(TestCase):
+    def test_subject_with_no_sessions_still_shows_as_not_started(self):
+        Subject.objects.create(name='Coding', slug='coding')
+        Subject.objects.create(name='Mathematics', slug='math')
+
+        response = self.client.get(reverse('progress:dashboard'))
+        self.assertContains(response, 'Coding')
+        self.assertContains(response, 'Mathematics')
+        self.assertContains(response, 'Not started yet')
+
+
 class SessionIsolationTests(TestCase):
     def test_other_browsers_sessions_are_not_shown(self):
         session = self.client.session
@@ -148,6 +159,7 @@ class QueryCountTests(TestCase):
             )
 
     def test_dashboard_grid_query_count_does_not_scale_with_topic_count(self):
-        """Guards against the N+1 query pattern in _is_review_item() coming back."""
-        with self.assertNumQueries(2):
+        """Guards against the N+1 query pattern in _is_review_item() coming back.
+        3 queries: all subjects, sessions, prefetched misconceptions."""
+        with self.assertNumQueries(3):
             self.client.get(reverse('progress:dashboard'))
