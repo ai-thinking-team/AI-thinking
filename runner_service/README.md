@@ -12,3 +12,8 @@ This service is separate from Django. Django sends only Python source code and c
 The executor container is removed after every request and runs with no network, a read-only root filesystem, a non-root user, all Linux capabilities dropped, a 128 MB memory limit, one CPU, a PID limit, and layered execution timeouts.
 
 The runner service allows 15 seconds for Docker container startup and teardown by default, while learner execution inside the container remains limited to 2 seconds. Override the outer limit with `RUNNER_CONTAINER_TIMEOUT_SECONDS`; keep Django's `CODE_RUNNER_TIMEOUT_SECONDS` greater than that value (the supplied default is 20 seconds).
+
+Evaluation statuses distinguish `OUTPUT_MISMATCH` for a failed public expected/actual check from
+`LOGIC_ERROR` for a missing required function or a hidden boundary failure. Hidden failures never
+return expected or actual values. Syntax, runtime, timeout, unavailable-runner, and passing results
+remain `SYNTAX_ERROR`, `RUNTIME_ERROR`, `TIMEOUT`, `NOT_EXECUTED`, and `PASSED` respectively.

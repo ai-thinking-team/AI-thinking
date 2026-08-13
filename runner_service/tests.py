@@ -56,9 +56,30 @@ class HarnessTests(TestCase):
             'test_case_ids': ['negative-values'],
         })
 
-        self.assertEqual(result['status'], 'FAILED')
+        self.assertEqual(result['status'], 'LOGIC_ERROR')
         self.assertNotIn('expected', result['tests'][0])
         self.assertNotIn('actual', result['tests'][0])
+
+    def test_failed_public_test_is_classified_as_output_mismatch_with_public_evidence(self):
+        result = execute({
+            'language': 'python',
+            'source_code': 'def double_numbers(numbers):\n    return numbers',
+            'test_case_ids': ['double-public'],
+        })
+
+        self.assertEqual(result['status'], 'OUTPUT_MISMATCH')
+        self.assertEqual(result['tests'][0]['expected'], [2, 6])
+        self.assertEqual(result['tests'][0]['actual'], [1, 3])
+
+    def test_missing_required_function_is_classified_as_logic_error(self):
+        result = execute({
+            'language': 'python',
+            'source_code': 'def another_function(numbers):\n    return numbers',
+            'test_case_ids': ['double-public'],
+        })
+
+        self.assertEqual(result['status'], 'LOGIC_ERROR')
+        self.assertEqual(result['tests'], [])
 
     def test_syntax_and_runtime_errors_are_classified(self):
         syntax_result = execute({

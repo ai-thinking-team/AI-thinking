@@ -56,6 +56,38 @@ class HttpCodeExecutionGatewayTests(SimpleTestCase):
         sent_payload = json.loads(sent_request.data)
         self.assertEqual(sent_payload['test_case_ids'], ['double-public', 'empty-list'])
 
+    @patch('apps.code_runner.http_gateway.urlopen')
+    def test_classified_failure_statuses_are_mapped_without_becoming_unavailable(
+        self,
+        mocked_urlopen,
+    ):
+        for status in ('OUTPUT_MISMATCH', 'LOGIC_ERROR'):
+            with self.subTest(status=status):
+                response = MagicMock()
+                response.read.return_value = json.dumps({
+                    'status': status,
+                    'message': 'Classified learner result.',
+                    'tests': [{'id': 'double-public', 'passed': False}],
+                }).encode()
+                mocked_urlopen.return_value.__enter__.return_value = response
+
+                result = self.gateway.run(self.request)
+
+                self.assertEqual(result.status, ExecutionStatus(status))
+
+    @patch('apps.code_runner.http_gateway.urlopen')
+    def test_unknown_runner_status_still_fails_closed(self, mocked_urlopen):
+        response = MagicMock()
+        response.read.return_value = json.dumps({
+            'status': 'MASTERED',
+            'message': 'Unauthorized workflow result.',
+        }).encode()
+        mocked_urlopen.return_value.__enter__.return_value = response
+
+        result = self.gateway.run(self.request)
+
+        self.assertEqual(result.status, ExecutionStatus.NOT_EXECUTED)
+
     @patch('apps.code_runner.http_gateway.urlopen', side_effect=URLError('offline'))
     def test_unavailable_runner_fails_closed(self, mocked_urlopen):
         result = self.gateway.run(self.request)

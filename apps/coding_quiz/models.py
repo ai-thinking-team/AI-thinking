@@ -1,7 +1,27 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from apps.learning_core.models import LearningActivity
+from apps.learning_core.models import LearningActivity, LearningSession
+
+
+class CodingPlanEvidence(models.Model):
+    learning_session = models.OneToOneField(
+        LearningSession,
+        on_delete=models.CASCADE,
+        related_name='coding_plan',
+    )
+    activity = models.ForeignKey(
+        LearningActivity,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='coding_plans',
+    )
+    solution_plan = models.TextField()
+    predicted_output = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'Plan for session {self.learning_session_id}'
 
 
 class CodingExercise(models.Model):

@@ -9,4 +9,5 @@ def sessions_for_browser(browser_session_key):
     ).select_related(
         'topic__subject',
         'activity__concept',
+        'coding_plan',
     ).prefetch_related('mastery_records').order_by('-started_at', '-pk')

@@ -1,6 +1,17 @@
 from django import forms
 
 
+class CodingPlanForm(forms.Form):
+    solution_plan = forms.CharField(
+        label='Describe your solution plan before writing code',
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+    predicted_output = forms.CharField(
+        label='Predict the output for the public example',
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+
 class CodingAttemptForm(forms.Form):
     source_code = forms.CharField(
         label='Python source code',
@@ -39,11 +50,11 @@ class TeachBackForm(forms.Form):
         widget=forms.Textarea(attrs={'rows': 3}),
     )
     failure_reason = forms.CharField(
-        label='Why did the original approach fail?',
+        label='Why did the original approach work or fail?',
         widget=forms.Textarea(attrs={'rows': 3}),
     )
     correction = forms.CharField(
-        label='What did you change, and why?',
+        label='What did you change, or what made the original solution correct?',
         widget=forms.Textarea(attrs={'rows': 3}),
     )
     concept = forms.CharField(

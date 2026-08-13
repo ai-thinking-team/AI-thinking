@@ -25,7 +25,7 @@ from apps.learning_core.models import (
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import InvalidWorkflowTransition, WorkflowState
 
-from .models import CodingExercise
+from .models import CodingExercise, CodingPlanEvidence
 from .catalog import CODING_CATALOG
 from .catalog_validation import validate_catalog
 from .teach_back_rubric import LOOP_VALUES_TEACH_BACK_RUBRIC, evaluate_teach_back
@@ -36,6 +36,7 @@ from .services import (
     request_curated_hint,
     submit_diagnosis,
     submit_first_attempt,
+    submit_plan,
     submit_revision,
     submit_teach_back,
     submit_transfer_check,
@@ -144,8 +145,26 @@ class CodingWorkflowBrowserTests(TestCase):
         data.update(overrides)
         return data
 
-    def post_first_attempt(self, client=None, **overrides):
-        return (client or self.client).post(self.url, self.first_attempt_data(**overrides))
+    def plan_data(self, **overrides):
+        data = {
+            'action': 'plan',
+            'solution_plan': 'Loop through each current value, transform it, and collect the result.',
+            'predicted_output': '[2, 6]',
+        }
+        data.update(overrides)
+        return data
+
+    def post_plan(self, client=None, url=None, **overrides):
+        return (client or self.client).post(
+            url or self.url,
+            self.plan_data(**overrides),
+        )
+
+    def post_first_attempt(self, client=None, url=None, **overrides):
+        selected_client = client or self.client
+        selected_url = url or self.url
+        self.post_plan(client=selected_client, url=selected_url)
+        return selected_client.post(selected_url, self.first_attempt_data(**overrides))
 
     def advance_to_revision(self):
         self.post_first_attempt()
@@ -172,7 +191,7 @@ class CodingWorkflowBrowserTests(TestCase):
             'teach-prevention': 'I will trace the loop variable with a small example.',
         })
 
-    def test_page_loads_exercise_from_database_and_starts_at_first_attempt(self):
+    def test_page_loads_exercise_from_database_and_starts_at_understand_and_plan(self):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -180,7 +199,8 @@ class CodingWorkflowBrowserTests(TestCase):
         exercise = CodingExercise.objects.select_related('activity').get(slug='double-numbers')
         self.assertEqual(response.context['exercise'], exercise)
         self.assertContains(response, 'Double every number')
-        self.assertContains(response, 'Think-First / First Attempt')
+        self.assertContains(response, 'Understand and Plan')
+        self.assertNotContains(response, 'name="source_code"')
 
     def test_catalog_lists_database_exercises_and_routes_by_slug(self):
         response = self.client.get(reverse('coding_quiz:home'))
@@ -196,8 +216,7 @@ class CodingWorkflowBrowserTests(TestCase):
     def test_same_browser_has_independent_active_session_per_exercise(self):
         double_url = reverse('coding_quiz:exercise_detail', args=('double-numbers',))
         square_url = reverse('coding_quiz:exercise_detail', args=('square-numbers',))
-        self.client.get(double_url)
-        self.client.post(double_url, self.first_attempt_data())
+        self.post_first_attempt(url=double_url)
 
         square_page = self.client.get(square_url)
 
@@ -210,8 +229,8 @@ class CodingWorkflowBrowserTests(TestCase):
             set(sessions.values_list('activity__coding_exercise__slug', flat=True)),
             {'double-numbers', 'square-numbers'},
         )
-        self.assertContains(square_page, 'Think-First / First Attempt')
-        self.assertContains(square_page, 'def square_numbers')
+        self.assertContains(square_page, 'Understand and Plan')
+        self.assertContains(square_page, 'square_numbers([2, -3])')
 
     def test_database_rejects_two_active_sessions_for_same_exercise(self):
         self.client.get(self.url)
@@ -256,14 +275,14 @@ class CodingWorkflowBrowserTests(TestCase):
         with self.assertRaises(ValidationError):
             exercise.full_clean()
 
-    def test_invalid_database_rubric_blocks_first_attempt_before_evidence_or_ai(self):
+    def test_invalid_database_rubric_blocks_plan_before_evidence_or_ai(self):
         self.client.get(self.url)
         exercise = CodingExercise.objects.select_related('activity').get(slug='double-numbers')
         invalid_rubric = deepcopy(exercise.activity.rubric)
         invalid_rubric['allowed_misconception_codes'] = []
         LearningActivity.objects.filter(pk=exercise.activity_id).update(rubric=invalid_rubric)
 
-        response = self.client.post(self.url, self.first_attempt_data())
+        response = self.client.post(self.url, self.plan_data())
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'curated configuration is invalid')
@@ -272,7 +291,49 @@ class CodingWorkflowBrowserTests(TestCase):
             WorkflowState.DIAGNOSTIC_QUIZ,
         )
         self.assertFalse(LearnerAttempt.objects.exists())
+        self.assertFalse(CodingPlanEvidence.objects.exists())
         self.assertFalse(CoachInteraction.objects.exists())
+
+    def test_plan_is_required_before_first_attempt_and_does_not_call_ai_or_runner(self):
+        self.client.get(self.url)
+
+        blocked = self.client.post(self.url, self.first_attempt_data())
+
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, 'Complete Understand and Plan')
+        self.assertFalse(LearnerAttempt.objects.exists())
+        self.assertFalse(CoachInteraction.objects.exists())
+
+        response = self.post_plan()
+
+        self.assertRedirects(response, self.url)
+        plan = CodingPlanEvidence.objects.get()
+        session = LearningSession.objects.get()
+        self.assertEqual(plan.solution_plan, self.plan_data()['solution_plan'])
+        self.assertEqual(plan.predicted_output, '[2, 6]')
+        self.assertEqual(session.current_state, WorkflowState.FIRST_ATTEMPT)
+        self.assertFalse(LearnerAttempt.objects.exists())
+        self.assertFalse(CoachInteraction.objects.exists())
+        page = self.client.get(self.url)
+        self.assertContains(page, 'Think-First / First Attempt')
+
+    def test_plan_requires_both_fields_and_is_append_only(self):
+        for field in ('solution_plan', 'predicted_output'):
+            with self.subTest(field=field):
+                response = self.post_plan(**{field: ''})
+                self.assertContains(response, 'This field is required.')
+                self.assertFalse(CodingPlanEvidence.objects.exists())
+
+        self.post_plan()
+        second = self.post_plan(solution_plan='Replace the original plan.')
+
+        self.assertEqual(second.status_code, 200)
+        self.assertContains(second, 'already been completed')
+        self.assertEqual(CodingPlanEvidence.objects.count(), 1)
+        self.assertNotEqual(
+            CodingPlanEvidence.objects.get().solution_plan,
+            'Replace the original plan.',
+        )
 
     def test_reset_preserves_old_evidence_and_starts_a_new_session(self):
         self.post_first_attempt()
@@ -288,7 +349,7 @@ class CodingWorkflowBrowserTests(TestCase):
         new_session = LearningSession.objects.exclude(pk=old_session.pk).get()
         self.assertIsNone(new_session.ended_at)
         self.assertEqual(new_session.activity_id, old_session.activity_id)
-        self.assertContains(response, 'Think-First / First Attempt')
+        self.assertContains(response, 'Understand and Plan')
 
     def test_untracked_browser_progress_is_resumed_without_deleting_evidence(self):
         self.client.get(self.url)
@@ -310,7 +371,7 @@ class CodingWorkflowBrowserTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '2. Diagnosis')
+        self.assertContains(response, '3. Diagnosis')
         self.assertEqual(LearnerAttempt.objects.count(), 1)
 
     def test_refresh_keeps_a_tracked_first_attempt_at_diagnosis(self):
@@ -319,8 +380,8 @@ class CodingWorkflowBrowserTests(TestCase):
         first_refresh = self.client.get(self.url)
         second_refresh = self.client.get(self.url)
 
-        self.assertContains(first_refresh, '2. Diagnosis')
-        self.assertContains(second_refresh, '2. Diagnosis')
+        self.assertContains(first_refresh, '3. Diagnosis')
+        self.assertContains(second_refresh, '3. Diagnosis')
         self.assertEqual(LearnerAttempt.objects.filter(revision_number=0).count(), 1)
 
     @override_settings(CODE_RUNNER_URL='', CODE_RUNNER_GATEWAY_CLASS='')
@@ -333,13 +394,89 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertEqual(attempt.revision_number, 0)
         self.assertEqual(attempt.evaluation['status'], 'NOT_EXECUTED')
         page = self.client.get(self.url)
-        self.assertContains(page, '2. Diagnosis')
+        self.assertContains(page, '3. Diagnosis')
         self.assertContains(page, 'NOT_EXECUTED')
         self.assertNotContains(page, 'ExecutionStatus.NOT_EXECUTED')
         interaction = CoachInteraction.objects.get()
         self.assertEqual(interaction.source, CoachInteraction.Source.CURATED_FALLBACK)
         self.assertEqual(interaction.failure_code, 'AIServiceUnavailable')
         self.assertContains(page, 'Question source:</strong> CURATED_FALLBACK')
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY)
+    def test_passing_first_attempt_with_clear_reasoning_opens_teach_back(self):
+        response = self.post_first_attempt(
+            reasoning='Double and collect each current value during the loop.',
+            confidence='4',
+        )
+
+        self.assertRedirects(response, self.url)
+        session = LearningSession.objects.get()
+        attempt = LearnerAttempt.objects.get()
+        self.assertEqual(session.current_state, WorkflowState.TEACH_BACK)
+        self.assertEqual(
+            attempt.evaluation['response_evaluation']['outcome'],
+            'READY_FOR_TEACH_BACK',
+        )
+        self.assertFalse(CoachInteraction.objects.exists())
+        self.assertFalse(MisconceptionRecord.objects.exists())
+        page = self.client.get(self.url)
+        self.assertContains(page, '5. Teach-Back')
+        self.assertContains(page, 'Why did the original approach work or fail?')
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY)
+    def test_passing_first_attempt_with_low_confidence_requires_verification(self):
+        self.post_first_attempt(
+            reasoning='Double and collect each current value during the loop.',
+            confidence='3',
+        )
+
+        session = LearningSession.objects.get()
+        attempt = LearnerAttempt.objects.get()
+        self.assertEqual(session.current_state, WorkflowState.DIAGNOSIS)
+        self.assertEqual(
+            attempt.evaluation['response_evaluation']['outcome'],
+            'VERIFICATION_REQUIRED',
+        )
+        self.assertEqual(CoachInteraction.objects.count(), 1)
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY)
+    def test_passing_first_attempt_with_unclear_reasoning_requires_diagnosis(self):
+        self.post_first_attempt(reasoning='I used Python.', confidence='5')
+
+        session = LearningSession.objects.get()
+        attempt = LearnerAttempt.objects.get()
+        self.assertEqual(session.current_state, WorkflowState.DIAGNOSIS)
+        self.assertEqual(
+            attempt.evaluation['response_evaluation']['outcome'],
+            'DIAGNOSIS_REQUIRED',
+        )
+        self.assertEqual(CoachInteraction.objects.count(), 1)
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY)
+    def test_clear_first_attempt_teach_back_can_open_transfer(self):
+        self.post_first_attempt(
+            reasoning='Double and collect each current value during the loop.',
+            confidence='5',
+        )
+
+        response = self.client.post(self.url, {
+            'action': 'teach_back',
+            'teach-original_issue': 'There was no failing issue in the first attempt.',
+            'teach-failure_reason': 'It works because every current value is doubled and collected.',
+            'teach-correction': 'No correction was needed; I doubled each current value before collecting it.',
+            'teach-concept': 'A for loop processes one item at a time.',
+            'teach-prevention': 'I will trace each loop item with a small test.',
+        }, follow=True)
+
+        session = LearningSession.objects.get()
+        teach_back = TeachBackAttempt.objects.get()
+        self.assertEqual(teach_back.evaluation, 'CLEAR_UNDERSTANDING')
+        self.assertEqual(
+            teach_back.rubric_evidence['response_path'],
+            'PASSED_FIRST_ATTEMPT',
+        )
+        self.assertEqual(session.current_state, WorkflowState.TRANSFER_TASK)
+        self.assertContains(response, '6. Transfer Check')
 
     @override_settings(AI_PROVIDER_CLASS=PASSING_AI_PROVIDER)
     def test_valid_ai_diagnostic_is_displayed_with_privacy_minimized_context(self):
@@ -418,7 +555,7 @@ class CodingWorkflowBrowserTests(TestCase):
         learner_response = CoachLearnerResponse.objects.get()
         self.assertIn('loop variable is one current number', learner_response.response)
         response = self.client.get(self.url)
-        self.assertContains(response, '3. Revision')
+        self.assertContains(response, '4. Revision')
 
     def test_wrong_diagnosis_stays_locked_and_unlocks_an_easier_question(self):
         self.post_first_attempt()
@@ -438,7 +575,7 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertEqual(CoachLearnerResponse.objects.count(), 1)
         self.assertContains(response, 'current level 2 of 4')
         self.assertContains(response, 'which current number must be doubled')
-        self.assertNotContains(response, '3. Revision')
+        self.assertNotContains(response, '4. Revision')
 
     def test_final_diagnosis_answer_must_be_reviewed_before_revision_opens(self):
         self.post_first_attempt()
@@ -470,7 +607,7 @@ class CodingWorkflowBrowserTests(TestCase):
 
         session.refresh_from_db()
         self.assertEqual(session.current_state, WorkflowState.GUIDED_REVISION)
-        self.assertContains(response, '3. Revision')
+        self.assertContains(response, '4. Revision')
 
     def test_diagnosis_solution_cannot_be_acknowledged_before_it_is_unlocked(self):
         self.post_first_attempt()
@@ -520,6 +657,23 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertRedirects(response, self.url)
         learning_session.refresh_from_db()
         self.assertEqual(learning_session.current_state, WorkflowState.GUIDED_REVISION)
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY)
+    def test_interrupted_clear_passing_attempt_recovers_to_teach_back(self):
+        self.post_first_attempt(
+            reasoning='Double and collect each current value during the loop.',
+            confidence='5',
+        )
+        learning_session = LearningSession.objects.get()
+        learning_session.current_state = WorkflowState.FIRST_ATTEMPT
+        learning_session.save(update_fields=('current_state', 'updated_at'))
+
+        page = self.client.get(self.url)
+
+        learning_session.refresh_from_db()
+        self.assertEqual(learning_session.current_state, WorkflowState.TEACH_BACK)
+        self.assertContains(page, '5. Teach-Back')
+        self.assertFalse(CoachInteraction.objects.exists())
 
     def test_hints_unlock_in_order_only_after_new_revision_action(self):
         self.advance_to_revision()
@@ -577,7 +731,7 @@ class CodingWorkflowBrowserTests(TestCase):
                 'revision-confidence': '3',
             }, follow=True)
         self.assertEqual(LearningSession.objects.get().current_state, WorkflowState.TEACH_BACK)
-        self.assertContains(completed, '4. Teach-Back')
+        self.assertContains(completed, '5. Teach-Back')
 
     def test_revision_is_append_only_and_opens_teach_back(self):
         self.advance_to_revision()
@@ -594,7 +748,7 @@ class CodingWorkflowBrowserTests(TestCase):
         original.refresh_from_db()
         self.assertEqual(original.answer, original_answer)
         self.assertTrue(LearnerAttempt.objects.filter(revision_number=1).exists())
-        self.assertContains(self.client.get(self.url), '4. Teach-Back')
+        self.assertContains(self.client.get(self.url), '5. Teach-Back')
 
     def test_unverified_revision_stays_in_revision(self):
         self.advance_to_revision()
@@ -745,7 +899,7 @@ class CodingWorkflowBrowserTests(TestCase):
             'action': 'acknowledge_teach_back_solution',
         }, follow=True)
         self.assertEqual(LearningSession.objects.get().current_state, WorkflowState.TRANSFER_TASK)
-        self.assertContains(transfer_page, '5. Transfer Check')
+        self.assertContains(transfer_page, '6. Transfer Check')
 
         with override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY):
             self.client.post(self.url, {
@@ -763,7 +917,7 @@ class CodingWorkflowBrowserTests(TestCase):
         self.advance_to_transfer()
         self.assertEqual(TeachBackAttempt.objects.count(), 1)
         page = self.client.get(self.url)
-        self.assertContains(page, '5. Transfer Check')
+        self.assertContains(page, '6. Transfer Check')
         self.assertContains(page, 'AI and all hints are locked')
         self.assertNotContains(page, 'def double_numbers')
 
@@ -857,6 +1011,12 @@ class CodingWorkflowServiceTests(TestCase):
         self.exercise = ensure_demo_exercise()
         self.session, _ = get_demo_session(browser_session_key='service-browser', exercise=self.exercise)
         transition_session(self.session, WorkflowState.DIAGNOSTIC_QUIZ)
+        submit_plan(
+            learning_session=self.session,
+            exercise=self.exercise,
+            solution_plan='Transform each current value and collect the result.',
+            predicted_output='[2, 6]',
+        )
 
     def submit_first(self, gateway=None, ai_provider=None):
         return submit_first_attempt(
@@ -920,6 +1080,39 @@ class CodingWorkflowServiceTests(TestCase):
         )
         self.assertEqual(attempt.evaluation['status'], 'FAILED')
 
+    def test_output_mismatch_is_stored_and_cannot_skip_diagnosis(self):
+        gateway = Mock()
+        gateway.run.return_value = ExecutionResult(
+            status=ExecutionStatus.OUTPUT_MISMATCH,
+            message='A public test returned an unexpected result.',
+            tests=({
+                'id': 'double-public',
+                'passed': False,
+                'expected': [2, 6],
+                'actual': [1, 3],
+            },),
+        )
+
+        attempt, result = submit_first_attempt(
+            learning_session=self.session,
+            exercise=self.exercise,
+            source_code='def double_numbers(numbers):\n    return numbers',
+            reasoning='Double and collect each current value.',
+            confidence=5,
+            gateway=gateway,
+        )
+
+        self.session.refresh_from_db()
+        self.assertEqual(result.status, ExecutionStatus.OUTPUT_MISMATCH)
+        self.assertEqual(attempt.evaluation['status'], 'OUTPUT_MISMATCH')
+        self.assertEqual(
+            attempt.evaluation['response_evaluation']['outcome'],
+            'DIAGNOSIS_REQUIRED',
+        )
+        self.assertEqual(self.session.current_state, WorkflowState.DIAGNOSIS)
+        self.assertFalse(self.session.teach_back_attempts.exists())
+        self.assertFalse(self.session.mastery_records.exists())
+
     def test_square_exercise_uses_its_own_database_catalog_and_runner_ids(self):
         exercise = CodingExercise.objects.get(slug='square-numbers')
         session, _ = get_demo_session(
@@ -927,6 +1120,12 @@ class CodingWorkflowServiceTests(TestCase):
             exercise=exercise,
         )
         transition_session(session, WorkflowState.DIAGNOSTIC_QUIZ)
+        submit_plan(
+            learning_session=session,
+            exercise=exercise,
+            solution_plan='Square each current number and collect the result.',
+            predicted_output='[4, 9]',
+        )
         gateway = Mock()
         gateway.run.return_value = ExecutionResult(ExecutionStatus.PASSED, 'Passed')
 
@@ -935,7 +1134,7 @@ class CodingWorkflowServiceTests(TestCase):
             exercise=exercise,
             source_code='def square_numbers(numbers):\n    return [number ** 2 for number in numbers]',
             reasoning='Square and collect each current number.',
-            confidence=4,
+            confidence=3,
             gateway=gateway,
         )
 

@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -38,7 +39,7 @@ from .ai_prompts import (
     TEACH_BACK_SYSTEM_PROMPT,
 )
 from .catalog_validation import validate_database_exercise
-from .models import CodingExercise
+from .models import CodingExercise, CodingPlanEvidence
 from .misconception_rules import (
     LOOP_VALUE_MISCONCEPTION,
     diagnosis_confirms_loop_value_misconception,
@@ -149,11 +150,64 @@ def _exercise_for_activity(activity):
     _require_valid_exercise_configuration(exercise)
     return exercise
 
+
+@transaction.atomic
+def submit_plan(*, learning_session, exercise, solution_plan, predicted_output):
+    _require_valid_exercise_configuration(exercise)
+    solution_plan = str(solution_plan).strip()
+    predicted_output = str(predicted_output).strip()
+    if not solution_plan or not predicted_output:
+        raise ValidationError(
+            'Understand and Plan requires both a solution plan and predicted output.'
+        )
+    locked_session = LearningSession.objects.select_for_update().get(pk=learning_session.pk)
+    if locked_session.current_state != WorkflowState.DIAGNOSTIC_QUIZ:
+        raise ValidationError('Understand and Plan has already been completed for this session.')
+    if locked_session.activity_id != exercise.activity_id:
+        raise ValidationError('The plan does not belong to this Coding exercise.')
+    if CodingPlanEvidence.objects.filter(learning_session=locked_session).exists():
+        raise ValidationError('Understand and Plan evidence has already been saved.')
+    evidence = CodingPlanEvidence.objects.create(
+        learning_session=locked_session,
+        activity=exercise.activity,
+        solution_plan=solution_plan,
+        predicted_output=predicted_output,
+    )
+    transition_session(locked_session, WorkflowState.FIRST_ATTEMPT)
+    learning_session.current_state = locked_session.current_state
+    return evidence
+
 def _execution_evidence(result):
     return {
         'status': result.status.value,
         'message': result.message,
         'tests': list(result.tests),
+    }
+
+
+def _first_attempt_response_evaluation(*, result, reasoning, confidence, activity):
+    reasoning_clear = not diagnosis_confirms_loop_value_misconception(
+        reasoning,
+        action_terms=activity.rubric.get('diagnosis_action_terms', ()),
+    )
+    if result.status != ExecutionStatus.PASSED:
+        outcome = 'DIAGNOSIS_REQUIRED'
+        reason = 'The original code was not runner-verified as passed.'
+    elif not reasoning_clear:
+        outcome = 'DIAGNOSIS_REQUIRED'
+        reason = 'The code passed, but the reasoning does not yet explain the current item and operation.'
+    elif confidence < 4:
+        outcome = 'VERIFICATION_REQUIRED'
+        reason = 'The code and reasoning passed, but low confidence requires verification.'
+    else:
+        outcome = 'READY_FOR_TEACH_BACK'
+        reason = 'The code passed with clear reasoning and confidence high enough to continue.'
+    return {
+        'outcome': outcome,
+        'reason': reason,
+        'runner_passed': result.status == ExecutionStatus.PASSED,
+        'reasoning_clear': reasoning_clear,
+        'confidence': confidence,
     }
 
 
@@ -290,8 +344,15 @@ def submit_first_attempt(*, learning_session, exercise, source_code, reasoning, 
     _require_valid_exercise_configuration(exercise)
     validate_first_attempt(answer=source_code, reasoning=reasoning, confidence=confidence)
     locked_session = LearningSession.objects.select_for_update().get(pk=learning_session.pk)
-    if locked_session.current_state != WorkflowState.DIAGNOSTIC_QUIZ:
+    if locked_session.current_state == WorkflowState.DIAGNOSTIC_QUIZ:
+        raise ValidationError('Complete Understand and Plan before submitting your first attempt.')
+    if locked_session.current_state != WorkflowState.FIRST_ATTEMPT:
         raise ValidationError('Your first attempt has already been submitted. Continue with the current step.')
+    if not CodingPlanEvidence.objects.filter(
+        learning_session=locked_session,
+        activity=exercise.activity,
+    ).exists():
+        raise ValidationError('Complete Understand and Plan before submitting your first attempt.')
     if locked_session.attempts.filter(revision_number=0).exists():
         raise ValidationError('Your first attempt has already been saved.')
 
@@ -302,22 +363,31 @@ def submit_first_attempt(*, learning_session, exercise, source_code, reasoning, 
         reasoning=reasoning,
         confidence=confidence,
     )
-    transition_session(locked_session, WorkflowState.FIRST_ATTEMPT)
     runner = gateway or get_code_execution_gateway()
     result = runner.run(build_python_request(
         source_code=source_code,
         test_case_ids=_original_test_case_ids(exercise),
     ))
     attempt.evaluation = _execution_evidence(result)
+    response_evaluation = _first_attempt_response_evaluation(
+        result=result,
+        reasoning=reasoning,
+        confidence=confidence,
+        activity=exercise.activity,
+    )
+    attempt.evaluation['response_evaluation'] = response_evaluation
     attempt.save(update_fields=('evaluation',))
     transition_session(locked_session, WorkflowState.RESPONSE_EVALUATION)
-    transition_session(locked_session, WorkflowState.DIAGNOSIS)
-    _ensure_diagnostic_interaction(
-        learning_session=locked_session,
-        exercise=exercise,
-        attempt=attempt,
-        ai_provider=ai_provider,
-    )
+    if response_evaluation['outcome'] == 'READY_FOR_TEACH_BACK':
+        transition_session(locked_session, WorkflowState.TEACH_BACK)
+    else:
+        transition_session(locked_session, WorkflowState.DIAGNOSIS)
+        _ensure_diagnostic_interaction(
+            learning_session=locked_session,
+            exercise=exercise,
+            attempt=attempt,
+            ai_provider=ai_provider,
+        )
     learning_session.current_state = locked_session.current_state
     return attempt, result
 
@@ -535,6 +605,38 @@ def _curated_teach_back_payload(response, rubric, *, hint_level=1, followups=Non
     }
 
 
+def _teach_back_rubric_for_attempt(activity_rubric, attempt):
+    rubric = deepcopy(activity_rubric.get('teach_back'))
+    passed_without_revision = (
+        attempt.revision_number == 0
+        and attempt.evaluation.get('status') == ExecutionStatus.PASSED.value
+    )
+    if not passed_without_revision:
+        return rubric, 'REVISED_SOLUTION'
+
+    correction = next(
+        criterion for criterion in rubric['criteria']
+        if criterion['id'] == 'explain_correction'
+    )
+    outcome = next(
+        criterion for criterion in rubric['criteria']
+        if criterion['id'] == 'explain_failure_reason'
+    )
+    outcome['meaning'] = (
+        'Explains why the original solution works by connecting one current item '
+        'to the required operation and collected result.'
+    )
+    outcome['required_groups'] = deepcopy(correction['required_groups'])
+    outcome['feedback'] = (
+        'The explanation does not yet connect one current item and the required operation '
+        'to the correct result.'
+    )
+    outcome['follow_up_question'] = (
+        'During one iteration, what happens to the current item before it is collected?'
+    )
+    return rubric, 'PASSED_FIRST_ATTEMPT'
+
+
 def _teach_back_prompt_context(response, rubric, *, hint_level=1, operation=''):
     return {
         'rubric': {
@@ -567,7 +669,10 @@ def submit_teach_back(*, learning_session, response, ai_provider=None):
         raise ValidationError('Teach-Back requires a revision verified as PASSED by the isolated runner.')
     activity_rubric = verified_revision.activity.rubric
     _exercise_for_activity(verified_revision.activity)
-    rubric = activity_rubric.get('teach_back')
+    rubric, response_path = _teach_back_rubric_for_attempt(
+        activity_rubric,
+        verified_revision,
+    )
     latest_teach_back = locked_session.teach_back_attempts.order_by('-created_at', '-pk').first()
     if latest_teach_back and latest_teach_back.evaluation == 'ASSISTED_COMPLETION':
         raise ValidationError('Review and acknowledge the final Teach-Back answer before continuing.')
@@ -644,6 +749,7 @@ def submit_teach_back(*, learning_session, response, ai_provider=None):
 
     rubric_evidence = {
         'rubric_valid': True,
+        'response_path': response_path,
         'evaluation_source': orchestration.source,
         'failure_code': orchestration.failure_code,
         'data_minimized': True,
@@ -940,7 +1046,17 @@ def recover_interrupted_first_attempt(*, learning_session):
     if locked_session.current_state == WorkflowState.FIRST_ATTEMPT:
         transition_session(locked_session, WorkflowState.RESPONSE_EVALUATION)
     if locked_session.current_state == WorkflowState.RESPONSE_EVALUATION:
-        transition_session(locked_session, WorkflowState.DIAGNOSIS)
+        attempt = locked_session.attempts.filter(revision_number=0).first()
+        response_outcome = (
+            attempt.evaluation.get('response_evaluation', {}).get('outcome')
+            if attempt else None
+        )
+        target = (
+            WorkflowState.TEACH_BACK
+            if response_outcome == 'READY_FOR_TEACH_BACK'
+            else WorkflowState.DIAGNOSIS
+        )
+        transition_session(locked_session, target)
     if locked_session.current_state == WorkflowState.DIAGNOSIS:
         attempt = locked_session.attempts.filter(revision_number=0).first()
         exercise = CodingExercise.objects.filter(activity=attempt.activity).first() if attempt else None

@@ -10,6 +10,9 @@ from .validators import validate_execution_request
 
 class ExecutionStatus(str, Enum):
     PASSED = 'PASSED'
+    OUTPUT_MISMATCH = 'OUTPUT_MISMATCH'
+    LOGIC_ERROR = 'LOGIC_ERROR'
+    # Kept for compatibility with an older runner deployment.
     FAILED = 'FAILED'
     SYNTAX_ERROR = 'SYNTAX_ERROR'
     RUNTIME_ERROR = 'RUNTIME_ERROR'

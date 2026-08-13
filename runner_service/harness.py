@@ -187,7 +187,10 @@ def execute(payload):
             test = TEST_CATALOG[test_id]
             worker_result = _run_learner(source_code, test)
             if worker_result.get('kind') == 'missing_function':
-                return _result('FAILED', f"Required function `{test['function']}` was not defined.")
+                return _result(
+                    'LOGIC_ERROR',
+                    f"Required function `{test['function']}` was not defined.",
+                )
             if worker_result.get('kind') != 'ok':
                 return _result(
                     'RUNTIME_ERROR',
@@ -207,7 +210,8 @@ def execute(payload):
                     if test['public']
                     else 'A hidden boundary test failed.'
                 )
-                return _result('FAILED', message, test_results)
+                status = 'OUTPUT_MISMATCH' if test['public'] else 'LOGIC_ERROR'
+                return _result(status, message, test_results)
     except ExecutionTimedOut:
         return _result('TIMEOUT', 'Execution exceeded the 2-second limit.')
     finally:

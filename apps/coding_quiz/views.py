@@ -11,6 +11,7 @@ from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowe
 
 from .forms import (
     CodingAttemptForm,
+    CodingPlanForm,
     DiagnosisForm,
     RevisionForm,
     TeachBackForm,
@@ -26,6 +27,7 @@ from .services import (
     reset_demo_session,
     submit_diagnosis,
     submit_first_attempt,
+    submit_plan,
     submit_revision,
     submit_teach_back,
     submit_transfer_check,
@@ -33,6 +35,7 @@ from .services import (
 
 
 DISPLAY_STAGES = (
+    ('plan', 'Understand & Plan'),
     ('first', 'First Attempt'),
     ('diagnosis', 'Diagnosis'),
     ('revision', 'Revision'),
@@ -42,9 +45,9 @@ DISPLAY_STAGES = (
 )
 
 STATE_TO_STAGE = {
-    WorkflowState.TOPIC_SELECTED: 'first',
-    WorkflowState.DIAGNOSTIC_QUIZ: 'first',
-    WorkflowState.FIRST_ATTEMPT: 'diagnosis',
+    WorkflowState.TOPIC_SELECTED: 'plan',
+    WorkflowState.DIAGNOSTIC_QUIZ: 'plan',
+    WorkflowState.FIRST_ATTEMPT: 'first',
     WorkflowState.RESPONSE_EVALUATION: 'diagnosis',
     WorkflowState.DIAGNOSIS: 'diagnosis',
     WorkflowState.GUIDED_REVISION: 'revision',
@@ -95,7 +98,14 @@ def _handle_action(request, learning_session, exercise, forms):
     if form is not None and not form.is_valid():
         return None
 
-    if action == 'first_attempt':
+    if action == 'plan':
+        submit_plan(
+            learning_session=learning_session,
+            exercise=exercise,
+            **form.cleaned_data,
+        )
+        messages.success(request, 'Your plan and predicted output were saved. Submit your First Attempt.')
+    elif action == 'first_attempt':
         _, result = submit_first_attempt(
             learning_session=learning_session,
             exercise=exercise,
@@ -209,6 +219,7 @@ def exercise(request, slug='double-numbers'):
         latest_teach_back_response = {}
 
     forms = {
+        'plan': _bound_form(request, CodingPlanForm, 'plan'),
         'first_attempt': _bound_form(
             request,
             CodingAttemptForm,
@@ -269,6 +280,7 @@ def exercise(request, slug='double-numbers'):
             return response
 
     learning_session.refresh_from_db()
+    planning_evidence = getattr(learning_session, 'coding_plan', None)
     attempts = list(learning_session.attempts.order_by('revision_number', 'created_at'))
     hints = list(
         learning_session.attempts.order_by('created_at')
@@ -322,6 +334,9 @@ def exercise(request, slug='double-numbers'):
         'current_stage': current_stage,
         'current_stage_label': stage_labels[current_stage],
         'progress_steps': progress_steps,
+        'plan_form': forms['plan'],
+        'planning_required': learning_session.current_state == WorkflowState.DIAGNOSTIC_QUIZ,
+        'planning_evidence': planning_evidence,
         'first_form': forms['first_attempt'],
         'diagnosis_form': forms['diagnosis'],
         'revision_form': forms['finish_revision'] if request.POST.get('action') == 'finish_revision' else forms['save_revision'],

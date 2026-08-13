@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.coding_quiz.models import CodingExercise
@@ -47,6 +47,31 @@ class ProgressRouteTests(TestCase):
         response = self.client.get(reverse('progress:session_detail', args=(other.pk,)))
 
         self.assertEqual(response.status_code, 404)
+
+    def test_planning_evidence_is_shown_only_to_its_browser_session(self):
+        exercise_url = reverse('coding_quiz:exercise_detail', args=('double-numbers',))
+        self.client.post(exercise_url, {
+            'action': 'plan',
+            'solution_plan': 'Use a unique per-item transformation plan.',
+            'predicted_output': 'unique-output-[2, 6]',
+        })
+        learning_session = LearningSession.objects.get(
+            browser_session_key=self.client.session.session_key,
+        )
+
+        detail = self.client.get(
+            reverse('progress:session_detail', args=(learning_session.pk,))
+        )
+        another_browser = Client()
+        other_dashboard = another_browser.get(reverse('progress:dashboard'))
+        other_detail = another_browser.get(
+            reverse('progress:session_detail', args=(learning_session.pk,))
+        )
+
+        self.assertContains(detail, 'Use a unique per-item transformation plan.')
+        self.assertContains(detail, 'unique-output-[2, 6]')
+        self.assertNotContains(other_dashboard, 'unique-output-[2, 6]')
+        self.assertEqual(other_detail.status_code, 404)
 
     def test_session_detail_renders_coach_interactions_hint_usage_and_mastery(self):
         from apps.learning_core.models import CoachInteraction, CoachLearnerResponse, ConceptMastery, HintUsage
@@ -100,4 +125,3 @@ class ProgressRouteTests(TestCase):
         self.assertContains(response, 'Think about the loop variable value.')
         self.assertContains(response, 'Transfer test failed.')
         self.assertContains(response, 'Review loop value binding.')
-

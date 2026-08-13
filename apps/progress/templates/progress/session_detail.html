@@ -12,6 +12,17 @@
 </p>
 
 <section class="panel">
+  <h2>Understand and Plan</h2>
+  {% if learning_session.coding_plan %}
+    <p><strong>Solution plan:</strong> {{ learning_session.coding_plan.solution_plan }}</p>
+    <p><strong>Predicted output:</strong> {{ learning_session.coding_plan.predicted_output }}</p>
+    <p><small>Saved {{ learning_session.coding_plan.created_at|date:"Y-m-d H:i:s" }}</small></p>
+  {% else %}
+    <p>No planning evidence recorded.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
   <h2>Code attempts</h2>
   {% for attempt in learning_session.attempts.all %}
     <article class="history-entry">

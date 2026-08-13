@@ -30,9 +30,24 @@
   <p class="status"><strong>Execution status:</strong> {{ latest_evaluation.status }} — {{ latest_evaluation.message }}</p>
 {% endif %}
 
-{% if current_stage == 'first' %}
+{% if current_stage == 'plan' or current_stage == 'first' %}
+{% if planning_required %}
+<section class="panel" id="understand-and-plan">
+  <h2>1. Understand and Plan</h2>
+  <p>Plan before writing code. AI, hints, and code execution remain locked until this evidence is stored.</p>
+  <p><strong>Public example:</strong> {{ exercise.public_test_description }}</p>
+  <form method="post" data-disable-on-submit>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="plan">
+    {{ plan_form.non_field_errors }}
+    <label>{{ plan_form.solution_plan.label }}{{ plan_form.solution_plan }}{{ plan_form.solution_plan.errors }}</label>
+    <label>{{ plan_form.predicted_output.label }}{{ plan_form.predicted_output }}{{ plan_form.predicted_output.errors }}</label>
+    <button type="submit">Save plan and continue</button>
+  </form>
+</section>
+{% else %}
 <section class="panel" id="first-attempt">
-  <h2>1. Think-First / First Attempt</h2>
+  <h2>2. Think-First / First Attempt</h2>
   <p>Submit code, your plan, and confidence. AI and hints remain locked until this is stored.</p>
   <form method="post" data-disable-on-submit>
     {% csrf_token %}
@@ -44,9 +59,10 @@
     <button type="submit">Store first attempt</button>
   </form>
 </section>
+{% endif %}
 {% elif current_stage == 'diagnosis' %}
 <section class="panel" id="diagnosis">
-  <h2>2. Diagnosis</h2>
+  <h2>3. Diagnosis</h2>
   <p>Your First Attempt is already saved. You must show the core idea or complete the progressive Hint Ladder before Revision opens.</p>
   <div class="hint-panel">
     <strong>Diagnosis Hint Ladder:</strong> current level {{ diagnostic_hint_level }} of 4
@@ -95,7 +111,7 @@
 </section>
 {% elif current_stage == 'revision' %}
 <section class="panel" id="revision">
-  <h2>3. Revision</h2>
+  <h2>4. Revision</h2>
   <p>This creates a new revision. Your first attempt remains unchanged.</p>
   <p class="locked-note">Teach-Back opens only after an isolated runner verifies this exercise as <strong>PASSED</strong>. If the status is NOT_EXECUTED, your revision is still saved but the workflow remains here.</p>
   <form method="post" data-disable-on-submit>
@@ -113,7 +129,7 @@
 </section>
 {% elif current_stage == 'teach_back' %}
 <section class="panel" id="teach-back">
-  <h2>4. Teach-Back</h2>
+  <h2>5. Teach-Back</h2>
   <p>Explain the change in your own words. Incomplete responses unlock progressively easier questions; the final conceptual answer appears only after level 4.</p>
   {% if teach_back_attempts %}
     {% with latest_teach_back=teach_back_attempts|last %}
@@ -154,7 +170,7 @@
 </section>
 {% elif current_stage == 'transfer' %}
 <section class="panel" id="transfer-check">
-  <h2>5. Transfer Check</h2>
+  <h2>6. Transfer Check</h2>
   <p><strong>New task:</strong> {{ exercise.transfer_prompt }}</p>
   <p class="locked-note">AI and all hints are locked for this unassisted check.</p>
   {% if transfer_attempt and transfer_attempt.evaluation.status == 'NOT_EXECUTED' %}
@@ -181,6 +197,9 @@
 
 {% if current_stage != 'transfer' %}<section class="panel">
   <h2>Your saved work</h2>
+  {% if planning_evidence %}
+    <details><summary>Understand and Plan</summary><p><strong>Solution plan:</strong> {{ planning_evidence.solution_plan }}</p><p><strong>Predicted output:</strong> {{ planning_evidence.predicted_output }}</p></details>
+  {% endif %}
   {% if first_attempt %}
     <details><summary>First attempt</summary><pre><code>{{ first_attempt.answer }}</code></pre><p>{{ first_attempt.reasoning }}</p></details>
   {% endif %}

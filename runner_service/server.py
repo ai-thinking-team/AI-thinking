@@ -111,7 +111,8 @@ def run_in_sandbox(payload):
     except (IndexError, json.JSONDecodeError):
         return _not_executed('The execution container returned an invalid response.')
     if result.get('status') not in {
-        'PASSED', 'FAILED', 'SYNTAX_ERROR', 'RUNTIME_ERROR', 'TIMEOUT', 'NOT_EXECUTED'
+        'PASSED', 'OUTPUT_MISMATCH', 'LOGIC_ERROR', 'FAILED',
+        'SYNTAX_ERROR', 'RUNTIME_ERROR', 'TIMEOUT', 'NOT_EXECUTED'
     }:
         return _not_executed('The execution container returned an unknown status.')
     return result
