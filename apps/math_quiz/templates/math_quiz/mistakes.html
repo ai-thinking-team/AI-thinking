@@ -1,0 +1,81 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% trans "間違えた問題" %} | MathPath</title>
+{% include "math_quiz/_style.html" %}
+<style>
+  .hero { padding: .5rem clamp(1.25rem, 4vw, 3rem) 1.5rem; max-width: 720px; }
+  .hero .eyebrow { color: var(--warning); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: .78rem; }
+  .hero h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); margin: .4rem 0 .5rem; letter-spacing: -.01em; }
+  .hero p { color: var(--muted); margin: 0; font-size: 1rem; }
+
+  .list { display: flex; flex-direction: column; gap: 1rem; padding: 0 clamp(1.25rem, 4vw, 3rem) 4rem; max-width: 780px; }
+
+  .mistake-card { padding: 1.3rem 1.4rem; display: flex; flex-direction: column; gap: .75rem; }
+  .mistake-card .eyebrow-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+  .mistake-card .unit-label { font-size: .76rem; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .04em; }
+  .mistake-card h2 { font-size: 1.05rem; margin: 0; }
+  .equation { font-family: 'Space Mono', ui-monospace, monospace; font-size: 1.05rem; background: var(--warning-soft); color: #8a5a08; border-radius: var(--radius-sm); padding: .9rem 1rem; margin: 0; white-space: pre-wrap; }
+  .explanation { color: var(--muted); font-size: .86rem; margin: 0; }
+  .misconception-tag { align-self: flex-start; font-size: .76rem; font-weight: 700; color: var(--warning); background: var(--warning-soft); padding: .3rem .7rem; border-radius: 999px; }
+  .reasons-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .reasons-list li { font-size: .84rem; color: var(--muted); line-height: 1.6; padding-left: 1.2rem; position: relative; }
+  .reasons-list li::before { content: '\2022'; position: absolute; left: .3rem; color: var(--muted); }
+  .mistake-card .btn { align-self: flex-start; }
+
+  .empty-state { padding: 3rem 1.4rem; text-align: center; color: var(--muted); }
+  .empty-state .big { font-size: 2rem; margin-bottom: .5rem; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
+      {% include "math_quiz/_language_switcher.html" %}
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">{% trans "間違えた問題" %}</p>
+    <h1>{% trans "復習して、もう一度解きなおそう。" %}</h1>
+    <p>{% trans "各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。" %}</p>
+  </section>
+
+  {% if items %}
+  <div class="list">
+    {% for item in items %}
+    <section class="mistake-card card">
+      <div class="eyebrow-row">
+        <span class="unit-label">{{ item.unit.name }}</span>
+      </div>
+      <h2>{{ item.section.title }}</h2>
+      {% if item.misconception_type %}<span class="misconception-tag">{% blocktrans with misconception=item.misconception_type %}推定される誤解: {{ misconception }}{% endblocktrans %}</span>{% endif %}
+      <p class="equation">{{ item.problem }}</p>
+      {% if item.explanation %}<p class="explanation">{{ item.explanation }}</p>{% endif %}
+      {% if item.reasons %}
+        <ul class="reasons-list">
+          {% for reason in item.reasons %}<li>{{ reason }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <form method="post" action="{% url 'math_quiz:section_quiz' item.section.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset">
+        <button type="submit" class="btn btn-primary">{% trans "解きなおす" %}</button>
+      </form>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="list">
+    <div class="empty-state card">
+      <div class="big">🎉</div>
+      <p>{% trans "間違えた問題はまだありません。学習を進めると、要復習になった問題がここに表示されます。" %}</p>
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

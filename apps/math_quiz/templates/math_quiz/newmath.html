@@ -1,119 +1,112 @@
+{% load i18n %}
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
 <meta charset="UTF-8">
-<title>New</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% trans "新しい科目を追加" %} | MathPath</title>
+{% include "math_quiz/_style.html" %}
 <style>
-  body {
-    font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    margin: 0;
-    background: #f5f5f5;
-  }
-  h1 {
-    margin-top: 20px;
-    margin-bottom: 8px;
-  }
-  input[type="text"] {
-    padding: 10px 14px;
-    font-size: 16px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-  }
+  .wrap { display: flex; justify-content: center; padding: 2.5rem 1.25rem 4rem; }
+  .form-card { width: 100%; max-width: 480px; padding: 2rem; display: flex; flex-direction: column; gap: 1.35rem; }
+  .form-card h1 { font-size: 1.4rem; margin: 0; }
+  .form-card > p { color: var(--muted); margin: -.8rem 0 0; font-size: .9rem; }
+  .field label { display: block; font-weight: 700; font-size: .88rem; margin-bottom: .4rem; }
+
   #dropzone {
-    width: 360px;
-    max-width: 80vw;
-    padding: 40px 20px;
-    margin-top: 20px;
-    border: 2px dashed #9ca3af;
-    border-radius: 10px;
+    padding: 2.2rem 1rem;
+    border: 2px dashed #c8c1ec;
+    border-radius: var(--radius-md);
     text-align: center;
-    color: #6b7280;
+    color: var(--muted);
     cursor: pointer;
-    background: white;
-    transition: border-color 0.2s, background 0.2s;
+    background: var(--primary-soft);
+    transition: border-color .15s ease, background .15s ease;
   }
-  #dropzone.dragover {
-    border-color: #8b5cf6;
-    background: #f5f3ff;
-    color: #8b5cf6;
-  }
-  #fileInput {
-    display: none;
-  }
-  #fileName {
-    margin-top: 8px;
-    font-size: 14px;
-    color: #4b5563;
-  }
-  button {
-    padding: 10px 20px;
-    font-size: 16px;
-    border: none;
-    border-radius: 6px;
-    background: #8b5cf6;
-    color: white;
-    cursor: pointer;
-    margin-top: 16px;
-  }
-  button:hover {
-    opacity: 0.85;
-  }
+  #dropzone.dragover { border-color: var(--primary); background: #e6dffc; color: var(--primary-dark); }
+  #dropzone .icon { font-size: 1.6rem; margin-bottom: .3rem; }
+  #dropzone .hint { font-size: .78rem; margin-top: .3rem; }
+  #fileInput { display: none; }
+  #fileName { margin-top: .5rem; font-size: .85rem; font-weight: 700; color: var(--primary-dark); }
+
+  .note { font-size: .8rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem .9rem; }
 </style>
 </head>
 <body>
-  <form method="post" action="{% url 'math_quiz:add_unit' %}" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="text" name="name" placeholder="科目名を入力" required>
-
-    <h1>newページ</h1>
-    <p><a href="{% url 'math_quiz:home' %}">戻る</a></p>
-
-    <div id="dropzone">
-      ここにファイルをドラッグ&amp;ドロップ<br>
-      （またはクリックして選択）
-      <div id="fileName"></div>
+  <header class="topbar">
+    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
+      {% include "math_quiz/_language_switcher.html" %}
     </div>
-    <input type="file" id="fileInput" name="file">
+  </header>
 
-    <button type="submit">追加</button>
-  </form>
+  <div class="wrap">
+    <form class="card form-card" method="post" action="{% url 'math_quiz:add_unit' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div>
+        <h1>{% trans "新しい科目を追加" %}</h1>
+        <p>{% trans "科目名を入力し、参考資料があればドラッグ&ドロップしてください。セクション構成は自動で作成されます。" %}</p>
+      </div>
+
+      <div class="field">
+        <label for="name">{% trans "科目名" %}</label>
+        <input type="text" id="name" name="name" placeholder="{% trans '例: 二次関数、微分の基礎' %}" required>
+      </div>
+
+      <div class="field">
+        <label>{% trans "参考ファイル（任意・複数可）" %}</label>
+        <div id="dropzone">
+          <div class="icon">⇧</div>
+          {% trans "ここにファイルをドラッグ&ドロップ" %}<br>{% trans "（またはクリックして選択、複数選択可）" %}
+          <div class="hint">{% trans "未選択でも追加できます" %}</div>
+          <div id="fileName"></div>
+        </div>
+        <input type="file" id="fileInput" name="file" multiple accept="application/pdf,image/*">
+      </div>
+
+      <p class="note">{% trans "「追加」を押すと、セクションが自動生成されます。" %}</p>
+
+      <button type="submit" class="btn btn-primary btn-block">{% trans "この科目を追加" %}</button>
+    </form>
+  </div>
 
   <script>
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
     const fileName = document.getElementById('fileName');
 
-    function setFile(file) {
+    const SELECTED_LABEL = '{% trans "選択中" %}';
+
+    function describeFiles(files) {
+      if (files.length === 0) return '';
+      if (files.length === 1) return SELECTED_LABEL + ': ' + files[0].name;
+      const names = Array.from(files).map((f) => f.name).join('、');
+      return SELECTED_LABEL + '(' + files.length + ') : ' + names;
+    }
+
+    function setFiles(files) {
       const transfer = new DataTransfer();
-      transfer.items.add(file);
+      for (const file of files) transfer.items.add(file);
       fileInput.files = transfer.files;
-      fileName.textContent = file.name;
+      fileName.textContent = describeFiles(fileInput.files);
     }
 
     dropzone.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
-      if (fileInput.files.length > 0) {
-        fileName.textContent = fileInput.files[0].name;
-      }
+      fileName.textContent = describeFiles(fileInput.files);
     });
 
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropzone.classList.add('dragover');
     });
-    dropzone.addEventListener('dragleave', () => {
-      dropzone.classList.remove('dragover');
-    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
     dropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropzone.classList.remove('dragover');
       if (e.dataTransfer.files.length > 0) {
-        setFile(e.dataTransfer.files[0]);
+        setFiles(e.dataTransfer.files);
       }
     });
   </script>

@@ -1,11 +1,20 @@
+import json
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
+from . import client
 from .client import generate_ai_response
 from .exceptions import AIServiceUnavailable
 from .schemas import DiagnosticResponse
+
+
+def _fake_urlopen_response(body):
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(body).encode('utf-8')
+    mock_response.__enter__.return_value = mock_response
+    return mock_response
 
 
 class AIClientTests(SimpleTestCase):
@@ -13,6 +22,80 @@ class AIClientTests(SimpleTestCase):
     def test_missing_key_fails_safely(self):
         with self.assertRaises(AIServiceUnavailable):
             generate_ai_response(system_prompt='system', user_prompt='learner')
+
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'})
+    @patch.object(client, '_generate_gemini_response', return_value='gemini answered')
+    @patch.object(client, '_generate_openai_response', side_effect=AIServiceUnavailable('quota exhausted'))
+    def test_falls_through_to_the_next_provider_when_the_first_is_configured_but_broken(
+        self, mock_openai, mock_gemini,
+    ):
+        """A provider being configured (a key is present) doesn't mean
+        it's currently working — e.g. an OpenAI key with no billing
+        credits. That should transparently fall through to the next
+        configured provider rather than making the whole app AI-silent."""
+        result = generate_ai_response(system_prompt='system', user_prompt='learner')
+        self.assertEqual(result, 'gemini answered')
+        mock_openai.assert_called_once()
+        mock_gemini.assert_called_once()
+
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'})
+    @patch.object(client, '_generate_gemini_response', side_effect=AIServiceUnavailable('also broken'))
+    @patch.object(client, '_generate_openai_response', side_effect=AIServiceUnavailable('quota exhausted'))
+    def test_raises_when_every_configured_provider_fails(self, mock_openai, mock_gemini):
+        with self.assertRaises(AIServiceUnavailable):
+            generate_ai_response(system_prompt='system', user_prompt='learner')
+
+    @patch.dict(os.environ, {'GEMINI_API_KEY': 'gm-test'})
+    @patch('urllib.request.urlopen', side_effect=TimeoutError('The read operation timed out'))
+    def test_a_bare_read_timeout_is_reported_as_ai_unavailable_not_a_crash(self, mock_urlopen):
+        """A read timeout past the deadline raises a bare TimeoutError from
+        urllib — not wrapped in URLError — so it needs its own handler or
+        it escapes _request_json as an unhandled exception and crashes the
+        calling view with a 500 instead of falling back gracefully."""
+        with self.assertRaises(AIServiceUnavailable):
+            generate_ai_response(system_prompt='system', user_prompt='learner')
+
+    @patch.dict(os.environ, {'GEMINI_API_KEY': 'gm-test'}, clear=True)
+    @patch('urllib.request.urlopen')
+    def test_gemini_attaches_one_inline_part_per_file(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_urlopen_response(
+            {'candidates': [{'content': {'parts': [{'text': '{}'}]}}]}
+        )
+        generate_ai_response(
+            system_prompt='system', user_prompt='learner',
+            files=[(b'pdf-bytes', 'application/pdf'), (b'img-bytes', 'image/png')],
+        )
+        request = mock_urlopen.call_args[0][0]
+        payload = json.loads(request.data)
+        parts = payload['contents'][0]['parts']
+        # 1 text part + 2 file parts, one inline_data entry per attachment.
+        self.assertEqual(len(parts), 3)
+        self.assertEqual(parts[1]['inline_data']['mime_type'], 'application/pdf')
+        self.assertEqual(parts[2]['inline_data']['mime_type'], 'image/png')
+
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test'}, clear=True)
+    @patch('urllib.request.urlopen')
+    def test_openai_attaches_every_image_but_skips_non_images(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_urlopen_response(
+            {'choices': [{'message': {'content': '{}'}}]}
+        )
+        generate_ai_response(
+            system_prompt='system', user_prompt='learner',
+            files=[
+                (b'pdf-bytes', 'application/pdf'),
+                (b'img1-bytes', 'image/png'),
+                (b'img2-bytes', 'image/jpeg'),
+            ],
+        )
+        request = mock_urlopen.call_args[0][0]
+        payload = json.loads(request.data)
+        content = payload['messages'][1]['content']
+        # Text block + 2 image blocks; the PDF is silently skipped (the
+        # Chat Completions endpoint used here only accepts inline images).
+        self.assertEqual(len(content), 3)
+        self.assertEqual(content[0]['type'], 'text')
+        image_types = [block['image_url']['url'].split(';')[0] for block in content[1:]]
+        self.assertEqual(image_types, ['data:image/png', 'data:image/jpeg'])
 
     def test_ai_response_schema_has_no_mastery_control(self):
         response = DiagnosticResponse(

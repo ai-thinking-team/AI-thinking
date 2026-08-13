@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Concept,
+    DiagnosticQuizAttempt,
     HintUsage,
     LearnerAttempt,
     LearningActivity,
@@ -14,4 +15,7 @@ from .models import (
 )
 
 admin.site.register((Subject, Topic, Concept, LearningActivity, LearningSession))
-admin.site.register((LearnerAttempt, HintUsage, MisconceptionRecord, TeachBackAttempt, TransferAttempt))
+admin.site.register((
+    LearnerAttempt, HintUsage, MisconceptionRecord, TeachBackAttempt, TransferAttempt,
+    DiagnosticQuizAttempt,
+))

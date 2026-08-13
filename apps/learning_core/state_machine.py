@@ -7,6 +7,7 @@ class WorkflowState(models.TextChoices):
     FIRST_ATTEMPT = 'FIRST_ATTEMPT', 'First attempt'
     RESPONSE_EVALUATION = 'RESPONSE_EVALUATION', 'Response evaluation'
     DIAGNOSIS = 'DIAGNOSIS', 'Diagnosis'
+    VERIFICATION = 'VERIFICATION', 'Verification'
     GUIDED_REVISION = 'GUIDED_REVISION', 'Guided revision'
     TEACH_BACK = 'TEACH_BACK', 'Teach-Back'
     TRANSFER_TASK = 'TRANSFER_TASK', 'Transfer task'
@@ -18,8 +19,11 @@ ALLOWED_TRANSITIONS = {
     WorkflowState.TOPIC_SELECTED: {WorkflowState.DIAGNOSTIC_QUIZ},
     WorkflowState.DIAGNOSTIC_QUIZ: {WorkflowState.FIRST_ATTEMPT},
     WorkflowState.FIRST_ATTEMPT: {WorkflowState.RESPONSE_EVALUATION},
-    WorkflowState.RESPONSE_EVALUATION: {WorkflowState.DIAGNOSIS, WorkflowState.TEACH_BACK},
+    WorkflowState.RESPONSE_EVALUATION: {
+        WorkflowState.DIAGNOSIS, WorkflowState.VERIFICATION, WorkflowState.TEACH_BACK,
+    },
     WorkflowState.DIAGNOSIS: {WorkflowState.GUIDED_REVISION},
+    WorkflowState.VERIFICATION: {WorkflowState.TEACH_BACK},
     WorkflowState.GUIDED_REVISION: {WorkflowState.RESPONSE_EVALUATION, WorkflowState.TEACH_BACK},
     WorkflowState.TEACH_BACK: {WorkflowState.GUIDED_REVISION, WorkflowState.TRANSFER_TASK},
     WorkflowState.TRANSFER_TASK: {WorkflowState.MASTERED, WorkflowState.NEEDS_REVIEW},
@@ -40,7 +44,9 @@ def validate_transition(current_state, target_state):
 
 
 def ai_assistance_allowed(state):
-    return WorkflowState(state) in {WorkflowState.DIAGNOSIS, WorkflowState.GUIDED_REVISION}
+    return WorkflowState(state) in {
+        WorkflowState.DIAGNOSIS, WorkflowState.VERIFICATION, WorkflowState.GUIDED_REVISION,
+    }
 
 
 def hints_allowed(state):

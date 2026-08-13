@@ -1,57 +1,66 @@
+{% load i18n %}
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
 <meta charset="UTF-8">
-<title>{{ unit.name }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ unit.name }} | MathPath</title>
+{% include "math_quiz/_style.html" %}
 <style>
-  body {
-    font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-height: 100vh;
-    margin: 0;
-    padding: 20px 0 60px;
-    background: #f5f5f5;
-  }
-  h1 {
-    margin-bottom: 8px;
-  }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
-    max-width: 500px;
-    margin-top: 20px;
-  }
-  button.section-btn {
-    padding: 12px 24px;
-    font-size: 16px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    color: white;
-    background: #8b5cf6;
-    transition: opacity 0.2s;
-  }
-  button.section-btn:hover {
-    opacity: 0.85;
-  }
+  .head { padding: .5rem clamp(1.25rem, 4vw, 3rem) 1.25rem; max-width: 720px; }
+  .head .eyebrow { color: var(--primary); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: .78rem; }
+  .head h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin: .35rem 0 .6rem; }
+  .head .file-link { font-size: .85rem; font-weight: 700; color: var(--primary); text-decoration: none; }
+
+  .progress-summary { display: flex; align-items: center; gap: .9rem; margin-top: .9rem; max-width: 420px; }
+  .progress-track { flex: 1; height: 8px; border-radius: 999px; background: var(--primary-soft); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #8a3ff0); }
+  .progress-summary.is-complete .progress-fill { background: linear-gradient(90deg, var(--success), #4fd3a0); }
+  .progress-summary strong { font-size: .85rem; white-space: nowrap; }
+
+  .sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 0 clamp(1.25rem, 4vw, 3rem) 4rem; }
+  .section-card { display: flex; flex-direction: column; gap: .7rem; padding: 1.2rem; text-decoration: none; color: inherit; transition: transform .15s ease, box-shadow .15s ease; }
+  .section-card:hover { transform: translateY(-2px); box-shadow: 0 1px 2px rgba(33,31,61,.06), 0 16px 30px -16px rgba(33,31,61,.28); }
+  .section-card h2 { font-size: 1rem; margin: 0; }
+  .section-card p { margin: 0; font-size: .84rem; color: var(--muted); line-height: 1.55; }
+  .section-order { font-size: .74rem; font-weight: 800; color: var(--primary); letter-spacing: .04em; }
+
+  .empty { padding: 2rem; color: var(--muted); }
 </style>
 </head>
 <body>
-  <p><a href="{% url 'math_quiz:home' %}">戻る</a></p>
-  <h1>{{ unit.name }}</h1>
-  {% if unit.file %}
-  <p><a href="{{ unit.file.url }}">元のファイルをダウンロード</a></p>
-  {% endif %}
+  <header class="topbar">
+    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
+      {% include "math_quiz/_language_switcher.html" %}
+    </div>
+  </header>
 
-  <div class="buttons">
-    {% for section in unit.sections.all %}
-    <button class="section-btn" onclick="location.href='{% url 'math_quiz:section_quiz' section.id %}'">{{ section.title }}</button>
+  <section class="head">
+    <p class="eyebrow">{% trans "科目" %}</p>
+    <h1>{{ unit.name }}</h1>
+    {% if unit.file %}<a class="file-link" href="{{ unit.file.url }}">↓ {% trans "参考ファイルをダウンロード" %}</a>{% endif %}
+    <div class="progress-summary{% if complete %} is-complete{% endif %}">
+      <div class="progress-track"><div class="progress-fill" style="width: {{ percent }}%;"></div></div>
+      <strong>
+        {% if complete %}{% trans "Complete! 🎉" %}
+        {% else %}{% blocktrans %}達成率 {{ percent }}%（{{ mastered }}/{{ total }}）{% endblocktrans %}
+        {% endif %}
+      </strong>
+    </div>
+  </section>
+
+  <div class="sections">
+    {% for item in sections %}
+    <a class="section-card card" href="{% url 'math_quiz:section_quiz' item.section.id %}">
+      <span class="section-order">{% blocktrans with n=forloop.counter %}セクション {{ n }}{% endblocktrans %}</span>
+      <h2>{{ item.section.title }}</h2>
+      <p>{{ item.section.content|truncatewords:22 }}</p>
+      <span class="pill pill-{{ item.status_tone }}">{{ item.status_label }}</span>
+    </a>
     {% empty %}
-    <p>セクションがまだありません。</p>
+    <p class="empty">{% trans "セクションがまだありません。" %}</p>
     {% endfor %}
   </div>
 </body>

@@ -1,140 +1,308 @@
+{% load i18n %}
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
 <meta charset="UTF-8">
-<title>{{ section.title }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ section.title }} | MathPath</title>
+{% include "math_quiz/_style.html" %}
 <style>
-  body {
-    font-family: sans-serif;
-    margin: 0;
-    min-height: 100vh;
-    background: #f5f5f5;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 16px;
-    box-sizing: border-box;
+  .menu-wrapper { position: relative; }
+  .hamburger-btn {
+    width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); font-size: 1.1rem; cursor: pointer; color: var(--muted);
   }
-  .back-link {
-    position: absolute;
-    top: 20px;
-    left: 20px;
+  .menu-dropdown {
+    display: none; flex-direction: column; position: absolute; top: 48px; right: 0;
+    min-width: 190px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow); overflow: hidden; z-index: 20;
   }
-  #hintBtn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: none;
-    background: #f59e0b;
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  .menu-dropdown.open { display: flex; }
+  .menu-dropdown form { margin: 0; }
+  .menu-dropdown a, .menu-item-button {
+    display: block; width: 100%; box-sizing: border-box; text-align: left;
+    padding: .75rem 1rem; font-size: .88rem; font-weight: 600; background: var(--surface);
+    color: var(--ink); border: none; text-decoration: none; cursor: pointer; font-family: inherit;
   }
-  #hintPopup {
-    display: none;
-    position: absolute;
-    top: 72px;
-    right: 20px;
-    width: 260px;
-    padding: 16px;
-    border-radius: 10px;
-    background: white;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    line-height: 1.5;
+  .menu-dropdown a:hover, .menu-item-button:hover { background: var(--bg); }
+
+  .page { max-width: 680px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  .section-head { margin: .5rem 0 1.4rem; }
+  .section-head .eyebrow { color: var(--primary); font-weight: 800; letter-spacing: .05em; text-transform: uppercase; font-size: .76rem; }
+  .section-head h1 { font-size: 1.35rem; margin: .3rem 0 .1rem; }
+  .section-head h2 { font-size: .95rem; margin: 0; color: var(--muted); font-weight: 600; }
+
+  .course-badge { display: inline-flex; align-items: center; gap: .4rem; margin-top: .6rem; font-size: .78rem; font-weight: 700; color: var(--muted); }
+  .course-badge .track { width: 60px; height: 6px; border-radius: 999px; background: var(--primary-soft); overflow: hidden; }
+  .course-badge .fill { height: 100%; background: linear-gradient(90deg, var(--primary), #8a3ff0); }
+
+  .stepper { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; list-style: none; padding: 0; margin: 0 0 1.6rem; }
+  .stepper li { display: flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 700; color: #b6b2d1; }
+  .stepper li .dot { width: 7px; height: 7px; border-radius: 50%; background: #d9d5f0; }
+  .stepper li.current { color: var(--primary); }
+  .stepper li.current .dot { background: var(--primary); }
+  .stepper li.complete { color: var(--success); }
+  .stepper li.complete .dot { background: var(--success); }
+
+  .panel { padding: 1.6rem 1.6rem 1.75rem; margin-bottom: 1.1rem; }
+  .prompt { font-size: 1.05rem; line-height: 1.75; margin: 0 0 1.3rem; white-space: pre-wrap; font-weight: 600; }
+  .prompt-note { color: var(--muted); font-size: .86rem; margin: -.6rem 0 1.2rem; }
+  .equation { font-family: 'Space Mono', ui-monospace, monospace; font-size: 1.25rem; background: var(--primary-soft); color: var(--primary-dark); border-radius: var(--radius-sm); padding: 1rem 1.1rem; margin: 0 0 1.3rem; text-align: center; }
+
+  form.stage-form { display: flex; flex-direction: column; gap: 1.1rem; }
+  .field label { display: block; font-weight: 700; font-size: .88rem; margin-bottom: .4rem; }
+  textarea.answer-box { min-height: 120px; }
+
+  .confidence fieldset { border: none; margin: 0; padding: 0; }
+  .confidence legend { font-weight: 700; font-size: .88rem; margin-bottom: .5rem; padding: 0; }
+  .confidence-caption { color: var(--muted); font-size: .78rem; margin: -.3rem 0 .6rem; }
+  .confidence-options { display: grid; grid-template-columns: repeat(5, 1fr); gap: .5rem; }
+  .confidence-options label {
+    display: flex; flex-direction: column; align-items: center; gap: .2rem;
+    padding: .6rem .2rem; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: .72rem; font-weight: 700; color: var(--muted); cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
   }
-  h2 {
-    margin-bottom: 4px;
-    color: #6b7280;
-    font-size: 16px;
+  .confidence-options input { accent-color: var(--primary); }
+  .confidence-options label:has(input:checked) { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-soft); }
+
+  .hint-block { border-top: 1px dashed var(--border); margin-top: .3rem; padding-top: 1.2rem; }
+  .hint-block h3 { font-size: .9rem; margin: 0 0 .7rem; }
+  .hint-card {
+    display: flex; gap: .8rem; padding: .95rem 1.05rem; border-radius: var(--radius-sm);
+    background: var(--warning-soft); border-left: 4px solid var(--warning);
   }
-  #problem {
-    max-width: 600px;
-    text-align: center;
-    font-size: 20px;
-    line-height: 1.7;
-    margin: 8px 0 32px;
-    white-space: pre-wrap;
+  .hint-card.level-5 { background: var(--danger-soft); border-left-color: var(--danger); }
+  .hint-card .level-tag {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--warning);
+    color: white; font-weight: 800; font-size: .82rem; display: flex; align-items: center; justify-content: center;
   }
-  form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-  }
-  textarea {
-    width: 600px;
-    max-width: 90vw;
-    height: 200px;
-    font-size: 16px;
-    padding: 14px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    box-sizing: border-box;
-    resize: vertical;
-  }
-  .confidence {
-    width: 600px;
-    max-width: 90vw;
-    margin-top: 16px;
-    text-align: center;
-  }
-  .confidence input[type="range"] {
-    width: 100%;
-  }
-  button[type="submit"] {
-    margin-top: 28px;
-    padding: 12px 40px;
-    font-size: 16px;
-    border: none;
-    border-radius: 6px;
-    background: #8b5cf6;
-    color: white;
-    cursor: pointer;
-  }
-  button[type="submit"]:hover {
-    opacity: 0.85;
-  }
+  .hint-card.level-5 .level-tag { background: var(--danger); }
+  .hint-card p { margin: 0; font-size: .9rem; line-height: 1.6; }
+  .hint-history { margin-top: .8rem; display: flex; flex-direction: column; gap: .5rem; }
+  .hint-history summary { cursor: pointer; font-size: .82rem; font-weight: 700; color: var(--muted); }
+  .hint-history-item { font-size: .82rem; color: var(--muted); padding: .4rem 0; border-bottom: 1px dashed var(--border); }
+  .hint-history-item strong { color: var(--ink); }
+
+  .panel h3.block-title { font-size: .88rem; margin: 1.1rem 0 .3rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+  .locked-note { color: var(--muted); font-size: .84rem; margin: 0 0 1rem; }
+
+  .outcome-title { font-size: 1.15rem; margin: 0 0 .4rem; }
+  .outcome-title.success { color: var(--success); }
+  .outcome-title.warning { color: var(--warning); }
+  .evidence-list { list-style: none; padding: 0; margin: .3rem 0 0; display: flex; flex-direction: column; gap: .45rem; }
+  .evidence-list li { font-size: .88rem; line-height: 1.6; padding-left: 1.4rem; position: relative; }
+  .evidence-list li::before { content: '\2022'; position: absolute; left: .35rem; color: var(--muted); }
+  .evidence-list.is-positive li::before { content: '\2713'; color: var(--success); font-weight: 700; }
+  .record { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: .6rem; }
+  .record details { margin-bottom: .5rem; font-size: .86rem; }
+  .record summary { cursor: pointer; font-weight: 700; color: var(--muted); }
+  .record dl { margin: .5rem 0 0; }
+  .record dt { font-weight: 700; font-size: .8rem; color: var(--muted); }
+  .record dd { margin: .1rem 0 .6rem; }
 </style>
 </head>
 <body>
-  <a class="back-link" href="{% url 'math_quiz:unit_detail' section.unit_id %}">戻る</a>
+  <header class="topbar">
+    <a class="brand" href="{% url 'math_quiz:unit_detail' section.unit_id %}"><span class="brand-mark">M</span>{{ section.unit.name }}</a>
+    <div style="display:flex; align-items:center; gap:1rem;">
+      {% include "math_quiz/_language_switcher.html" %}
+      <div class="menu-wrapper">
+        <button id="menuBtn" class="hamburger-btn" title="{% trans 'メニュー' %}" aria-haspopup="true" aria-expanded="false">☰</button>
+        <div id="menuDropdown" class="menu-dropdown">
+          <a href="{% url 'math_quiz:home' %}">{% trans "ホームに戻る" %}</a>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reset">
+            <button class="menu-item-button" type="submit">{% trans "最初からやり直す" %}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </header>
 
-  <button id="hintBtn" title="ヒント">💡</button>
-  <div id="hintPopup">{{ hint }}</div>
-
-  <h2>{{ section.unit.name }} - {{ section.title }}</h2>
-  <p id="problem">{{ problem }}</p>
-
-  <form method="post" action="{% url 'math_quiz:submit_answer' %}">
-    {% csrf_token %}
-    <input type="hidden" name="section_id" value="{{ section.id }}">
-    <textarea name="problem" style="display:none">{{ problem }}</textarea>
-    <textarea name="answer" placeholder="ここに解答を入力してください" required></textarea>
-
-    <div class="confidence">
-      <label for="confidence">自信度: <span id="confidenceValue">50</span>%</label><br>
-      <input type="range" id="confidence" name="confidence" min="0" max="100" value="50">
+  <div class="page">
+    <div class="section-head">
+      <p class="eyebrow">{{ current_stage_label }}</p>
+      <h1>{{ section.title }}</h1>
+      <h2>{{ section.unit.name }}</h2>
+      <div class="course-badge">
+        <span class="track"><span class="fill" style="width: {{ course_percent }}%;"></span></span>
+        {% blocktrans %}コース達成率 {{ course_percent }}%{% endblocktrans %}{% if course_complete %} · {% trans "Complete! 🎉" %}{% endif %}
+      </div>
     </div>
 
-    <button type="submit">提出</button>
-  </form>
+    {% for message in messages %}
+      {% if forloop.last %}<p class="status-banner {{ message.tags }}">{{ message }}</p>{% endif %}
+    {% endfor %}
+
+    <ol class="stepper">
+      {% for step in progress_steps %}
+        <li class="{% if step.current %}current{% elif step.complete %}complete{% endif %}"><span class="dot"></span>{{ step.label }}</li>
+      {% endfor %}
+    </ol>
+
+    {% if current_stage == 'first' %}
+    <section class="panel card">
+      <div class="equation">{{ session.first_problem }}</div>
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="first_attempt">
+        <div class="field"><label>{% trans "解答" %}</label><textarea name="answer" class="answer-box" placeholder="{% trans 'ここに解答を入力してください' %}" required></textarea></div>
+        <div class="field"><label>{% trans "考え方の説明" %}</label><textarea name="reasoning" placeholder="{% trans 'どう考えて解いたか説明してください' %}" required></textarea></div>
+        {% include "math_quiz/_confidence.html" %}
+        <button type="submit" class="btn btn-primary">{% trans "提出" %}</button>
+      </form>
+    </section>
+
+    {% elif current_stage == 'diagnosis' %}
+    <section class="panel card">
+      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation }}</p>{% endif %}
+      <p class="prompt-note">{% trans "不正解でした。誤解を明らかにするための質問です。" %}</p>
+      <p class="prompt">{{ first_attempt.diagnosis_question }}</p>
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="diagnosis">
+        <textarea name="answer" class="answer-box" placeholder="{% trans 'ここに回答を入力してください' %}" required></textarea>
+        <button type="submit" class="btn btn-primary">{% trans "回答して次へ" %}</button>
+      </form>
+    </section>
+
+    {% elif current_stage == 'verification' %}
+    <section class="panel card">
+      <p class="status-banner success">{% trans "正解でした！自信度が低かったので、理解を確認します。" %}</p>
+      <p class="prompt">{{ first_attempt.verification_question }}</p>
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="verification">
+        <textarea name="answer" class="answer-box" placeholder="{% trans 'ここに回答を入力してください' %}" required></textarea>
+        <button type="submit" class="btn btn-primary">{% trans "回答して次へ" %}</button>
+      </form>
+    </section>
+
+    {% elif current_stage == 'revision' %}
+    <section class="panel card">
+      <div class="equation">{{ session.first_problem }}</div>
+      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation }}</p>{% endif %}
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="revision">
+        <div class="field"><label>{% trans "解答（修正版）" %}</label><textarea name="answer" class="answer-box" placeholder="{% trans 'ここに解答を入力してください' %}" required></textarea></div>
+        <div class="field"><label>{% trans "考え方の説明" %}</label><textarea name="reasoning" placeholder="{% trans 'どう考えて修正したか説明してください' %}" required></textarea></div>
+        {% include "math_quiz/_confidence.html" %}
+        <button type="submit" class="btn btn-primary">{% trans "再提出" %}</button>
+      </form>
+
+      <div class="hint-block">
+        <h3>{% blocktrans with level=current_hint.level %}ヒント レベル{{ level }}{% endblocktrans %}{% if current_hint.level == 5 %}{% trans "（最終手段）" %}{% endif %}</h3>
+        {% if current_hint %}
+        <div class="hint-card{% if current_hint.level == 5 %} level-5{% endif %}">
+          <span class="level-tag">{{ current_hint.level }}</span>
+          <p>{{ current_hint.content }}</p>
+        </div>
+        {% endif %}
+        {% if hint_usage|length > 1 %}
+        <details class="hint-history">
+          <summary>{% blocktrans with count_hints=hint_usage|length %}これまでのヒントを見る（{{ count_hints }}件）{% endblocktrans %}</summary>
+          {% for hint in hint_usage %}
+            <div class="hint-history-item"><strong>{% blocktrans with level=hint.level %}レベル{{ level }}:{% endblocktrans %}</strong> {{ hint.content }}</div>
+          {% endfor %}
+        </details>
+        {% endif %}
+      </div>
+    </section>
+
+    {% elif current_stage == 'teach_back' %}
+    <section class="panel card">
+      <p class="prompt-note">{% trans "最後に、今回の考え方を自分の言葉で確認してみましょう。長い説明は必要ありません（目安10〜20秒、1〜2文でOKです）。" %}</p>
+      {% if teach_back_attempts %}
+        {% with latest_teach_back=teach_back_attempts|last %}
+          <p class="status-banner warning">{{ latest_teach_back.feedback }}</p>
+        {% endwith %}
+      {% endif %}
+      <p class="prompt">{{ current_teach_back.question }}</p>
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="teach_back">
+        <textarea name="answer" class="answer-box" style="min-height:70px;" placeholder="{% trans '1〜2文でOKです' %}" required></textarea>
+        <button type="submit" class="btn btn-primary">{% trans "回答する" %}</button>
+      </form>
+    </section>
+
+    {% elif current_stage == 'transfer' %}
+    <section class="panel card">
+      <p class="locked-note">{% trans "AIのヒントなしで解いてください。" %}</p>
+      <div class="equation">{{ session.transfer_problem }}</div>
+      <form class="stage-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="transfer">
+        <div class="field"><label>{% trans "解答" %}</label><textarea name="answer" class="answer-box" required></textarea></div>
+        <div class="field"><label>{% trans "考え方の説明" %}</label><textarea name="reasoning" required></textarea></div>
+        {% include "math_quiz/_confidence.html" %}
+        <button type="submit" class="btn btn-primary">{% trans "提出" %}</button>
+      </form>
+    </section>
+
+    {% else %}
+    <section class="panel card">
+      <h3 class="outcome-title {% if session.current_state == 'MASTERED' %}success{% else %}warning{% endif %}">{{ final_result_message }}</h3>
+      {% if review_recommendation %}<p><strong>{% trans "次のおすすめ:" %}</strong> {{ review_recommendation }}</p>{% endif %}
+      {% if course_complete %}<p class="status-banner success" style="margin-top:1rem;">{% trans "このコースはComplete!です 🎉" %}</p>{% endif %}
+
+      {% if evidence_list %}
+        <h4 class="block-title">{% if session.current_state == 'MASTERED' %}{% trans "理解の証拠" %}{% else %}{% trans "もう少し練習するとよさそうな点" %}{% endif %}</h4>
+        <ul class="evidence-list {% if session.current_state == 'MASTERED' %}is-positive{% endif %}">
+          {% for item in evidence_list %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if concept_mastery.confidence_calibration == 'OVERCONFIDENT' or concept_mastery.confidence_calibration == 'UNDERCONFIDENT' %}
+        <p class="status-banner info" style="margin-top:1rem;">{% trans "理解度の自己評価と結果に少しズレがあります。次は自信度も意識して答えてみましょう。" %}</p>
+      {% endif %}
+      {% if session.current_state == 'NEEDS_REVIEW' and concept_mastery.misconception_type %}
+        <p class="status-banner info" style="margin-top:1rem;">{% blocktrans with point=concept_mastery.misconception_type %}今回つまずいたポイント: {{ point }}{% endblocktrans %}</p>
+      {% endif %}
+    </section>
+
+    <section class="panel card record">
+      <h3 class="block-title" style="margin-top:0;">{% trans "学習の記録" %}</h3>
+      {% if first_attempt %}
+        <details><summary>{% trans "最初の解答" %}</summary><dl><dt>{% trans "解答" %}</dt><dd>{{ first_attempt.answer }}</dd><dt>{% trans "考え方" %}</dt><dd>{{ first_attempt.reasoning }}</dd></dl></details>
+      {% endif %}
+      {% for attempt in attempts %}
+        {% if attempt.revision_number %}
+          <details><summary>{% blocktrans with n=attempt.revision_number %}修正 {{ n }}{% endblocktrans %}</summary><dl><dt>{% trans "解答" %}</dt><dd>{{ attempt.answer }}</dd><dt>{% trans "考え方" %}</dt><dd>{{ attempt.reasoning }}</dd></dl></details>
+        {% endif %}
+      {% endfor %}
+      {% if hint_usage %}
+        <details><summary>{% blocktrans with count_hints=hint_usage|length %}使用したヒント（{{ count_hints }}件）{% endblocktrans %}</summary><dl>{% for hint in hint_usage %}<dt>{% blocktrans with level=hint.level %}レベル{{ level }}{% endblocktrans %}</dt><dd>{{ hint.content }}</dd>{% endfor %}</dl></details>
+      {% endif %}
+      {% if teach_back_attempts %}
+        <details><summary>Teach-Back</summary><dl>{% for item in teach_back_attempts %}<dt>{{ item.evaluation }}</dt><dd>{{ item.feedback }}</dd>{% endfor %}</dl></details>
+      {% endif %}
+      {% if transfer_attempt %}
+        <details><summary>Transfer Check</summary><dl><dt>{% if transfer_attempt.is_correct %}{% trans "正解" %}{% else %}{% trans "不正解" %}{% endif %}</dt><dd>{{ transfer_attempt.explanation }}</dd></dl></details>
+      {% endif %}
+    </section>
+
+    <a class="btn btn-primary" href="{% url 'math_quiz:home' %}">{% trans "ホームに戻る" %}</a>
+    {% endif %}
+  </div>
 
   <script>
-    const hintBtn = document.getElementById('hintBtn');
-    const hintPopup = document.getElementById('hintPopup');
-    hintBtn.addEventListener('click', () => {
-      hintPopup.style.display = hintPopup.style.display === 'block' ? 'none' : 'block';
+    const menuBtn = document.getElementById('menuBtn');
+    const menuDropdown = document.getElementById('menuDropdown');
+    menuBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = menuDropdown.classList.toggle('open');
+      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
-
-    const confidenceInput = document.getElementById('confidence');
-    const confidenceValue = document.getElementById('confidenceValue');
-    confidenceInput.addEventListener('input', () => {
-      confidenceValue.textContent = confidenceInput.value;
+    document.addEventListener('click', (event) => {
+      if (!menuDropdown.contains(event.target) && event.target !== menuBtn) {
+        menuDropdown.classList.remove('open');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      }
     });
   </script>
 </body>
