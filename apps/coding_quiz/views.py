@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 
-from apps.ai_engine.client import ai_provider_configured
+from apps.ai_engine.client import ai_provider_configured, ai_provider_status
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowed
 
@@ -64,7 +64,10 @@ def home(request):
     exercises = CodingExercise.objects.filter(active=True).select_related(
         'activity__concept__topic'
     )
-    return render(request, 'coding_quiz/home.html', {'exercises': exercises})
+    return render(request, 'coding_quiz/home.html', {
+        'exercises': exercises,
+        'ai_status': ai_provider_status(),
+    })
 
 
 def _session_tracking_key(exercise):
@@ -371,4 +374,7 @@ def exercise(request, slug='double-numbers'):
         'revision_solution_interaction': revision_solution_interaction,
         'ai_enabled': ai_assistance_allowed(learning_session.current_state),
         'ai_configured': ai_provider_configured(),
+        'ai_status': ai_provider_status(
+            assistance_enabled=ai_assistance_allowed(learning_session.current_state),
+        ),
     })

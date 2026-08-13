@@ -33,6 +33,7 @@ from .misconception_rules import (
     diagnosis_confirms_misconception,
     transfer_repeats_misconception,
 )
+from apps.ai_engine.client import ai_provider_status
 from .services import (
     acknowledge_diagnosis_solution,
     ensure_demo_exercise,
@@ -111,6 +112,16 @@ PARTIAL_TEACH_BACK_PROVIDER = 'apps.coding_quiz.tests.PartialTeachBackProvider'
 
 
 class TeachBackRubricTests(SimpleTestCase):
+    def test_ai_status_explains_safe_fallback_without_external_api(self):
+        with override_settings(AI_PROVIDER_CLASS=''):
+            status = ai_provider_status(assistance_enabled=True)
+        self.assertEqual(status['mode'], 'CURATED_FALLBACK')
+        self.assertIn('No external API is required', status['detail'])
+
+    @override_settings(AI_PROVIDER_CLASS='apps.ai_engine.providers.gemini.GeminiProvider')
+    def test_ai_status_distinguishes_configured_and_workflow_locked(self):
+        status = ai_provider_status(assistance_enabled=False)
+        self.assertEqual(status['mode'], 'CONFIGURED_LOCKED')
     def test_semantic_rubric_evidence_replaces_minimum_length(self):
         outcome = evaluate_teach_back({
             'original_issue': 'Wrong current value.',
@@ -230,11 +241,13 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertEqual(response.context['exercise'], exercise)
         self.assertContains(response, 'Double every number')
         self.assertContains(response, 'Understand and Plan')
+        self.assertContains(response, 'Curated fallback ready')
         self.assertNotContains(response, 'name="source_code"')
 
     def test_catalog_lists_database_exercises_and_routes_by_slug(self):
         response = self.client.get(reverse('coding_quiz:home'))
 
+        self.assertContains(response, 'Curated fallback ready')
         self.assertContains(response, 'Double every number')
         self.assertContains(response, 'Square every number')
         self.assertContains(response, 'Increment every number')

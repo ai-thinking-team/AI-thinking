@@ -7,6 +7,10 @@
 {% block content %}
 <h1>Coding</h1>
 <p>The first MVP supports beginner Python only. Passing tests is necessary, but Teach-Back and an unassisted Transfer Check are also required for mastery.</p>
+<section class="panel ai-status">
+  <p><strong>AI Coach:</strong> {{ ai_status.label }}</p>
+  <p class="locked-note">{{ ai_status.detail }}</p>
+</section>
 {% include "components/progress_bar.html" %}
 <div class="subject-grid">
   {% for exercise in exercises %}

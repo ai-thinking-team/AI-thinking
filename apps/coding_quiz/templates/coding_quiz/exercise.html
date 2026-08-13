@@ -225,7 +225,8 @@
 
 <section class="panel ai-status">
   <h2>Support status</h2>
-  <p><strong>AI Coach:</strong> {% if ai_configured and ai_enabled %}Available{% else %}Not configured. The curated workflow remains available.{% endif %}</p>
+  <p><strong>AI Coach:</strong> {{ ai_status.label }}</p>
+  <p class="locked-note">{{ ai_status.detail }}</p>
   <p><strong>Code runner:</strong> {% if latest_evaluation.status == 'NOT_EXECUTED' %}Not configured. Code is stored but never executed in Django.{% else %}Results are accepted only through the isolated runner gateway.{% endif %}</p>
   {% if current_stage == 'transfer' %}<p><strong>Hints:</strong> Locked during Transfer Check.</p>{% endif %}
 </section>

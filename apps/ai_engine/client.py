@@ -27,6 +27,33 @@ def ai_provider_configured():
     return bool(getattr(settings, 'AI_PROVIDER_CLASS', ''))
 
 
+def ai_provider_status(*, assistance_enabled=True):
+    """Return a local, non-network status for the learner-facing AI Coach."""
+    if not ai_provider_configured():
+        return {
+            'mode': 'CURATED_FALLBACK',
+            'label': 'Curated fallback ready',
+            'detail': 'No external API is required. Curated questions, hints, and rubrics remain available.',
+            'configured': False,
+            'assistance_enabled': assistance_enabled,
+        }
+    if not assistance_enabled:
+        return {
+            'mode': 'CONFIGURED_LOCKED',
+            'label': 'Live AI configured; currently locked',
+            'detail': 'The workflow unlocks AI Coach assistance only after the Think-First gate.',
+            'configured': True,
+            'assistance_enabled': False,
+        }
+    return {
+        'mode': 'LIVE_PROVIDER',
+        'label': 'Live AI provider available',
+        'detail': 'Provider failures automatically fall back to curated responses.',
+        'configured': True,
+        'assistance_enabled': True,
+    }
+
+
 def generate_ai_response(*, system_prompt, user_prompt, response_schema=None, provider=None):
     """Call a replaceable provider and normalize failures at one boundary."""
     selected_provider = provider or get_ai_provider()

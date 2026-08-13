@@ -200,6 +200,9 @@ present. The Coding Diagnosis sends only privacy-minimized
 signals: the target concept, confidence, execution category, aggregate test counts, and boolean
 code-structure features. Raw learner source code and reasoning are not sent to the provider. Provider
 failure or invalid structured output falls back to the curated diagnostic question.
+The Coding page shows whether the session is using a live provider, a configured-but-workflow-locked
+provider, or the always-available curated fallback. This status is local configuration only and does
+not make a network health request.
 
 ---
 
