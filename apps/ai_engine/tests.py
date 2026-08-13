@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase, override_settings
 
 from .client import generate_ai_response
+from .health import probe_ai_provider
 from .exceptions import AIServiceUnavailable, InvalidAIResponse
 from .orchestrator import (
     orchestrate_diagnostic,
@@ -68,6 +69,17 @@ class StaticProvider:
 
     def generate(self, **kwargs):
         return self.payload
+
+
+class InvalidThenValidProvider:
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return {**VALID_TEACH_BACK, 'mastery': 'MASTERED'}
+        return VALID_TEACH_BACK
 
 
 class BrokenProvider:
@@ -295,6 +307,43 @@ class TeachBackOrchestratorTests(SimpleTestCase):
                     provider=provider,
                 )
                 self.assertEqual(result.source, expected_source)
+
+    def test_invalid_structured_teach_back_is_retried_once(self):
+        provider = InvalidThenValidProvider()
+
+        result = orchestrate_teach_back(
+            system_prompt='semantic rubric evaluation',
+            user_prompt='privacy-minimized answers',
+            curated_fallback=VALID_TEACH_BACK,
+            expected_fields=TEACH_BACK_FIELDS,
+            allowed_misconception_codes=('loop-value-misuse',),
+            provider=provider,
+        )
+
+        self.assertEqual(result.source, 'AI')
+        self.assertEqual(provider.calls, 2)
+
+
+class AIProviderHealthTests(SimpleTestCase):
+    @override_settings(AI_PROVIDER_CLASS='')
+    def test_unconfigured_provider_reports_fallback_without_network(self):
+        result = probe_ai_provider()
+
+        self.assertFalse(result['available'])
+        self.assertEqual(result['code'], 'NOT_CONFIGURED')
+
+    def test_structured_probe_reports_available(self):
+        result = probe_ai_provider(provider=StaticProvider({'status': 'ok'}))
+
+        self.assertTrue(result['available'])
+        self.assertEqual(result['code'], 'OK')
+
+    def test_provider_failure_returns_safe_diagnostics(self):
+        result = probe_ai_provider(provider=BrokenProvider())
+
+        self.assertFalse(result['available'])
+        self.assertEqual(result['code'], 'AIServiceUnavailable')
+        self.assertNotIn('key', result['message'].casefold())
 
 
 class GeminiProviderTests(SimpleTestCase):

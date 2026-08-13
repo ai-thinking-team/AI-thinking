@@ -87,24 +87,34 @@ def orchestrate_diagnostic(*, system_prompt, user_prompt, curated_fallback,
 
 def orchestrate_teach_back(*, system_prompt, user_prompt, curated_fallback,
                            expected_fields, allowed_misconception_codes, provider=None):
-    try:
-        raw_response = generate_ai_response(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            response_schema=TeachBackResponse.schema_contract(
+    failure_code = ''
+    schema = TeachBackResponse.schema_contract(
+        expected_fields=expected_fields,
+        allowed_misconception_codes=allowed_misconception_codes,
+    )
+    # Structured model output can occasionally violate its schema despite a valid
+    # semantic judgment. Retry one invalid response before using the deterministic
+    # curated fallback; service-unavailable errors fail over immediately.
+    for _attempt in range(2):
+        try:
+            raw_response = generate_ai_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_schema=schema,
+                provider=provider,
+            )
+            response = validate_teach_back_response(
+                raw_response,
                 expected_fields=expected_fields,
                 allowed_misconception_codes=allowed_misconception_codes,
-            ),
-            provider=provider,
-        )
-        response = validate_teach_back_response(
-            raw_response,
-            expected_fields=expected_fields,
-            allowed_misconception_codes=allowed_misconception_codes,
-        )
-        return OrchestratedTeachBack(response=response, source='AI')
-    except AIEngineError as exc:
-        failure_code = type(exc).__name__
+            )
+            return OrchestratedTeachBack(response=response, source='AI')
+        except InvalidAIResponse as exc:
+            failure_code = type(exc).__name__
+            continue
+        except AIEngineError as exc:
+            failure_code = type(exc).__name__
+            break
 
     safe_fallback = validate_teach_back_response(
         curated_fallback,

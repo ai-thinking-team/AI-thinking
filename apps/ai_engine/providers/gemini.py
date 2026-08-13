@@ -25,9 +25,10 @@ def _gemini_compatible_schema(schema):
 
 
 class GeminiProvider:
-    def __init__(self, *, api_key=None, model=None, client=None):
+    def __init__(self, *, api_key=None, model=None, timeout=None, client=None):
         self.api_key = api_key or os.environ.get('GEMINI_API_KEY', '')
         self.model = model or getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        self.timeout = timeout or getattr(settings, 'GEMINI_TIMEOUT_SECONDS', 20)
         self._client = client
 
     def _get_client(self):
@@ -39,7 +40,10 @@ class GeminiProvider:
             from google import genai
         except ImportError as exc:
             raise AIServiceUnavailable('The Google Gen AI SDK is not installed.') from exc
-        self._client = genai.Client(api_key=self.api_key)
+        self._client = genai.Client(
+            api_key=self.api_key,
+            http_options={'timeout': self.timeout * 1000},
+        )
         return self._client
 
     def generate(self, *, system_prompt, user_prompt, response_schema=None):
@@ -53,6 +57,7 @@ class GeminiProvider:
                 'response_json_schema': _gemini_compatible_schema(response_schema),
                 # Teach-Back evaluates five fields; 512 tokens can truncate otherwise-valid JSON.
                 'max_output_tokens': 2048,
+                'temperature': 0,
             },
         )
         if isinstance(getattr(response, 'parsed', None), dict):

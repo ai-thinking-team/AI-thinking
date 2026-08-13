@@ -28,6 +28,8 @@ wording, answer length, grammar, or keyword matches. Accept concise paraphrases 
 main idea. Judge every field independently and give specific, learner-friendly feedback only where
 revision is needed. Use the target concept and operation in the supplied rubric; do not assume the
 exercise is about loops. Report only a misconception code supplied in the rubric, or `none`. If a
+misconception is not explicitly supported by the learner's meaning, report `none`. Keep
+`misconception_code` as `none` when every field is understood. If a
 core idea needs revision, follow the
 server-selected Teach-Back Hint Ladder instruction and ask exactly one focused question about the
 most important gap. Each higher level must be easier and more concrete. Do not make a mastery judgment, choose

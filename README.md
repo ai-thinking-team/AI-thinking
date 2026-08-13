@@ -200,6 +200,14 @@ will then show `Live AI provider available`. Teach-Back sends the current exerci
 learner's answers to the selected provider; the server validates the structured response and retains
 control of progression. Without a key, it shows `Curated fallback ready` and remains usable.
 
+Verify the configured provider with a data-free structured request before a demo:
+
+```powershell
+venv\Scripts\python.exe manage.py check_ai_provider
+```
+
+The command reports only a safe status code and latency; it never prints the API key.
+
 Do not commit or paste either key into source code. When `AI_PROVIDER_CLASS` is omitted, Django
 selects DeepSeek when `DEEPSEEK_API_KEY` is present, otherwise Gemini when `GEMINI_API_KEY` is
 present. The Coding Diagnosis sends only privacy-minimized
