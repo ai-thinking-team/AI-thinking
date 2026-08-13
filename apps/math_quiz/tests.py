@@ -18,6 +18,7 @@ from .models import (
     SectionSession,
     Unit,
     UnitDiagnosticSession,
+    UnitMaterial,
 )
 from .state_machine import WorkflowState
 
@@ -674,6 +675,112 @@ class MathAddUnitViewTests(TestCase):
         self.assertFalse(unit.file)
 
 
+class MathUnitMaterialTests(TestCase):
+    """Adding reference material to an already-created Unit — see
+    models.UnitMaterial, services.add_unit_materials/_unit_material_files,
+    views.add_unit_material. Kept as its own 1-to-many table so Unit.file
+    (the single file captured at creation) keeps its original meaning and
+    existing data/behavior is untouched."""
+
+    def _upload(self, name, content=b'dummy content', content_type='application/pdf'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
+    def _url(self, unit):
+        return reverse('math_quiz:add_unit_material', args=[unit.id])
+
+    def test_can_add_a_single_material_to_an_existing_unit(self):
+        unit = Unit.objects.create(name='資料追加テスト単元1', is_demo=True)
+        response = self.client.post(self._url(unit), {'file': self._upload('note.pdf')})
+        self.assertRedirects(response, reverse('math_quiz:unit_detail', args=[unit.id]))
+        self.assertEqual(unit.materials.count(), 1)
+        self.assertTrue(unit.materials.get().file.name.endswith('.pdf'))
+
+    def test_can_add_multiple_materials_at_once(self):
+        unit = Unit.objects.create(name='資料追加テスト単元2', is_demo=True)
+        response = self.client.post(self._url(unit), {
+            'file': [self._upload('a.pdf'), self._upload('b.png', content_type='image/png')],
+        })
+        self.assertRedirects(response, reverse('math_quiz:unit_detail', args=[unit.id]))
+        self.assertEqual(unit.materials.count(), 2)
+        self.assertEqual(
+            set(unit.materials.values_list('content_type', flat=True)),
+            {'application/pdf', 'image/png'},
+        )
+
+    def test_existing_material_is_not_deleted_or_overwritten_by_a_later_upload(self):
+        unit = Unit.objects.create(name='資料追加テスト単元3', is_demo=True, file=self._upload('original.pdf'))
+        self.client.post(self._url(unit), {'file': self._upload('first-addition.pdf')})
+        self.client.post(self._url(unit), {'file': self._upload('second-addition.png', content_type='image/png')})
+
+        unit.refresh_from_db()
+        self.assertTrue(unit.file.name.endswith('.pdf'))  # untouched original
+        self.assertIn('original', unit.file.name)
+        self.assertEqual(unit.materials.count(), 2)  # both additions kept, neither replaced the other
+        names = set(unit.materials.values_list('file', flat=True))
+        self.assertTrue(any('first-addition' in n for n in names))
+        self.assertTrue(any('second-addition' in n for n in names))
+
+    def test_adding_material_does_not_call_the_ai(self):
+        unit = Unit.objects.create(name='資料追加AI呼び出しテスト単元', is_demo=False)
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        with patch('apps.math_quiz.services.generate_ai_response') as mock_response:
+            self.client.post(self._url(unit), {'file': self._upload('note.pdf')})
+        mock_response.assert_not_called()
+
+    def test_uploading_no_file_shows_an_error_and_adds_nothing(self):
+        unit = Unit.objects.create(name='資料追加空テスト単元', is_demo=True)
+        response = self.client.post(self._url(unit), {}, follow=True)
+        self.assertEqual(unit.materials.count(), 0)
+        self.assertContains(response, 'ファイルを選択してください')
+
+    def test_added_materials_are_included_when_sections_are_generated(self):
+        """The one AI call generate_sections makes must see both a file
+        passed in explicitly (the creation-time path) and anything already
+        saved as UnitMaterial — with no extra AI call for either."""
+        unit = Unit.objects.create(name='資料反映テスト単元', is_demo=False)
+        services.add_unit_materials(unit=unit, files=[self._upload('slides.pdf', content=b'slide bytes')])
+
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch('apps.math_quiz.services.generate_ai_response')
+        mock_response = response_patcher.start()
+        self.addCleanup(response_patcher.stop)
+        mock_response.return_value = json.dumps({'sections': [{'title': 'セクション1', 'content': '内容'}]})
+
+        services.generate_sections(unit, unit.name, [(b'creation time bytes', 'application/pdf')])
+
+        self.assertEqual(mock_response.call_count, 1)  # exactly the existing single call, nothing extra
+        _args, kwargs = mock_response.call_args
+        passed_files = kwargs['files']
+        self.assertIn((b'creation time bytes', 'application/pdf'), passed_files)
+        self.assertIn((b'slide bytes', 'application/pdf'), passed_files)
+
+    def test_unit_without_any_material_still_generates_sections_normally(self):
+        unit = Unit.objects.create(name='資料なしテスト単元', is_demo=True)
+        services.generate_sections(unit, unit.name)
+        self.assertTrue(unit.sections.exists())
+
+    def test_unit_detail_page_lists_both_existing_and_added_materials(self):
+        unit = Unit.objects.create(name='資料一覧表示テスト単元', is_demo=True, file=self._upload('original.pdf'))
+        services.generate_sections(unit, unit.name)
+        services.add_unit_materials(unit=unit, files=[self._upload('added.pdf')])
+
+        detail_url = reverse('math_quiz:unit_detail', args=[unit.id])
+        self.client.get(detail_url)  # first visit creates the course diagnostic session
+        key = self.client.session.session_key
+        diagnostic = UnitDiagnosticSession.objects.get(unit=unit, browser_session_key=key)
+        diagnostic.completed_at = timezone.now()
+        diagnostic.save(update_fields=('completed_at',))
+
+        response = self.client.get(detail_url)
+        self.assertContains(response, 'original')
+        self.assertContains(response, 'added')
+
+
 class MathAIGenerationTests(TestCase):
     """AI generation is only reachable for non-demo units, and only while
     a provider is configured — both are mocked here so nothing ever hits
@@ -1004,6 +1111,363 @@ class MathProblemDedupTests(TestCase):
         )
         self.assertTrue(is_correct)
         self.assertNotIn('採点に失敗しました', explanation)
+
+
+class MathCrossSectionDedupTests(TestCase):
+    """Cross-section duplicate avoidance within a single course (unit): the
+    same problem text must never be shown twice across different sections'
+    first attempt, diagnostic quiz, and Transfer Check — see
+    services._used_problems_in_unit, which every problem-generation call
+    site (ensure_first_problem / _add_diagnostic_question /
+    ensure_transfer_problem) now excludes against, instead of only
+    checking within their own section/session as before."""
+
+    def test_used_problems_in_unit_collects_first_transfer_and_diagnostic_problems(self):
+        unit, sections = _create_unit_with_sections('横断重複収集テスト単元', 2)
+        section_a, _section_b = sections
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='collect-browser',
+        )
+        first_a = services.ensure_first_problem(session=session_a)
+        session_a.first_problem = first_a
+        transfer_a = services.ensure_transfer_problem(session=session_a)
+        diagnostic = services.start_unit_diagnostic(unit=unit, browser_session_key='collect-browser')
+        diagnostic_problem = diagnostic.answers.get().problem
+
+        used = services._used_problems_in_unit(unit=unit, browser_session_key='collect-browser')
+        self.assertIn(first_a, used)
+        self.assertIn(transfer_a, used)
+        self.assertIn(diagnostic_problem, used)
+
+    def test_ensure_first_problem_excludes_problems_already_used_by_another_section(self):
+        unit, sections = _create_unit_with_sections('セクション間重複防止テスト単元', 2)
+        section_a, section_b = sections
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='exclude-browser',
+        )
+        problem_a = services.ensure_first_problem(session=session_a)
+
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='exclude-browser',
+        )
+        with patch(
+            'apps.math_quiz.services._generate_problem', wraps=services._generate_problem,
+        ) as spy:
+            services.ensure_first_problem(session=session_b)
+        _args, kwargs = spy.call_args
+        self.assertIn(problem_a, kwargs['exclude'])
+
+    def test_ensure_transfer_problem_excludes_problems_used_by_another_section(self):
+        unit, sections = _create_unit_with_sections('発展問題重複防止テスト単元', 2)
+        section_a, section_b = sections
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='transfer-exclude-browser',
+        )
+        problem_a = services.ensure_first_problem(session=session_a)
+
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='transfer-exclude-browser',
+        )
+        services.ensure_first_problem(session=session_b)
+        with patch(
+            'apps.math_quiz.services._generate_problem', wraps=services._generate_problem,
+        ) as spy:
+            services.ensure_transfer_problem(session=session_b)
+        _args, kwargs = spy.call_args
+        self.assertIn(problem_a, kwargs['exclude'])
+
+    def test_diagnostic_quiz_excludes_problems_already_used_by_a_section_session(self):
+        unit, sections = _create_unit_with_sections('診断横断重複防止テスト単元', 2)
+        section_a, _section_b = sections
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='diag-exclude-browser',
+        )
+        problem_a = services.ensure_first_problem(session=session_a)
+
+        with patch(
+            'apps.math_quiz.services._generate_problem', wraps=services._generate_problem,
+        ) as spy:
+            services.start_unit_diagnostic(unit=unit, browser_session_key='diag-exclude-browser')
+        _args, kwargs = spy.call_args
+        self.assertIn(problem_a, kwargs['exclude'])
+
+    def test_cross_section_dedup_excludes_fallback_problems_from_ai_mode_generation(self):
+        """AI-generated problems are checked against the same exclude set
+        as the deterministic fallback — a subject-catalog problem already
+        used by another section must be rejected even when AI (mis)returns
+        it verbatim, and the eventual fallback pick must also honor the
+        same exclude set."""
+        unit = Unit.objects.create(name='群論', is_demo=False)
+        section_a = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        section_b = Section.objects.create(unit=unit, title='セクションB', content='内容')
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='cross-dedup-browser',
+        )
+        problem_a = services.ensure_first_problem(session=session_a)
+
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch('apps.math_quiz.services.generate_ai_response')
+        mock_response = response_patcher.start()
+        self.addCleanup(response_patcher.stop)
+        mock_response.return_value = json.dumps({'problem': problem_a})
+
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='cross-dedup-browser',
+        )
+        build_patcher = patch(
+            'apps.math_quiz.services.demo_content.build_unique_problem',
+            wraps=demo_content.build_unique_problem,
+        )
+        mock_build = build_patcher.start()
+        self.addCleanup(build_patcher.stop)
+
+        services.ensure_first_problem(session=session_b)
+        self.assertEqual(mock_response.call_count, 2)  # AI retried once, both matched exclude
+        _args, kwargs = mock_build.call_args
+        self.assertIn(problem_a, kwargs['exclude'])
+
+    def test_no_extra_ai_call_is_made_purely_for_duplicate_checking(self):
+        unit, sections = _create_unit_with_sections('AI呼び出し回数テスト単元', 2, is_demo=True)
+        section_a, section_b = sections
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='no-extra-ai-browser',
+        )
+        services.ensure_first_problem(session=session_a)
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='no-extra-ai-browser',
+        )
+        with patch('apps.math_quiz.services.generate_ai_response') as mock_response:
+            services.ensure_first_problem(session=session_b)
+        mock_response.assert_not_called()  # is_demo unit: dedup is pure code, no AI involved at all
+
+    def test_ai_problem_prompt_includes_the_existing_problem_list_without_extra_calls(self):
+        """The exclude set is also handed to the AI inside its one existing
+        call (not a second call) — a proactive nudge on top of the
+        deterministic post-hoc exclude check, still zero extra requests."""
+        unit = Unit.objects.create(name='群論AIプロンプトテスト単元', is_demo=False)
+        section_a = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        section_b = Section.objects.create(unit=unit, title='セクションB', content='内容')
+        session_a, _ = services.get_or_create_section_session(
+            section=section_a, browser_session_key='prompt-browser',
+        )
+        problem_a = services.ensure_first_problem(session=session_a)
+
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch('apps.math_quiz.services.generate_ai_response')
+        mock_response = response_patcher.start()
+        self.addCleanup(response_patcher.stop)
+        mock_response.return_value = json.dumps({'problem': '新しい問題文'})
+
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='prompt-browser',
+        )
+        services.ensure_first_problem(session=session_b)
+        self.assertEqual(mock_response.call_count, 1)  # accepted first try, no retry needed
+        _args, kwargs = mock_response.call_args
+        self.assertIn(problem_a, kwargs['user_prompt'])
+        self.assertIn('既出問題リスト', kwargs['user_prompt'])
+
+
+class MathSameSectionResetDedupTests(TestCase):
+    """Re-selecting a completed section always starts a brand-new
+    SectionSession (see views._browser_section_session /
+    services.restart_for_review), and SectionSession.delete() cascades to
+    delete every Attempt with it — so the previous round's exact problem
+    text is gone by the time a new one is generated, and the unit-wide
+    exclude set (_used_problems_in_unit) can no longer see it. Without
+    services._next_problem_salt, this made a section regenerate the exact
+    same problem on every single reset (build_unique_problem always
+    retrying salt=0 first with nothing to exclude it)."""
+
+    def _complete_confidently(self, section, *, browser_session_key):
+        """Fastest path to a finished (Mastered) round: confident+correct
+        first attempt skips straight to Transfer, and a confident+correct
+        Transfer Check reaches Mastered — see
+        state_machine.ALLOWED_TRANSITIONS."""
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key=browser_session_key,
+        )
+        services.ensure_first_problem(session=session)
+        answer = _correct_answer(section, kind='first')
+        services.submit_first_attempt(
+            session=session, answer=answer, reasoning='移項して計算しました', confidence=5,
+        )
+        services.ensure_transfer_problem(session=session)
+        transfer_answer = _correct_answer(section, kind='transfer')
+        services.submit_transfer_check(
+            session=session, answer=transfer_answer, reasoning='計算しました', confidence=5,
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.current_state, WorkflowState.MASTERED)
+        return session
+
+    def test_same_section_shows_a_different_problem_after_a_reset(self):
+        section = _create_section(name='リセット後重複防止テスト単元')
+        session = self._complete_confidently(section, browser_session_key='reset-dedup-browser')
+        first_round_problem = session.first_problem
+
+        restarted = services.restart_for_review(section=section, browser_session_key='reset-dedup-browser')
+        second_round_problem = services.ensure_first_problem(session=restarted)
+        self.assertNotEqual(second_round_problem, first_round_problem)
+
+    def test_same_section_catalog_fallback_never_repeats_the_immediately_preceding_first_problem(self):
+        """restart_for_review now captures the outgoing round's own
+        first_problem (and transfer_problem, if any) before it's deleted
+        and passes it forward as an explicit exclude — a hard guarantee
+        for the immediately-next round, not just the salt rotation's
+        probabilistic variety. Regression coverage specifically for the
+        2-entry fallback catalog case, where two different salts can
+        otherwise land on the same one of only two possible texts."""
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='catalog-immediate-browser',
+        )
+        first_round_problem = services.ensure_first_problem(session=session)
+        answer = _correct_answer(section, kind='first')
+        # Confident+correct skips straight to Transfer — reset right after,
+        # so only first_problem (not transfer_problem) was actually used
+        # this round, leaving the catalog's other entry available.
+        services.submit_first_attempt(
+            session=session, answer=answer, reasoning='わかりました', confidence=5,
+        )
+
+        restarted = services.restart_for_review(section=section, browser_session_key='catalog-immediate-browser')
+        self.assertNotEqual(restarted.first_problem, first_round_problem)
+
+    def test_ensure_first_problem_passes_a_nonzero_start_salt_after_a_completed_round(self):
+        """Verifies the rotation mechanism directly (rather than the
+        probabilistic final text) — this stays deterministic even for a
+        subject with only a 2-entry fallback catalog, where the final
+        chosen text isn't guaranteed to differ every single time.
+
+        restart_for_review now generates the new round's first_problem
+        eagerly (see its docstring), so that's where the call happens —
+        by the time a caller's own ensure_first_problem runs afterward,
+        first_problem is already set and it's a no-op."""
+        section = _create_section(name='スタート塩テスト単元')
+        self._complete_confidently(section, browser_session_key='start-salt-browser')
+
+        with patch(
+            'apps.math_quiz.services._generate_problem', wraps=services._generate_problem,
+        ) as spy:
+            services.restart_for_review(section=section, browser_session_key='start-salt-browser')
+        _args, kwargs = spy.call_args
+        self.assertNotEqual(kwargs['start_salt'], 0)
+
+    def test_grading_still_works_correctly_for_a_rotated_salt_after_reset(self):
+        """Critical safety check: whatever salt gets rotated to after a
+        reset must stay within the range services._resolve_fallback /
+        demo_content.build_hint search (0..MAX_PROBLEM_DEDUP_ATTEMPTS-1) —
+        otherwise a real fallback problem would look like a genuine AI
+        original and grading would break (see build_unique_problem's
+        `start_salt %= MAX_PROBLEM_DEDUP_ATTEMPTS`)."""
+        section = _create_section(name='ローテーション後採点テスト単元')
+        self._complete_confidently(section, browser_session_key='rotate-grade-browser')
+
+        restarted = services.restart_for_review(section=section, browser_session_key='rotate-grade-browser')
+        new_problem = services.ensure_first_problem(session=restarted)
+        expected_value = next(
+            value
+            for salt in range(demo_content.MAX_PROBLEM_DEDUP_ATTEMPTS)
+            for problem, value in [demo_content.build_problem(section, kind='first', salt=salt)]
+            if problem == new_problem
+        )
+        is_correct, explanation, _quality = services._judge(
+            section=section, problem=new_problem, answer=str(expected_value), kind='first',
+        )
+        self.assertTrue(is_correct)
+        self.assertNotIn('採点に失敗しました', explanation)
+
+    def test_resetting_one_section_does_not_affect_another_sections_problem(self):
+        unit, sections = _create_unit_with_sections('リセット影響範囲テスト単元', 2)
+        section_a, section_b = sections
+        session_b, _ = services.get_or_create_section_session(
+            section=section_b, browser_session_key='scope-browser',
+        )
+        problem_b_before = services.ensure_first_problem(session=session_b)
+
+        self._complete_confidently(section_a, browser_session_key='scope-browser')
+        services.restart_for_review(section=section_a, browser_session_key='scope-browser')
+
+        session_b.refresh_from_db()
+        self.assertEqual(session_b.first_problem, problem_b_before)
+
+    def test_no_extra_ai_call_when_regenerating_after_a_reset(self):
+        section = _create_section(name='リセット後AI呼び出しテスト単元')
+        self._complete_confidently(section, browser_session_key='reset-no-ai-browser')
+        # restart_for_review now generates the new round's first_problem
+        # eagerly (see its docstring), so that's what must stay AI-free
+        # for an is_demo unit — wrap it rather than the now-redundant
+        # follow-up ensure_first_problem call.
+        with patch('apps.math_quiz.services.generate_ai_response') as mock_response:
+            services.restart_for_review(section=section, browser_session_key='reset-no-ai-browser')
+        mock_response.assert_not_called()
+
+    def test_fallback_problem_after_reset_still_matches_the_subject(self):
+        unit = Unit.objects.create(name='フーリエ変換', is_demo=True)
+        section = Section.objects.create(unit=unit, title='基本の計算', content='内容')
+        self._complete_confidently(section, browser_session_key='reset-subject-browser')
+
+        restarted = services.restart_for_review(section=section, browser_session_key='reset-subject-browser')
+        new_problem = services.ensure_first_problem(session=restarted)
+        # Membership in the subject's own catalog is the precise check;
+        # looks_like_subject is a much cruder AI-sanity heuristic that
+        # isn't guaranteed to recognize every one of a catalog's own
+        # problems (e.g. one entry's text doesn't literally contain any of
+        # its catalog's keyword list) — not what's being tested here.
+        catalog_problems = {entry['problem'] for entry in demo_content.AI_FALLBACK_PROBLEMS['フーリエ変換']['problems']}
+        self.assertIn(new_problem, catalog_problems)
+
+    def test_ai_mode_falls_back_with_a_rotated_salt_when_ai_fails_after_reset(self):
+        """A genuine AI-original problem can't be checked against a
+        deleted prior round by text at all (there's nothing deterministic
+        to compare), so the meaningful guarantee in AI mode is: when the
+        AI call itself fails and generation drops to the deterministic
+        fallback, that fallback must still be rotated — not always retry
+        salt=0 and risk reproducing the exact fallback problem shown
+        before the reset."""
+        unit = Unit.objects.create(name='群論', is_demo=False)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='ai-fail-rotate-browser',
+        )
+
+        not_configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=False)
+        not_configured_patcher.start()
+        services.ensure_first_problem(session=session)
+        not_configured_patcher.stop()
+        services._update_concept_mastery(
+            section=section, browser_session_key='ai-fail-rotate-browser', is_correct=True, confidence=5,
+        )
+        services.reset_section_session(section=section, browser_session_key='ai-fail-rotate-browser')
+        restarted, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='ai-fail-rotate-browser',
+        )
+
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch(
+            'apps.math_quiz.services.generate_ai_response', side_effect=Exception('AI down'),
+        )
+        self.addCleanup(response_patcher.stop)
+        response_patcher.start()
+
+        build_patcher = patch(
+            'apps.math_quiz.services.demo_content.build_unique_problem',
+            wraps=demo_content.build_unique_problem,
+        )
+        mock_build = build_patcher.start()
+        self.addCleanup(build_patcher.stop)
+
+        services.ensure_first_problem(session=restarted)
+        _args, kwargs = mock_build.call_args
+        self.assertNotEqual(kwargs['start_salt'], 0)
 
 
 class MathConceptMasteryTests(TestCase):
@@ -1437,6 +1901,139 @@ class MathAdaptiveTeachBackAIModeTests(TestCase):
         )
         self.mock_response.assert_called_once()
         self.assertEqual(teach_back.evaluation, 'CLEAR_UNDERSTANDING')
+
+
+class MathTeachBackSubjectMatchTests(TestCase):
+    """Teach-Back must always be grounded in the actual problem shown for
+    the current section, never a generic or wrong-subject question —
+    regression coverage for a reported bug where a differential-equations
+    section showed a linear-equation ("6x - 1 = 47 の両辺から...")
+    Teach-Back question. See demo_content.teach_back_question /
+    evaluate_teach_back_answer and services._generate_teach_back_question."""
+
+    def _reach_targeted_teach_back(self, section, *, browser_session_key):
+        """Confident-but-wrong first attempt -> high misconception
+        probability -> after a correct revision, decide_teach_back_level
+        picks TARGETED (see mastery.decide_teach_back_level), which is the
+        only Teach-Back level that calls _generate_teach_back_question."""
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key=browser_session_key,
+        )
+        problem = services.ensure_first_problem(session=session)
+        wrong_answer = str(int(_correct_answer(section, kind='first')) + 1000)
+        services.submit_first_attempt(
+            session=session, answer=wrong_answer, reasoning='絶対これだと思います', confidence=5,
+        )
+        services.submit_diagnosis(session=session, answer='公式を間違えたと思います。')
+        services.ensure_current_hint(session=session)
+        correct_answer = _correct_answer(section, kind='first')
+        services.submit_revision(
+            session=session, answer=correct_answer, reasoning='考え直しました', confidence=4,
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.current_state, WorkflowState.TEACH_BACK)
+        self.assertEqual(session.teach_back_level, 'TARGETED')
+        return session, problem
+
+    def test_teach_back_question_for_differential_equations_matches_the_actual_problem(self):
+        unit = Unit.objects.create(name='微分方程式', is_demo=True)
+        section = Section.objects.create(unit=unit, title='二階線形微分方程式', content='内容')
+        session, problem = self._reach_targeted_teach_back(section, browser_session_key='diffeq-browser')
+
+        current = services.current_teach_back(session=session)
+        self.assertIn(problem, current.question)
+        self.assertNotIn('移項', current.question)
+        self.assertNotIn('両辺', current.question)
+        self.assertNotIn('6x', current.question)
+
+    def test_teach_back_question_for_fourier_transform_matches_the_actual_problem(self):
+        unit = Unit.objects.create(name='フーリエ変換', is_demo=True)
+        section = Section.objects.create(unit=unit, title='基本の計算', content='内容')
+        session, problem = self._reach_targeted_teach_back(section, browser_session_key='fourier-browser')
+
+        current = services.current_teach_back(session=session)
+        self.assertIn(problem, current.question)
+        self.assertNotIn('移項', current.question)
+        self.assertNotIn('両辺', current.question)
+
+    def test_teach_back_question_for_plain_linear_equation_still_matches_the_actual_problem(self):
+        """Non-catalog subjects (e.g. the existing demo linear-equation
+        content) must also quote the actual problem shown, not a
+        re-derived equation that could disagree with it once duplicate-
+        avoidance (build_unique_problem) is in play."""
+        section = _create_section(name='一次方程式Teach-Back照合テスト単元')
+        session, problem = self._reach_targeted_teach_back(section, browser_session_key='linear-browser')
+
+        current = services.current_teach_back(session=session)
+        self.assertIn(problem, current.question)
+
+    def test_evaluate_teach_back_answer_uses_catalog_keywords_for_a_matching_subject(self):
+        unit = Unit.objects.create(name='フーリエ変換', is_demo=True)
+        section = Section.objects.create(unit=unit, title='基本の計算', content='内容')
+        evaluation, _feedback, _follow_up = demo_content.evaluate_teach_back_answer(
+            section, '周波数成分をもとに変換の意味を考えて計算しました',
+        )
+        self.assertEqual(evaluation, 'CLEAR_UNDERSTANDING')
+
+    def test_evaluate_teach_back_answer_partial_feedback_does_not_mention_unrelated_subject_terms(self):
+        unit = Unit.objects.create(name='フーリエ変換', is_demo=True)
+        section = Section.objects.create(unit=unit, title='基本の計算', content='内容')
+        _evaluation, feedback, _follow_up = demo_content.evaluate_teach_back_answer(
+            section, 'なんとなく計算しただけです',
+        )
+        self.assertNotIn('移項', feedback)
+        self.assertNotIn('両辺', feedback)
+
+    def test_targeted_teach_back_question_uses_exactly_one_ai_call_with_full_context(self):
+        """No extra AI call is added purely to keep Teach-Back on-subject —
+        the existing single Targeted-question call is just given richer
+        context (subject, section, actual problem) in its prompt."""
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch(
+            'apps.math_quiz.services.generate_ai_response', side_effect=_fake_generate_ai_response,
+        )
+        mock_response = response_patcher.start()
+        self.addCleanup(response_patcher.stop)
+
+        unit = Unit.objects.create(name='微分方程式AIテスト単元', is_demo=False)
+        section = Section.objects.create(unit=unit, title='二階線形微分方程式', content='内容')
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='diffeq-ai-browser',
+        )
+        services.ensure_first_problem(session=session)
+        services.submit_first_attempt(
+            session=session, answer='WRONG_ANSWER', reasoning='絶対これだと思います', confidence=2,
+        )
+        services.submit_diagnosis(session=session, answer='わかりません')
+        # Escalate to hint level 4 via three wrong revisions — this reaches
+        # TARGETED through decide_teach_back_level's hint_level_used >= 4
+        # branch, which (unlike the misconception-probability branch)
+        # doesn't depend on optional fields the mocked AI response omits.
+        for _ in range(3):
+            services.ensure_current_hint(session=session)
+            services.submit_revision(
+                session=session, answer='WRONG_ANSWER', reasoning='まだ違う考え方です', confidence=2,
+            )
+        hint = services.ensure_current_hint(session=session)
+        self.assertEqual(hint.level, 4)
+        mock_response.reset_mock()
+        services.submit_revision(
+            session=session, answer='CORRECT_ANSWER', reasoning='考え直しました', confidence=4,
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.teach_back_level, 'TARGETED')
+
+        teach_back_calls = [
+            call for call in mock_response.call_args_list
+            if 'まだ誤解が残っていないか' in call.kwargs['system_prompt']
+        ]
+        self.assertEqual(len(teach_back_calls), 1)
+        user_prompt = teach_back_calls[0].kwargs['user_prompt']
+        self.assertIn('微分方程式AIテスト単元', user_prompt)
+        self.assertIn('二階線形微分方程式', user_prompt)
+        self.assertIn(session.first_problem, user_prompt)
 
 
 class MathSectionStatusTests(TestCase):

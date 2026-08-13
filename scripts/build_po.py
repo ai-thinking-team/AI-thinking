@@ -40,6 +40,10 @@ TRANSLATIONS = {
     '削除': 'Delete',
     '参考ファイルをダウンロード': 'Download reference file',
     '参考ファイル（任意・複数可）': 'Reference files (optional, multiple allowed)',
+    '資料': 'Materials',
+    '資料を追加': 'Add material',
+    '追加': 'Add',
+    '資料はまだありません。': 'No materials yet.',
     '各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。':
         'Sections marked "Needs Review" from each unit are collected here. '
         'Retrying a section starts it over with a new question.',
@@ -109,6 +113,8 @@ TRANSLATIONS = {
     'サンプル科目は削除できません。': 'The sample subject cannot be deleted.',
     '不明な操作です。': 'Unknown action.',
     '不正なリクエストです。': 'Invalid request.',
+    'ファイルを選択してください。': 'Please select a file.',
+    '資料を追加しました。': 'Material added.',
     '修正': 'Revision',
     '完了': 'Done',
     '新しい問題から、この学習セッションを始めます。': 'Starting this learning session over with a new question.',

@@ -4,7 +4,8 @@
       "Bash(python manage.py test apps.math_quiz -v 1)",
       "Bash(python3 -)",
       "Bash(cd /home/bokkurin/AI-thinking *)",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('apps/math_quiz/ai_prompts.py'\\).read\\(\\)\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('apps/math_quiz/ai_prompts.py'\\).read\\(\\)\\)\")",
+      "Bash(git stash *)"
     ],
     "additionalDirectories": [
       "/home/bokkurin/AI-thinking/media/units"

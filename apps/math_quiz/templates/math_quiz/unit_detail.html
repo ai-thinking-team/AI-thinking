@@ -18,6 +18,16 @@
   .progress-summary.is-complete .progress-fill { background: linear-gradient(90deg, var(--success), #4fd3a0); }
   .progress-summary strong { font-size: .85rem; white-space: nowrap; }
 
+  .materials { margin: 0 clamp(1.25rem, 4vw, 3rem) 1.6rem; padding: 1.2rem 1.4rem; max-width: 720px; }
+  .materials h2 { font-size: .92rem; margin: 0 0 .7rem; }
+  .material-list { list-style: none; padding: 0; margin: 0 0 .9rem; display: flex; flex-direction: column; gap: .4rem; }
+  .material-list li a { font-size: .85rem; color: var(--primary); text-decoration: none; font-weight: 600; }
+  .material-list li a:hover { text-decoration: underline; }
+  .materials-empty { color: var(--muted); font-size: .85rem; margin: 0 0 .9rem; }
+  .material-add-row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+  .material-add-row input[type="file"] { flex: 1; min-width: 200px; font-size: .82rem; }
+  .material-add-label { display: block; font-weight: 700; font-size: .84rem; margin-bottom: .5rem; }
+
   .sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 0 clamp(1.25rem, 4vw, 3rem) 4rem; }
   .section-card { display: flex; flex-direction: column; gap: .7rem; padding: 1.2rem; text-decoration: none; color: inherit; transition: transform .15s ease, box-shadow .15s ease; }
   .section-card:hover { transform: translateY(-2px); box-shadow: 0 1px 2px rgba(33,31,61,.06), 0 16px 30px -16px rgba(33,31,61,.28); }
@@ -49,6 +59,35 @@
         {% endif %}
       </strong>
     </div>
+  </section>
+
+  <div style="margin: 0 clamp(1.25rem, 4vw, 3rem);">
+    {% for message in messages %}
+      {% if forloop.last %}<p class="status-banner {{ message.tags }}">{{ message }}</p>{% endif %}
+    {% endfor %}
+  </div>
+
+  <section class="materials card">
+    <h2>{% trans "資料" %}</h2>
+    {% if unit.file or unit.materials.all %}
+    <ul class="material-list">
+      {% if unit.file %}<li><a href="{{ unit.file.url }}" target="_blank" rel="noopener">📄 {{ unit.file.name|cut:"units/" }}</a></li>{% endif %}
+      {% for material in unit.materials.all %}
+      <li><a href="{{ material.file.url }}" target="_blank" rel="noopener">📄 {{ material.file.name|cut:"units/materials/" }}</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="materials-empty">{% trans "資料はまだありません。" %}</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'math_quiz:add_unit_material' unit.id %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label class="material-add-label" for="materialFileInput">＋ {% trans "資料を追加" %}</label>
+      <div class="material-add-row">
+        <input type="file" id="materialFileInput" name="file" multiple accept="application/pdf,image/*">
+        <button type="submit" class="btn btn-ghost">{% trans "追加" %}</button>
+      </div>
+    </form>
   </section>
 
   <div class="sections">

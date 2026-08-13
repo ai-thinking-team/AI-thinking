@@ -90,6 +90,18 @@ msgstr "Download reference file"
 msgid "参考ファイル（任意・複数可）"
 msgstr "Reference files (optional, multiple allowed)"
 
+msgid "資料"
+msgstr "Materials"
+
+msgid "資料を追加"
+msgstr "Add material"
+
+msgid "追加"
+msgstr "Add"
+
+msgid "資料はまだありません。"
+msgstr "No materials yet."
+
 msgid "各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。"
 msgstr "Sections marked \"Needs Review\" from each unit are collected here. Retrying a section starts it over with a new question."
 
@@ -248,6 +260,12 @@ msgstr "Unknown action."
 
 msgid "不正なリクエストです。"
 msgstr "Invalid request."
+
+msgid "ファイルを選択してください。"
+msgstr "Please select a file."
+
+msgid "資料を追加しました。"
+msgstr "Material added."
 
 msgid "修正"
 msgstr "Revision"

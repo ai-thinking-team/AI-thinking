@@ -1235,17 +1235,33 @@ def build_problem(section, *, kind, salt=0):
 MAX_PROBLEM_DEDUP_ATTEMPTS = 4
 
 
-def build_unique_problem(section, *, kind, exclude=()):
+def build_unique_problem(section, *, kind, exclude=(), start_salt=0):
     """Like build_problem, but tries a few deterministic variants (salt=0,
     1, 2, ...) to avoid exactly repeating a problem text already used
     elsewhere in this session (`exclude`). If every variant still collides
     — a small fixed catalog (AI_FALLBACK_PROBLEMS has 2 entries per
     subject) can genuinely run out — the last variant tried is returned
     anyway rather than looping forever; an occasional repeat once the pool
-    is exhausted is an honest limit, not a bug."""
+    is exhausted is an honest limit, not a bug.
+
+    `start_salt` rotates which variant is tried first (still cycling
+    through the same salt=0..MAX_PROBLEM_DEDUP_ATTEMPTS-1 space, just in a
+    different order) — used when regenerating a problem for a section
+    whose previous round's problem text is no longer available to exclude
+    against (see services.reset_section_session's cascade delete +
+    services._next_problem_salt), so repeated resets of the same section
+    don't keep landing on the exact same salt=0 problem. Kept within the
+    original salt range (rather than growing unbounded) because
+    services._resolve_fallback / build_hint only ever search salt=0..
+    MAX_PROBLEM_DEDUP_ATTEMPTS-1 to identify which variant is active — a
+    salt outside that range would look like a genuine AI-original problem
+    and break grading. Defaults to 0, which reproduces the original
+    exclude-only search exactly."""
     exclude = set(exclude)
     result = None
-    for salt in range(MAX_PROBLEM_DEDUP_ATTEMPTS):
+    start_salt %= MAX_PROBLEM_DEDUP_ATTEMPTS
+    for offset in range(MAX_PROBLEM_DEDUP_ATTEMPTS):
+        salt = (start_salt + offset) % MAX_PROBLEM_DEDUP_ATTEMPTS
         problem, value = build_problem(section, kind=kind, salt=salt)
         if problem not in exclude:
             return problem, value
@@ -1397,25 +1413,47 @@ TEACH_BACK_ANSWER_MIN_LENGTH = 10
 TEACH_BACK_ANSWER_CONCEPT_TERMS = ('移項', '両辺', '符号', '方程式', '等式')
 
 
-def teach_back_question(section, *, kind='first', misconception=''):
+def teach_back_question(section, *, problem, kind='first', misconception=''):
     """A concrete, concept-core follow-up question for Level 2 (Targeted)
-    Teach-Back, grounded in the actual equation this learner just solved —
-    not a request to restate the answer (see
-    ai_prompts.TEACH_BACK_TARGETED_QUESTION_SYSTEM_PROMPT)."""
-    a, b, c, _x = _equation_for(section, kind)
-    sign = '+' if b >= 0 else '-'
+    Teach-Back, grounded in `problem` — the exact problem text actually
+    shown to the learner (see Attempt.problem) — not a request to restate
+    the answer (see ai_prompts.TEACH_BACK_TARGETED_QUESTION_SYSTEM_PROMPT).
+
+    `problem` is passed in rather than re-derived from section/kind:
+    duplicate-avoidance (build_unique_problem) may have picked a
+    different deterministic variant than salt=0, and — more importantly —
+    a subject-matched fallback problem (see AI_FALLBACK_PROBLEMS) needs
+    this same subject-neutral phrasing rather than the linear-equation-
+    specific "移項"/両辺 language below, which wouldn't make sense for e.g.
+    a differential-equations or Fourier-transform problem."""
+    if _ai_fallback_entry(section, kind=kind) is not None:
+        return (
+            f'「{problem}」を解くために使った公式や考え方を、あなたの言葉で説明してください。'
+            'なぜその方法が使えるのですか？'
+        )
     if '符号' in misconception:
         return (
-            f'{a}x {sign} {abs(b)} = {c} を解くとき、{abs(b)}を移項すると符号が変わるのは'
-            'なぜですか？あなたの言葉で説明してください。'
+            f'「{problem}」を解くとき、項を移項すると符号が変わるのはなぜですか？'
+            'あなたの言葉で説明してください。'
         )
     return (
-        f'{a}x {sign} {abs(b)} = {c} の両辺から同じ数をひいても、方程式が成り立ったままなのは'
-        'なぜですか？あなたの言葉で説明してください。'
+        f'「{problem}」の両辺から同じ数をひいても、方程式が成り立ったままなのはなぜですか？'
+        'あなたの言葉で説明してください。'
     )
 
 
-def evaluate_teach_back_answer(answer):
+def _teach_back_concept_terms(section):
+    """Subject-specific vocabulary used as a light proxy for "did the
+    learner's explanation touch on the actual concept" — reuses the same
+    catalog as looks_like_subject/diagnosis_question instead of always
+    falling back to the linear-equation-specific default, which would
+    unfairly penalize a correct, on-topic explanation for e.g. a
+    differential-equations or Fourier-transform course."""
+    catalog = AI_FALLBACK_PROBLEMS.get(section.unit.name.strip())
+    return catalog['keywords'] if catalog else TEACH_BACK_ANSWER_CONCEPT_TERMS
+
+
+def evaluate_teach_back_answer(section, answer):
     """Non-AI fallback for judging a single short Teach-Back answer — a
     length + concept-language proxy, not real language understanding (same
     limitation as before, now scoped to one short answer instead of five
@@ -1428,10 +1466,12 @@ def evaluate_teach_back_answer(answer):
             'もう少し具体的に、自分の言葉で説明してみましょう。',
             'この問題で、なぜその計算をしたのか、もう一度説明してみてください。',
         )
-    if not any(term in text for term in TEACH_BACK_ANSWER_CONCEPT_TERMS):
+    concept_terms = _teach_back_concept_terms(section)
+    if not any(term in text for term in concept_terms):
+        terms_hint = '・'.join(concept_terms[:3])
         return (
             'PARTIAL_UNDERSTANDING',
-            '関連する考え方（移項・両辺・符号など）に触れてみましょう。',
+            f'関連する考え方（{terms_hint}など）に触れてみましょう。',
             'この問題を解くときに使った考え方を、もう一言説明してみてください。',
         )
     return 'CLEAR_UNDERSTANDING', '自分の言葉でしっかり説明できています。', ''

@@ -224,6 +224,19 @@ def add_unit(request):
     return redirect('math_quiz:home')
 
 
+def add_unit_material(request, unit_id):
+    unit = get_object_or_404(Unit, id=unit_id)
+    if request.method != 'POST':
+        return HttpResponseBadRequest(_('不正なリクエストです。'))
+    uploaded_files = request.FILES.getlist('file')
+    if not uploaded_files:
+        messages.error(request, _('ファイルを選択してください。'))
+        return redirect('math_quiz:unit_detail', unit_id=unit.id)
+    services.add_unit_materials(unit=unit, files=uploaded_files)
+    messages.success(request, _('資料を追加しました。'))
+    return redirect('math_quiz:unit_detail', unit_id=unit.id)
+
+
 def delete_unit(request, unit_id):
     if request.method != 'POST':
         return HttpResponseBadRequest(_('不正なリクエストです。'))

@@ -22,6 +22,7 @@ from .models import (
     Unit,
     UnitDiagnosticAnswer,
     UnitDiagnosticSession,
+    UnitMaterial,
 )
 from .state_machine import WorkflowState, hints_allowed, validate_transition
 
@@ -55,11 +56,42 @@ def _ai_json(*, system_prompt, user_prompt, response_schema, files=None):
     return json.loads(text)
 
 
+def _unit_material_files(unit):
+    """(bytes, mime_type) pairs for every UnitMaterial added to this unit
+    after creation (see views.add_unit_material / services.add_unit_materials).
+    Doesn't include Unit.file itself — the one existing caller that passes
+    `files` explicitly (add_unit, at creation time) already includes it in
+    that list, so re-reading it here would attach it twice."""
+    result = []
+    for material in unit.materials.all():
+        material.file.open('rb')
+        try:
+            content = material.file.read()
+        finally:
+            material.file.close()
+        result.append((content, material.content_type or 'application/octet-stream'))
+    return result
+
+
+@transaction.atomic
+def add_unit_materials(*, unit, files):
+    """Persists each uploaded file as a UnitMaterial row — no AI call
+    here. generate_sections is what actually reads these (via
+    _unit_material_files), whenever it happens to run."""
+    for uploaded in files:
+        UnitMaterial.objects.create(
+            unit=unit, file=uploaded, content_type=getattr(uploaded, 'content_type', '') or '',
+        )
+
+
 @transaction.atomic
 def generate_sections(unit, name, files=None):
     """AI auto-generation when configured (reading the uploaded files'
     contents, if any — `files` is a list of `(file_bytes, mime_type)`
-    pairs); a fixed, deterministic section shape otherwise.
+    pairs, merged with any UnitMaterial already saved for this unit — see
+    _unit_material_files, so a course's full accumulated reference
+    material is always considered, not just whatever one caller happened
+    to pass); a fixed, deterministic section shape otherwise.
 
     A course must never end up with zero sections — that's a dead end
     with no retry path in the UI. So any problem with the AI call (a
@@ -72,6 +104,7 @@ def generate_sections(unit, name, files=None):
     sections_data = None
     if not unit.is_demo and is_ai_configured():
         try:
+            all_files = list(files or []) + _unit_material_files(unit)
             data = _ai_json(
                 system_prompt=ai_prompts.SECTIONS_SYSTEM_PROMPT,
                 user_prompt=(
@@ -80,7 +113,7 @@ def generate_sections(unit, name, files=None):
                     '場合は、そのすべての内容を踏まえてセクション構成を決めてください。'
                 ),
                 response_schema=ai_prompts.SECTIONS_SCHEMA,
-                files=files,
+                files=all_files,
             )
             candidate = data['sections']
             if isinstance(candidate, list) and candidate and all(
@@ -197,9 +230,29 @@ def restart_for_review(*, section, browser_session_key):
 
     Note this deliberately does NOT touch ConceptMastery: the durable
     learner model (unlike SectionSession) is meant to accumulate evidence
-    across resets, not reset with them."""
+    across resets, not reset with them.
+
+    The outgoing session's own first_problem is captured before it's
+    deleted (SectionSession.delete() cascades to its Attempts too, so
+    that text would otherwise be unrecoverable) and generation of the new
+    round's first_problem is done right here, passing it as an extra
+    exclude — this is the one case _used_problems_in_unit can never see
+    on its own, since the row it would have read is gone by the time
+    anything downstream asks. _next_problem_salt's salt rotation still
+    covers everything _used_problems_in_unit can't guarantee beyond this
+    immediate case (e.g. a small fallback catalog exhausting its couple
+    of variants after several resets)."""
+    previous = SectionSession.objects.filter(
+        section=section, browser_session_key=browser_session_key,
+    ).first()
+    previous_problems = set()
+    if previous is not None:
+        previous_problems = {p for p in (previous.first_problem, previous.transfer_problem) if p}
     reset_section_session(section=section, browser_session_key=browser_session_key)
-    return get_or_create_section_session(section=section, browser_session_key=browser_session_key)[0]
+    restarted = get_or_create_section_session(section=section, browser_session_key=browser_session_key)[0]
+    if previous_problems:
+        ensure_first_problem(session=restarted, extra_exclude=previous_problems)
+    return restarted
 
 
 def get_concept_mastery(*, section, browser_session_key):
@@ -267,7 +320,26 @@ def _update_concept_mastery(*, section, browser_session_key, **signals):
     return record
 
 
-def _generate_problem(*, section, kind, reference_problem=None, exclude=()):
+def _used_problems_in_unit(*, unit, browser_session_key):
+    """Every problem text already shown to this browser anywhere in this
+    unit — across every section and every generation phase (first
+    attempt, diagnostic quiz, transfer check) — so a newly generated
+    problem never exactly repeats one already used elsewhere in the same
+    course. Built entirely from existing SectionSession/
+    UnitDiagnosticAnswer data; no new table."""
+    pairs = SectionSession.objects.filter(
+        section__unit=unit, browser_session_key=browser_session_key,
+    ).values_list('first_problem', 'transfer_problem')
+    used = {problem for pair in pairs for problem in pair if problem}
+    used.update(
+        UnitDiagnosticAnswer.objects.filter(
+            session__unit=unit, session__browser_session_key=browser_session_key,
+        ).values_list('problem', flat=True)
+    )
+    return used
+
+
+def _generate_problem(*, section, kind, reference_problem=None, exclude=(), start_salt=0):
     """kind is 'first', 'transfer', or 'diagnostic'. AI mode asks for a
     fresh problem (or, for 'transfer', a same-concept variant of
     `reference_problem`); demo mode/failure falls back to the
@@ -278,15 +350,27 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=()):
     session — the result never exactly matches one of them (AI output
     isn't deterministic, so a plain retry is enough there; the
     deterministic fallback tries a few seeded variants — see
-    demo_content.build_unique_problem)."""
+    demo_content.build_unique_problem). `start_salt` only affects that
+    deterministic fallback — see _next_problem_salt."""
     exclude = set(exclude)
+    # Telling the AI what's already been used (in the same call it's
+    # already making — no extra request) lets it dodge a collision on its
+    # own; the exclude check below still catches it deterministically if
+    # the AI includes it anyway, so this is a pure improvement, not a
+    # dependency.
+    exclude_note = ''
+    if exclude:
+        listed = '\n'.join(f'- {text}' for text in sorted(exclude))
+        exclude_note = f'\n既出問題リスト（これらと重複しない新しい問題にすること）:\n{listed}'
     if _ai_mode(section.unit):
         for _attempt in range(2):
             try:
                 if kind == 'transfer':
                     data = _ai_json(
                         system_prompt=ai_prompts.TRANSFER_PROBLEM_SYSTEM_PROMPT,
-                        user_prompt=f'セクション: {section.title}\n元の問題: {reference_problem or ""}',
+                        user_prompt=(
+                            f'セクション: {section.title}\n元の問題: {reference_problem or ""}{exclude_note}'
+                        ),
                         response_schema=ai_prompts.TRANSFER_PROBLEM_SCHEMA,
                     )
                 else:
@@ -294,7 +378,7 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=()):
                         system_prompt=ai_prompts.PROBLEM_SYSTEM_PROMPT,
                         user_prompt=(
                             f'単元: {section.unit.name}\nセクション: {section.title}\n'
-                            f'セクションの内容: {section.content}'
+                            f'セクションの内容: {section.content}{exclude_note}'
                         ),
                         response_schema=ai_prompts.PROBLEM_SCHEMA,
                     )
@@ -312,7 +396,32 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=()):
                     return problem
             except Exception:
                 break  # a hard failure won't be fixed by retrying — go straight to the fallback
-    return demo_content.build_unique_problem(section, kind=kind, exclude=exclude)[0]
+    return demo_content.build_unique_problem(section, kind=kind, exclude=exclude, start_salt=start_salt)[0]
+
+
+def _next_problem_salt(*, section, browser_session_key):
+    """A deterministic, ever-growing offset used to rotate which
+    deterministic problem variant a fresh round starts from (see
+    demo_content.build_unique_problem's `start_salt`).
+
+    Re-selecting a completed section always starts a brand-new
+    SectionSession (see restart_for_review), and SectionSession.delete()
+    cascades to delete every Attempt row with it — so the previous
+    round's exact problem text is gone by the time this one is generated,
+    and _used_problems_in_unit can no longer exclude it. Without this,
+    build_unique_problem would always retry salt=0 first and regenerate
+    the byte-identical problem every single time a section is reset.
+
+    ConceptMastery, unlike SectionSession, is deliberately never touched
+    by a reset (see restart_for_review's docstring) — its attempt_count
+    keeps growing across rounds, so using it here rotates the starting
+    salt on every reset without needing any new stored data. 0 for a
+    section that has never been attempted (no history to rotate away
+    from, and no ConceptMastery row yet)."""
+    record = ConceptMastery.objects.filter(
+        section=section, browser_session_key=browser_session_key,
+    ).first()
+    return record.attempt_count if record else 0
 
 
 def _resolve_fallback(section, *, kind, problem):
@@ -393,7 +502,7 @@ def _diagnostic_should_stop(results):
 
 
 def _add_diagnostic_question(*, diagnostic, section, order):
-    exclude = set(diagnostic.answers.values_list('problem', flat=True))
+    exclude = _used_problems_in_unit(unit=diagnostic.unit, browser_session_key=diagnostic.browser_session_key)
     problem = _generate_problem(section=section, kind='diagnostic', exclude=exclude)
     UnitDiagnosticAnswer.objects.create(session=diagnostic, section=section, order=order, problem=problem)
 
@@ -480,12 +589,27 @@ def build_unit_diagnostic_result(*, diagnostic):
 
 
 @transaction.atomic
-def ensure_first_problem(*, session):
+def ensure_first_problem(*, session, extra_exclude=()):
     locked = SectionSession.objects.select_for_update().get(pk=session.pk)
     if locked.first_problem:
         session.first_problem = locked.first_problem
         return locked.first_problem
-    problem = _generate_problem(section=locked.section, kind='first')  # nothing precedes it in a fresh session
+    # Excludes problems already used anywhere else in this unit (other
+    # sections' first/transfer/diagnostic problems) so the same text never
+    # repeats across sections — see _used_problems_in_unit. `extra_exclude`
+    # is for the one thing that query can't see: the immediately preceding
+    # round's own problem for THIS section, passed in by restart_for_review
+    # right before this call (the row it lived on is already gone by now).
+    # start_salt additionally rotates the deterministic fallback's starting
+    # variant on top of that, for cases extra_exclude doesn't cover (e.g. a
+    # small fallback catalog exhausting its couple of variants after
+    # several resets) — see _next_problem_salt.
+    exclude = _used_problems_in_unit(unit=locked.section.unit, browser_session_key=locked.browser_session_key)
+    exclude |= set(extra_exclude)
+    start_salt = _next_problem_salt(section=locked.section, browser_session_key=locked.browser_session_key)
+    problem = _generate_problem(
+        section=locked.section, kind='first', exclude=exclude, start_salt=start_salt,
+    )
     locked.first_problem = problem
     locked.save(update_fields=('first_problem',))
     session.first_problem = problem
@@ -801,14 +925,19 @@ def submit_revision(*, session, answer, reasoning, confidence):
 
 def _generate_teach_back_question(*, session):
     """Level 2 (Targeted) initial question — grounded in the actual
-    problem and diagnosed misconception (if any), not a generic restatement
-    (see ai_prompts.TEACH_BACK_TARGETED_QUESTION_SYSTEM_PROMPT)."""
+    problem shown to the learner (never re-derived or borrowed from
+    another subject) and the diagnosed misconception (if any), not a
+    generic restatement (see
+    ai_prompts.TEACH_BACK_TARGETED_QUESTION_SYSTEM_PROMPT)."""
     section = session.section
     first_attempt = session.attempts.filter(revision_number=0).first()
     misconception = first_attempt.suspected_misconception if first_attempt else ''
+    problem = first_attempt.problem if first_attempt else ''
     if _ai_mode(section.unit):
         try:
-            user_prompt = f'問題: {first_attempt.problem if first_attempt else ""}'
+            user_prompt = (
+                f'科目/単元: {section.unit.name}\nセクション: {section.title}\n問題: {problem}'
+            )
             if first_attempt is not None and not first_attempt.is_correct:
                 user_prompt += f'\n学習者の最初の誤答: {first_attempt.answer}'
             user_prompt += f'\n推定される誤解: {misconception}'
@@ -822,7 +951,7 @@ def _generate_teach_back_question(*, session):
                 return question
         except Exception:
             pass
-    return demo_content.teach_back_question(section, misconception=misconception)
+    return demo_content.teach_back_question(section, problem=problem, misconception=misconception)
 
 
 def _start_teach_back(*, session, level):
@@ -854,11 +983,14 @@ def _evaluate_teach_back_answer(*, session, question, answer):
     nothing."""
     section = session.section
     if mastery.heuristic_teach_back_signal(answer=answer) == 'PARTIAL':
-        return demo_content.evaluate_teach_back_answer(answer)
+        return demo_content.evaluate_teach_back_answer(section, answer)
     if _ai_mode(section.unit):
         first_attempt = session.attempts.filter(revision_number=0).first()
         try:
-            user_prompt = f'質問: {question}\n学習者の回答: {answer}'
+            user_prompt = (
+                f'科目/単元: {section.unit.name}\nセクション: {section.title}\n'
+                f'質問: {question}\n学習者の回答: {answer}'
+            )
             if first_attempt is not None:
                 user_prompt += f'\n実際の問題: {first_attempt.problem}'
                 if not first_attempt.is_correct:
@@ -875,7 +1007,7 @@ def _evaluate_teach_back_answer(*, session, question, answer):
                 return evaluation, data.get('feedback', ''), data.get('follow_up_question', '')
         except Exception:
             pass
-    return demo_content.evaluate_teach_back_answer(answer)
+    return demo_content.evaluate_teach_back_answer(section, answer)
 
 
 @transaction.atomic
@@ -939,9 +1071,27 @@ def ensure_transfer_problem(*, session):
     if locked.transfer_problem:
         session.transfer_problem = locked.transfer_problem
         return locked.transfer_problem
+    # Unit-wide exclude (see _used_problems_in_unit) already includes this
+    # section's own first_problem, plus every other section's problems.
+    #
+    # start_salt is derived from whichever salt actually produced
+    # first_problem (via _resolve_fallback), NOT from _next_problem_salt /
+    # ConceptMastery.attempt_count directly — attempt_count already grew
+    # by the time Transfer is reached (submit_first_attempt/submit_revision
+    # judge at least one attempt first), so re-reading it here would give a
+    # start_salt that disagrees with the one ensure_first_problem used at
+    # the start of this same round. Reusing first_problem's own salt keeps
+    # both still rotating together across resets of this section, without
+    # that drift. None (a genuine AI-original first_problem) falls back to 0.
+    exclude = _used_problems_in_unit(unit=locked.section.unit, browser_session_key=locked.browser_session_key)
+    resolved_first = (
+        _resolve_fallback(locked.section, kind='first', problem=locked.first_problem)
+        if locked.first_problem else None
+    )
+    start_salt = resolved_first[0] if resolved_first else 0
     problem = _generate_problem(
         section=locked.section, kind='transfer', reference_problem=locked.first_problem,
-        exclude={locked.first_problem} if locked.first_problem else set(),
+        exclude=exclude, start_salt=start_salt,
     )
     locked.transfer_problem = problem
     locked.save(update_fields=('transfer_problem',))

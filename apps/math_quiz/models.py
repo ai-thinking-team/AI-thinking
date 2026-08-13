@@ -13,6 +13,25 @@ class Unit(models.Model):
         return self.name
 
 
+class UnitMaterial(models.Model):
+    """Reference material added to an existing Unit after creation (see
+    views.add_unit_material) — kept as its own 1-to-many table rather than
+    repurposing Unit.file, so the single-file-at-creation field keeps its
+    original meaning and existing data is untouched. AI section
+    generation reads these too — see services.generate_sections /
+    services._unit_material_files."""
+    unit = models.ForeignKey(Unit, related_name='materials', on_delete=models.CASCADE)
+    file = models.FileField(upload_to='units/materials/')
+    content_type = models.CharField(max_length=100, blank=True, default='')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('uploaded_at',)
+
+    def __str__(self):
+        return self.file.name
+
+
 class Section(models.Model):
     unit = models.ForeignKey(Unit, related_name='sections', on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
