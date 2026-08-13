@@ -29,6 +29,10 @@ from .models import CodingExercise, CodingPlanEvidence
 from .catalog import CODING_CATALOG
 from .catalog_validation import validate_catalog
 from .teach_back_rubric import LOOP_VALUES_TEACH_BACK_RUBRIC, evaluate_teach_back
+from .misconception_rules import (
+    diagnosis_confirms_misconception,
+    transfer_repeats_misconception,
+)
 from .services import (
     acknowledge_diagnosis_solution,
     ensure_demo_exercise,
@@ -135,6 +139,22 @@ class TeachBackRubricTests(SimpleTestCase):
         self.assertFalse(outcome.rubric_evidence['rubric_valid'])
         self.assertTrue(outcome.follow_up_question)
 
+    def test_concept_specific_misconception_rules_accept_correct_transfer_evidence(self):
+        cases = (
+            ('dictionary-key-misuse', 'dictionary_keys', 'The name is a key and get returns its value or fallback.', 'def lookup_price(p, name): return p.get(name, -1)', ['key', 'lookup', 'value', 'fallback']),
+            ('function-parameter-misuse', 'function_parameters_and_return', 'The denominator parameter can be zero, so return 0 or the division.', 'def safe_percentage(part, total): return 0 if total == 0 else part / total * 100', ['parameter', 'zero', 'return', 'divide']),
+            ('list-index-misuse', 'list_indexing', 'The first/last item uses an index, and empty lists return None.', 'def last_item(items): return items[-1] if items else None', ['index', 'position', 'last', 'empty', 'return']),
+        )
+        for code, concept, answer, source, terms in cases:
+            with self.subTest(code=code):
+                self.assertFalse(diagnosis_confirms_misconception(
+                    answer, misconception_code=code, concept=concept, action_terms=terms,
+                ))
+                self.assertFalse(transfer_repeats_misconception(
+                    source_code=source, reasoning=answer,
+                    misconception_code=code, action_terms=terms,
+                ))
+
 
 @override_settings(AI_PROVIDER_CLASS='')
 class CodingWorkflowBrowserTests(TestCase):
@@ -238,6 +258,67 @@ class CodingWorkflowBrowserTests(TestCase):
                 rubric = exercise.activity.rubric
                 self.assertEqual(rubric['concept'], concept)
                 self.assertEqual(rubric['allowed_misconception_codes'], [misconception])
+
+    def test_dictionary_function_and_list_workflows_reach_mastery(self):
+        cases = (
+            {
+                'slug': 'lookup-dictionary-grade',
+                'plan': ('Use the student name as a dictionary key and use a fallback.', '85'),
+                'first': ('def lookup_grade(grades, student_name):\n    return grades.get(student_name, 0)', 'The name is a key and get returns its value or fallback.'),
+                'teach': ('The name is a dictionary key.', 'A missing key needs a fallback.', 'I use get to return the value.', 'A dictionary maps keys to values.', 'I will test present and missing keys.'),
+                'transfer': ('def lookup_price(prices, product):\n    return prices.get(product, -1)', 'The product is a key and get returns a value or fallback.'),
+            },
+            {
+                'slug': 'safe-divide-function',
+                'plan': ('Check the denominator, return zero for zero, otherwise divide.', '2'),
+                'first': ('def safe_divide(a, b):\n    return 0 if b == 0 else a / b', 'The denominator parameter is checked and the function returns zero or the division.'),
+                'teach': ('The denominator can be zero.', 'Dividing by zero causes an error.', 'I check zero and return zero, otherwise divide.', 'Parameters enter a function and return gives the result.', 'I will test zero and normal inputs.'),
+                'transfer': ('def safe_percentage(part, total):\n    return 0 if total == 0 else part / total * 100', 'The denominator parameter is checked for zero and the function returns a division result.'),
+            },
+            {
+                'slug': 'first-list-item',
+                'plan': ('Check whether the list is empty, then read index zero.', '4'),
+                'first': ('def first_item(items):\n    return items[0] if items else None', 'The list uses index zero and returns the first item or None when empty.'),
+                'teach': ('The wrong case was reading an empty list.', 'An empty list has no index zero.', 'I check empty and return items[0] otherwise.', 'A list uses indexes and positions to access items.', 'I will test empty and non-empty lists.'),
+                'transfer': ('def last_item(items):\n    return items[-1] if items else None', 'The last position uses an index and an empty list returns None.'),
+            },
+        )
+        for case in cases:
+            with self.subTest(slug=case['slug']):
+                url = reverse('coding_quiz:exercise_detail', args=(case['slug'],))
+                self.post_plan(
+                    url=url,
+                    solution_plan=case['plan'][0],
+                    predicted_output=case['plan'][1],
+                )
+                with override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY):
+                    first = self.client.post(url, {
+                        'action': 'first_attempt',
+                        'source_code': case['first'][0],
+                        'reasoning': case['first'][1],
+                        'confidence': '4',
+                    })
+                self.assertEqual(first.status_code, 302)
+                teach_fields = ('original_issue', 'failure_reason', 'correction', 'concept', 'prevention')
+                teach_payload = {'action': 'teach_back'}
+                teach_payload.update({f'teach-{field}': value for field, value in zip(teach_fields, case['teach'])})
+                teach = self.client.post(url, teach_payload)
+                self.assertEqual(teach.status_code, 302)
+                with override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY):
+                    transfer = self.client.post(url, {
+                        'action': 'transfer',
+                        'transfer-source_code': case['transfer'][0],
+                        'transfer-reasoning': case['transfer'][1],
+                        'transfer-confidence': '4',
+                    })
+                self.assertEqual(transfer.status_code, 302)
+                self.assertEqual(
+                    LearningSession.objects.get(
+                        browser_session_key=self.client.session.session_key,
+                        activity__coding_exercise__slug=case['slug'],
+                    ).current_state,
+                    WorkflowState.MASTERED,
+                )
 
     def test_same_browser_has_independent_active_session_per_exercise(self):
         double_url = reverse('coding_quiz:exercise_detail', args=('double-numbers',))

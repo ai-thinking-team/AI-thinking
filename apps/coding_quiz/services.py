@@ -42,7 +42,9 @@ from .catalog_validation import validate_database_exercise
 from .models import CodingExercise, CodingPlanEvidence
 from .misconception_rules import (
     LOOP_VALUE_MISCONCEPTION,
+    diagnosis_confirms_misconception,
     diagnosis_confirms_loop_value_misconception,
+    transfer_repeats_misconception,
     transfer_repeats_loop_value_misconception,
 )
 from .teach_back_rubric import evaluate_teach_back
@@ -186,8 +188,10 @@ def _execution_evidence(result):
 
 
 def _first_attempt_response_evaluation(*, result, reasoning, confidence, activity):
-    reasoning_clear = not diagnosis_confirms_loop_value_misconception(
+    reasoning_clear = not diagnosis_confirms_misconception(
         reasoning,
+        concept=activity.rubric.get('concept'),
+        misconception_code=(activity.rubric.get('allowed_misconception_codes') or [LOOP_VALUE_MISCONCEPTION])[0],
         action_terms=activity.rubric.get('diagnosis_action_terms', ()),
     )
     if result.status != ExecutionStatus.PASSED:
@@ -394,11 +398,13 @@ def submit_first_attempt(*, learning_session, exercise, source_code, reasoning, 
 
 def _diagnosis_fallback(*, answer, next_level, response_type, reveal_solution,
                         misconception_code=LOOP_VALUE_MISCONCEPTION,
-                        action_terms=None, diagnosis_config=None):
+                        action_terms=None, diagnosis_config=None, concept=None):
     diagnosis_config = diagnosis_config or {}
     hints = diagnosis_config.get('hints', {})
-    understood = not diagnosis_confirms_loop_value_misconception(
+    understood = not diagnosis_confirms_misconception(
         answer,
+        misconception_code=misconception_code,
+        concept=concept,
         action_terms=action_terms,
     )
     return {
@@ -491,6 +497,7 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
             misconception_code=misconception_code,
             action_terms=action_terms,
             diagnosis_config=diagnosis_config,
+            concept=activity.rubric.get('concept'),
         ),
         allowed_misconception_codes=allowed_codes,
         response_type=response_type,
@@ -893,14 +900,11 @@ def submit_transfer_check(*, learning_session, exercise, source_code, reasoning,
     for code, misconception in latest_misconceptions.items():
         if misconception.status != MisconceptionRecord.Status.CONFIRMED:
             continue
-        repeated = (
-            transfer_repeats_loop_value_misconception(
-                source_code=source_code,
-                reasoning=reasoning,
-                action_terms=transfer_activity.rubric.get('action_terms'),
-            )
-            if code == LOOP_VALUE_MISCONCEPTION
-            else True
+        repeated = transfer_repeats_misconception(
+            source_code=source_code,
+            reasoning=reasoning,
+            misconception_code=code,
+            action_terms=transfer_activity.rubric.get('action_terms'),
         )
         if not repeated and not transfer.passed:
             continue

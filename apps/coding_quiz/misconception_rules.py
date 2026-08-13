@@ -31,6 +31,28 @@ def diagnosis_confirms_loop_value_misconception(answer, *, action_terms=None):
     return not (identifies_current_element and identifies_required_action)
 
 
+def diagnosis_confirms_misconception(answer, *, misconception_code=None,
+                                     concept=None, action_terms=None):
+    """Return whether an answer still misses the concept-specific core idea."""
+    normalized = answer.casefold()
+    if misconception_code == 'dictionary-key-misuse' or concept == 'dictionary_keys':
+        return not (
+            _contains_term(normalized, ('key', 'name', 'student'))
+            and _contains_term(normalized, tuple(action_terms or ('value', 'lookup', 'get', 'fallback')))
+        )
+    if misconception_code == 'function-parameter-misuse' or concept == 'function_parameters_and_return':
+        return not (
+            _contains_term(normalized, ('parameter', 'argument', 'denominator', 'input'))
+            and _contains_term(normalized, tuple(action_terms or ('zero', 'return', 'divide', 'check')))
+        )
+    if misconception_code == 'list-index-misuse' or concept == 'list_indexing':
+        return not (
+            _contains_term(normalized, ('index', 'position', 'first', 'item'))
+            and _contains_term(normalized, tuple(action_terms or ('empty', 'none', 'return', 'check')))
+        )
+    return diagnosis_confirms_loop_value_misconception(answer, action_terms=action_terms)
+
+
 def _contains_term(text, terms):
     return any(
         re.search(rf'(?<!\w){re.escape(term)}(?!\w)', text)
@@ -48,3 +70,31 @@ def transfer_repeats_loop_value_misconception(*, source_code, reasoning, action_
         tuple(action_terms or TRANSFER_ACTION_TERMS),
     )
     return not (iterates_values and explains_current_element and explains_transformation)
+
+
+def transfer_repeats_misconception(*, source_code, reasoning, misconception_code,
+                                    action_terms=None):
+    """Check whether a confirmed concept-specific error appears in Transfer."""
+    code = source_code.casefold()
+    text = reasoning.casefold()
+    terms = tuple(action_terms or ())
+    if misconception_code == 'dictionary-key-misuse':
+        safe_lookup = '.get(' in code or (' in ' in code and 'if ' in code)
+        explains_key = _contains_term(text, ('key', 'name', 'student'))
+        explains_value = _contains_term(text, terms or ('value', 'lookup', 'fallback'))
+        return not (safe_lookup and explains_key and explains_value)
+    if misconception_code == 'function-parameter-misuse':
+        checks_zero = 'if ' in code and ('== 0' in code or '!= 0' in code)
+        explains_parameters = _contains_term(text, ('parameter', 'argument', 'denominator', 'input'))
+        explains_return = _contains_term(text, terms or ('zero', 'return', 'divide'))
+        return not (checks_zero and explains_parameters and explains_return)
+    if misconception_code == 'list-index-misuse':
+        checks_empty = 'if ' in code and ('items[0]' in code or 'items[-1]' in code or 'items [-1]' in code)
+        explains_index = _contains_term(text, ('index', 'position', 'first', 'last'))
+        explains_boundary = _contains_term(text, terms or ('empty', 'none', 'return'))
+        return not (checks_empty and explains_index and explains_boundary)
+    return transfer_repeats_loop_value_misconception(
+        source_code=source_code,
+        reasoning=reasoning,
+        action_terms=action_terms,
+    )
