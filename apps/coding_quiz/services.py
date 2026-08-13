@@ -761,7 +761,9 @@ def submit_teach_back(*, learning_session, response, ai_provider=None):
         result = 'ASSISTED_COMPLETION'
 
     if result == 'CLEAR_UNDERSTANDING':
-        feedback = 'The Teach-Back shows understanding of the core loop concept.'
+        feedback = (
+            f'The Teach-Back shows understanding of the core {activity_rubric.get("concept", "concept")} concept.'
+        )
         follow_up_question = ''
     elif assisted_completion:
         feedback = activity_rubric.get('teach_back_answer', CURATED_TEACH_BACK_ANSWER)

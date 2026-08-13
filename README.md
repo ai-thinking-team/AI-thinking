@@ -194,6 +194,12 @@ GEMINI_MODEL=gemini-2.5-flash
 AI_PROVIDER_CLASS=apps.ai_engine.providers.gemini.GeminiProvider
 ```
 
+To enable semantic AI grading for Teach-Back, put one provider key in the local `.env`, run
+`venv\Scripts\python.exe -m pip install -r requirements.txt`, and restart Django. The Coding page
+will then show `Live AI provider available`. Teach-Back sends the current exercise's rubric and the
+learner's answers to the selected provider; the server validates the structured response and retains
+control of progression. Without a key, it shows `Curated fallback ready` and remains usable.
+
 Do not commit or paste either key into source code. When `AI_PROVIDER_CLASS` is omitted, Django
 selects DeepSeek when `DEEPSEEK_API_KEY` is present, otherwise Gemini when `GEMINI_API_KEY` is
 present. The Coding Diagnosis sends only privacy-minimized
