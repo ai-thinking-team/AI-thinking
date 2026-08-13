@@ -106,3 +106,38 @@ class HttpCodeExecutionGatewayTests(SimpleTestCase):
         self.assertIsInstance(gateway, HttpCodeExecutionGateway)
         self.assertEqual(gateway.auth_token, 'runner-token')
         self.assertEqual(gateway.timeout, 17)
+
+    @override_settings(
+        CODE_RUNNER_URL='http://127.0.0.1:8765',
+        CODE_RUNNER_AUTOSTART=True,
+        IS_PRODUCTION=False,
+    )
+    @patch('apps.code_runner.runner._runner_port_open', return_value=True)
+    @patch('apps.code_runner.runner.subprocess.Popen')
+    def test_factory_does_not_spawn_when_local_runner_is_already_ready(self, mocked_popen, mocked_port):
+        get_code_execution_gateway()
+        mocked_popen.assert_not_called()
+        mocked_port.assert_called()
+
+    @override_settings(
+        CODE_RUNNER_URL='http://127.0.0.1:8765',
+        CODE_RUNNER_AUTOSTART=True,
+        IS_PRODUCTION=False,
+        CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS=0,
+    )
+    @patch('apps.code_runner.runner._runner_port_open', return_value=False)
+    @patch('apps.code_runner.runner.subprocess.Popen')
+    def test_factory_can_start_local_runner_on_demand(self, mocked_popen, mocked_port):
+        mocked_popen.return_value.poll.return_value = None
+        get_code_execution_gateway()
+        mocked_popen.assert_called_once()
+
+    @override_settings(
+        CODE_RUNNER_URL='http://127.0.0.1:8765',
+        CODE_RUNNER_AUTOSTART=True,
+        IS_PRODUCTION=True,
+    )
+    @patch('apps.code_runner.runner.subprocess.Popen')
+    def test_production_never_spawns_local_runner(self, mocked_popen):
+        get_code_execution_gateway()
+        mocked_popen.assert_not_called()

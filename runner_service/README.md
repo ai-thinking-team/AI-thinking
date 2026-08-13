@@ -6,7 +6,9 @@ This service is separate from Django. Django sends only Python source code and c
 
 1. On Windows Home, run PowerShell as Administrator and execute `powershell -ExecutionPolicy Bypass -File runner_service/enable_wsl_features.ps1`, then restart Windows.
 2. Install and start Docker Desktop with the WSL 2 Linux-container backend.
-3. From the repository root, run `powershell -ExecutionPolicy Bypass -File runner_service/start.ps1`.
+3. Django local development auto-starts this service on the first code submission when
+   `CODE_RUNNER_AUTOSTART=true` (the default outside production). You can also start it manually
+   with `powershell -ExecutionPolicy Bypass -File runner_service/start.ps1`.
 4. Set `CODE_RUNNER_URL=http://127.0.0.1:8765` in `.env` and restart Django.
 
 If `start.ps1` says that Docker CLI was not found, install Docker Desktop with the WSL 2
@@ -14,6 +16,10 @@ Linux-container backend, start Docker Desktop, reopen PowerShell, and confirm `d
 works before starting the runner. If the Django page reports `NOT_EXECUTED`, inspect the runner
 terminal: the HTTP response now includes Docker's diagnostic message (for example, an image-not-found
 or Docker-Desktop-not-running error).
+
+The auto-start feature launches the runner in a separate process and never runs learner code inside
+Django. It is disabled in production; production deployments must provide their own isolated runner
+URL and authentication configuration.
 
 The executor container is removed after every request and runs with no network, a read-only root filesystem, a non-root user, all Linux capabilities dropped, a 128 MB memory limit, one CPU, a PID limit, and layered execution timeouts.
 
