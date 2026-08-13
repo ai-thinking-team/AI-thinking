@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Choose a learning area{% endblock %}
+{% block title %}Trellis{% endblock %}
 
 {% block navbar %}{% endblock %}
 
@@ -12,7 +13,9 @@
   </div>
   <div class="home-main">
     <div class="home-hero-text">
-      <h1>The AI tutor that makes you think before it helps.</h1>
+      <h1 class="home-logo">
+        <img src="{% static 'img/trellis-logo.png' %}" alt="Trellis">
+      </h1>
       <p>Answer first, get a hint only when you're stuck, then prove you really understood — across Math, Coding, Languages, and more.</p>
     </div>
     <div class="home-cards-panel">
