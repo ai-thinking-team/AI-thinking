@@ -72,6 +72,7 @@ class MissingLanguageQuestion(models.Model):
     explanation = models.TextField(blank=True)
     next_step = models.TextField(blank=True)
     hints = models.JSONField(default=list)
+    choices = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

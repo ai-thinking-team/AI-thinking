@@ -54,6 +54,16 @@ class FileUploadForm(forms.Form):
 
 
 class MaterialQuizForm(forms.Form):
+    answer_mode = forms.ChoiceField(
+        label='Vocabulary answer format',
+        choices=(
+            ('multiple_choice', '5-choice'),
+            ('typing', 'Typing'),
+        ),
+        initial='multiple_choice',
+        required=False,
+        widget=forms.RadioSelect,
+    )
     files = MultipleFileField(
         label='Material files (multiple allowed)',
         required=False,
@@ -79,12 +89,22 @@ class MaterialQuizForm(forms.Form):
 
 
 class QuizAnswerForm(forms.Form):
-    answer = forms.CharField(
-        label='Answer',
-        max_length=500,
-        widget=forms.TextInput(attrs={
-            'autocomplete': 'off',
-            'placeholder': 'Type your answer',
-            'autofocus': True,
-        }),
-    )
+    def __init__(self, *args, question=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = question.get('choices', []) if question else []
+        if choices:
+            self.fields['answer'] = forms.ChoiceField(
+                label='Choose one answer',
+                choices=[(choice, choice) for choice in choices],
+                widget=forms.RadioSelect,
+            )
+        else:
+            self.fields['answer'] = forms.CharField(
+                label='Answer',
+                max_length=500,
+                widget=forms.TextInput(attrs={
+                    'autocomplete': 'off',
+                    'placeholder': 'Type your answer',
+                    'autofocus': True,
+                }),
+            )

@@ -32,7 +32,10 @@
 <section class="setup-section">
   <div class="section-heading-row">
     <div><span class="section-kicker">CURATED COURSES</span><h2>10-Question Courses</h2></div>
-    <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'vocabulary' %}">Random 10 questions</a>
+    <div class="result-actions">
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_vocabulary' 'multiple_choice' %}">5-choice: 10 questions</a>
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_vocabulary' 'typing' %}">Typing: 10 questions</a>
+    </div>
   </div>
   <div class="course-grid">
     {% for course in courses %}
@@ -88,6 +91,9 @@
       <input id="folder-files" type="file" name="files" multiple webkitdirectory directory accept=".txt,.md,.csv,.json,.pdf">
     </div>
     <div class="form-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
+    {% if section == 'vocabulary' %}
+      <div class="form-group">{{ form.answer_mode.label_tag }}{{ form.answer_mode }}{{ form.answer_mode.errors }}</div>
+    {% endif %}
     <button type="submit" class="btn btn-primary btn-lg">Generate 10 Questions →</button>
   </form>
 </section>

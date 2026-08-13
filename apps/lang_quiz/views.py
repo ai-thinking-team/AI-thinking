@@ -20,6 +20,7 @@ from .quiz_engine import (
     SECTION_LABELS,
     answer_matches,
     course_catalog,
+    difficulty_from_diagnostic,
     diagnostic_recommendations,
     generate_section_questions,
     generate_uploaded_questions,
@@ -81,8 +82,28 @@ def start_quiz(request, section):
             messages.info(request, 'You have no questions to review in Missing.')
             return redirect('lang_quiz:home')
     else:
-        questions = generate_section_questions(section, count=10)
-    return _create_run(request, section=section, questions=questions, mode='random')
+        difficulty = difficulty_from_diagnostic(session_key, section)
+        questions = generate_section_questions(
+            section,
+            count=10,
+            answer_mode='multiple_choice',
+            difficulty=difficulty,
+        )
+    mode = 'multiple_choice' if section == 'vocabulary' else 'random'
+    return _create_run(request, section=section, questions=questions, mode=mode)
+
+
+def start_vocabulary(request, answer_mode):
+    if answer_mode not in {'multiple_choice', 'typing'}:
+        raise Http404('Unknown vocabulary answer mode')
+    session_key = _session_key(request)
+    difficulty = difficulty_from_diagnostic(session_key, 'vocabulary')
+    questions = generate_section_questions(
+        'vocabulary', count=10, answer_mode=answer_mode, difficulty=difficulty,
+    )
+    return _create_run(
+        request, section='vocabulary', questions=questions, mode=answer_mode,
+    )
 
 
 def start_course(request, course_slug):
@@ -111,11 +132,15 @@ def start_material_quiz(request, section):
     if not form.is_valid():
         return render(request, 'lang_quiz/material_setup.html', {'form': form, 'section': section}, status=400)
     try:
+        answer_mode = form.cleaned_data.get('answer_mode') or 'multiple_choice'
+        difficulty = difficulty_from_diagnostic(_session_key(request), section)
         questions, source_name = generate_uploaded_questions(
             form.cleaned_data['files'],
             form.cleaned_data['instruction'],
             section=section,
             count=10,
+            answer_mode=answer_mode,
+            difficulty=difficulty,
         )
     except ValueError as exc:
         form.add_error('files', exc)
@@ -158,20 +183,47 @@ def quiz_run(request, run_id):
             return redirect('lang_quiz:quiz_run', run_id=run.id)
 
         if not question.get('resolved'):
-            form = QuizAnswerForm(request.POST)
-            gave_up = action == 'give_up' and question.get('hint_level', 1) >= 5
+            form = QuizAnswerForm(request.POST, question=question)
+            gave_up = action == 'give_up' and question.get('hint_level', 0) >= 5
             if gave_up or form.is_valid():
                 correct = False if gave_up else answer_matches(
                     form.cleaned_data['answer'], question['answer']
                 )
-                if correct:
+                question['submitted_answer'] = (
+                    '' if gave_up else form.cleaned_data['answer']
+                )
+                if gave_up:
                     question['resolved'] = True
-                    question['is_correct'] = True
-                    question['last_feedback'] = 'Correct!'
-                    run.correct_count += 1
-                    resolve_missing(session_key, question)
-                    update_course_progress(session_key, run.course_slug, question)
-                elif question.get('hint_level', 1) >= 5:
+                    question['is_correct'] = False
+                    question['last_feedback'] = (
+                        'This question was marked as unknown and counts as incorrect. '
+                        'It has been saved to Missing for review.'
+                    )
+                    remember_missing(session_key, question)
+                elif correct:
+                    question['resolved'] = True
+                    used_hint = question.get('hint_level', 0) > 0
+                    question['is_correct'] = not used_hint
+                    if used_hint:
+                        question['last_feedback'] = (
+                            'The answer is correct, but this question counts as incorrect because a hint was used.'
+                        )
+                        remember_missing(session_key, question)
+                    else:
+                        question['last_feedback'] = 'Correct!'
+                        run.correct_count += 1
+                        resolve_missing(session_key, question)
+                        update_course_progress(session_key, run.course_slug, question)
+                elif run.section == 'diagnostic':
+                    question['attempt_count'] = question.get('attempt_count', 0) + 1
+                    question['resolved'] = True
+                    question['is_correct'] = False
+                    question['last_feedback'] = (
+                        'Incorrect. Diagnostic questions do not provide hints. '
+                        'This question has been saved to Missing for review.'
+                    )
+                    remember_missing(session_key, question)
+                elif question.get('hint_level', 0) >= 5:
                     question['resolved'] = True
                     question['is_correct'] = False
                     question['last_feedback'] = (
@@ -181,10 +233,23 @@ def quiz_run(request, run_id):
                     remember_missing(session_key, question)
                 else:
                     question['attempt_count'] = question.get('attempt_count', 0) + 1
-                    question['hint_level'] = question.get('hint_level', 1) + 1
+                    question['hint_level'] = min(5, question.get('hint_level', 0) + 1)
                     question['last_feedback'] = f'Not quite. Hint updated to level {question["hint_level"]}.'
+                    # Every wrong attempt is review material, even before level 5.
+                    remember_missing(session_key, question)
                 questions[run.current_index] = question
                 run.questions = questions
+                if run.section == 'diagnostic' and question.get('resolved'):
+                    # Diagnostic feedback is withheld until every question is answered.
+                    if run.current_index + 1 >= len(questions):
+                        run.finished = True
+                    else:
+                        run.current_index += 1
+                elif gave_up:
+                    if run.current_index + 1 >= len(questions):
+                        run.finished = True
+                    else:
+                        run.current_index += 1
                 run.save()
                 return redirect('lang_quiz:quiz_run', run_id=run.id)
 
@@ -194,7 +259,7 @@ def quiz_run(request, run_id):
     return render(request, 'lang_quiz/quiz_run.html', {
         'run': run,
         'question': question,
-        'form': QuizAnswerForm(),
+        'form': QuizAnswerForm(question=question),
         'section_label': SECTION_LABELS.get(run.section, run.section),
         'question_number': run.current_index + 1,
         'total_questions': len(questions),

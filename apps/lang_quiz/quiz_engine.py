@@ -14,7 +14,7 @@ from django.db import transaction
 from apps.ai_engine.client import generate_ai_response
 from apps.ai_engine.exceptions import AIEngineError
 
-from .models import LanguageCourseProgress, MissingLanguageQuestion
+from .models import LanguageCourseProgress, LanguageQuizRun, MissingLanguageQuestion
 
 
 SECTION_LABELS = {
@@ -33,17 +33,47 @@ AI_QUESTION_SCHEMA = [{
     'explanation': 'string',
     'next_step': 'string',
     'hints': ['string'],
+    'choices': ['string'],
 }]
 
 
-def _question(key, prompt, answer, explanation, next_step, *, section, hints=None):
-    hints = hints or [
-        'Focus on the key word in the question and the context around the blank.',
-        f'This is a {SECTION_LABELS.get(section, section)} question — recall the core rule or meaning.',
-        'Narrow down the part of speech, tense, or contextual role of the answer.',
-        f'The first letter of the answer is "{str(answer)[:1]}".',
+VOCABULARY_ANSWER_MODES = {'multiple_choice', 'typing'}
+DIFFICULTY_LABELS = {'beginner', 'intermediate', 'advanced'}
+
+
+def _vocabulary_choices(answer, provided=None):
+    answer = str(answer).strip()
+    candidates = [str(item).strip() for item in (provided or []) if str(item).strip()]
+    candidates.extend(word for word, _meaning, _prompt in VOCABULARY_DATA)
+    unique = []
+    for candidate in [answer, *candidates]:
+        if candidate.casefold() not in {item.casefold() for item in unique}:
+            unique.append(candidate)
+    choices = [answer, *random.sample(unique[1:], min(4, len(unique) - 1))]
+    if len(choices) != 5:
+        return []
+    random.shuffle(choices)
+    return choices
+
+
+def _question(
+    key, prompt, answer, explanation, next_step, *, section, hints=None,
+    answer_mode='typing', choices=None, difficulty='intermediate',
+):
+    default_hints = [
+        'Read the whole question and identify the exact information the blank requires.',
+        f'Focus on the {SECTION_LABELS.get(section, section)} rule, meaning, or evidence being tested.',
+        f'The answer has {len(str(answer))} characters; narrow it by its grammatical role and context.',
+        f'The answer starts with "{str(answer)[:1]}" and ends with "{str(answer)[-1:]}".',
         f'The answer is "{answer}". If you cannot type it, select "Give up".',
     ]
+    hints = hints if isinstance(hints, list) and len(hints) >= 5 else default_hints
+    if isinstance(choices, list) and choices:
+        choices = [str(choice).strip() for choice in choices if str(choice).strip()]
+    elif section == 'vocabulary' and answer_mode == 'multiple_choice':
+        choices = _vocabulary_choices(answer, choices)
+    else:
+        choices = []
     return {
         'key': key,
         'prompt': prompt,
@@ -52,8 +82,11 @@ def _question(key, prompt, answer, explanation, next_step, *, section, hints=Non
         'next_step': next_step,
         'hints': list(hints)[:5],
         'section': section,
+        'choices': choices,
+        'answer_mode': answer_mode,
+        'difficulty': difficulty,
         'attempt_count': 0,
-        'hint_level': 1,
+        'hint_level': 0,
         'resolved': False,
         'is_correct': None,
         'last_feedback': '',
@@ -109,27 +142,28 @@ READING_DATA = [
 ]
 
 
-def _vocabulary_questions(prefix='vocab'):
+def _vocabulary_questions(prefix='vocab', *, answer_mode='multiple_choice', difficulty='intermediate'):
     return [
         _question(
             f'{prefix}-{word}', prompt, word,
             f'"{word}" means "{meaning}" and fits naturally in this context.',
             f'Now write one original sentence using "{word}".', section='vocabulary',
+            answer_mode=answer_mode, difficulty=difficulty,
         )
         for word, meaning, prompt in VOCABULARY_DATA
     ]
 
 
-def _grammar_questions():
+def _grammar_questions(*, difficulty='intermediate'):
     return [
-        _question(key, prompt, answer, explanation, 'Write one original sentence using the same grammar rule.', section='grammar')
+        _question(key, prompt, answer, explanation, 'Write one original sentence using the same grammar rule.', section='grammar', difficulty=difficulty)
         for key, prompt, answer, explanation in GRAMMAR_DATA
     ]
 
 
-def _reading_questions():
+def _reading_questions(*, difficulty='intermediate'):
     return [
-        _question(key, prompt, answer, explanation, 'Identify the exact words in the passage that support your answer.', section='reading')
+        _question(key, prompt, answer, explanation, 'Identify the exact words in the passage that support your answer.', section='reading', difficulty=difficulty)
         for key, prompt, answer, explanation in READING_DATA
     ]
 
@@ -171,7 +205,29 @@ def course_catalog(session_key):
     return catalog
 
 
-def _questions_from_ai(specs, section, count):
+def difficulty_from_diagnostic(session_key, section):
+    """Map the latest completed diagnostic's section score to a quiz level."""
+    if section not in {'vocabulary', 'grammar', 'reading'}:
+        return 'intermediate'
+    run = LanguageQuizRun.objects.filter(
+        browser_session_key=session_key,
+        section='diagnostic',
+        finished=True,
+    ).first()
+    if run is None:
+        return 'intermediate'
+    relevant = [q for q in run.questions if q.get('section') == section]
+    if not relevant:
+        return 'intermediate'
+    score = sum(q.get('is_correct') is True for q in relevant) / len(relevant)
+    if score < 0.4:
+        return 'beginner'
+    if score < 0.8:
+        return 'intermediate'
+    return 'advanced'
+
+
+def _questions_from_ai(specs, section, count, *, answer_mode='multiple_choice', difficulty='intermediate'):
     if not isinstance(specs, list) or len(specs) < count:
         return []
     questions = []
@@ -193,6 +249,9 @@ def _questions_from_ai(specs, section, count):
             str(spec.get('next_step') or 'Write one original sentence using the same concept.'),
             section=item_section,
             hints=hints,
+            answer_mode=answer_mode if item_section == 'vocabulary' else 'typing',
+            choices=spec.get('choices') if isinstance(spec.get('choices'), list) else None,
+            difficulty=difficulty,
         )
         # Carry the skill_focus label into the question dict for display in the UI
         q['skill_focus'] = str(spec.get('skill_focus') or '')
@@ -200,7 +259,11 @@ def _questions_from_ai(specs, section, count):
     return questions
 
 
-def generate_section_questions(section, *, count=10):
+def generate_section_questions(section, *, count=10, answer_mode='multiple_choice', difficulty='intermediate'):
+    if answer_mode not in VOCABULARY_ANSWER_MODES:
+        raise ValueError('Unsupported vocabulary answer mode.')
+    if difficulty not in DIFFICULTY_LABELS:
+        difficulty = 'intermediate'
     if section in {'vocabulary', 'grammar', 'reading', 'diagnostic'}:
         try:
             specs = generate_ai_response(
@@ -212,29 +275,39 @@ def generate_section_questions(section, *, count=10):
                     'skill_focus (the specific language skill tested, e.g. "Past Tense", "Inference", "Vocabulary in Context"), '
                     'explanation (clear English explanation of why the answer is correct and what rule/principle applies), '
                     'next_step (one actionable study task in English for the learner to practise further), '
-                    'hints (exactly 5 English hints progressing from a gentle nudge at level 1 to revealing the full answer at level 5).'
+                    'hints (exactly 5 English hints, each narrowing the possible answer more than the previous one, '
+                    'with the full answer only at level 5), and choices. '
+                    'For vocabulary multiple_choice questions, choices must contain exactly 5 distinct words including the answer. '
+                    'For typing questions and non-vocabulary questions, choices must be an empty array.'
                 ),
                 user_prompt=(
-                    f'Section: {section}. Create {count} fresh questions. '
+                    f'Section: {section}. Difficulty: {difficulty}. Create {count} fresh questions. '
+                    f'Vocabulary answer mode: {answer_mode}. '
                     'For diagnostic, mix vocabulary, grammar, and short reading questions. '
                     'Avoid duplicates and keep prompts self-contained.'
                 ),
                 response_schema=AI_QUESTION_SCHEMA,
             )
-            generated = _questions_from_ai(specs, section, count)
+            generated = _questions_from_ai(
+                specs, section, count, answer_mode=answer_mode, difficulty=difficulty,
+            )
             if generated:
                 return generated
         except AIEngineError:
             pass
 
     if section == 'vocabulary':
-        pool = _vocabulary_questions()
+        pool = _vocabulary_questions(answer_mode=answer_mode, difficulty=difficulty)
     elif section == 'grammar':
-        pool = _grammar_questions()
+        pool = _grammar_questions(difficulty=difficulty)
     elif section == 'reading':
-        pool = _reading_questions()
+        pool = _reading_questions(difficulty=difficulty)
     elif section == 'diagnostic':
-        pool = _vocabulary_questions() + _grammar_questions() + _reading_questions()
+        pool = (
+            _vocabulary_questions(difficulty=difficulty)
+            + _grammar_questions(difficulty=difficulty)
+            + _reading_questions(difficulty=difficulty)
+        )
     else:
         raise ValueError('Unsupported language section.')
     return random.sample(pool, min(count, len(pool)))
@@ -359,7 +432,10 @@ _UPLOAD_SYSTEM_PROMPTS = {
 }
 
 
-def generate_uploaded_questions(files, instruction, *, section='myself', count=10):
+def generate_uploaded_questions(
+    files, instruction, *, section='myself', count=10,
+    answer_mode='multiple_choice', difficulty='intermediate',
+):
     """Create questions from user-uploaded material using section-aware AI prompts."""
     chunks = []
     names = []
@@ -387,11 +463,17 @@ def generate_uploaded_questions(files, instruction, *, section='myself', count=1
             user_prompt=(
                 f'Learner instruction: {instruction}\n'
                 f'Question count: {count}\n'
+                f'Difficulty: {difficulty}\n'
+                f'Vocabulary answer mode: {answer_mode}. '
+                'For multiple_choice use exactly 5 distinct choices including the answer; '
+                'otherwise return an empty choices array.\n'
                 f'Material:\n{material}'
             ),
             response_schema=AI_QUESTION_SCHEMA,
         )
-        generated = _questions_from_ai(specs, section, count)
+        generated = _questions_from_ai(
+            specs, section, count, answer_mode=answer_mode, difficulty=difficulty,
+        )
         if generated:
             return generated, ', '.join(names)
     except AIEngineError:
@@ -490,7 +572,21 @@ def generate_uploaded_questions(files, instruction, *, section='myself', count=1
                     f' The answer is "{q_answer}".'
                 ]
 
-        else:  # grammar section
+        elif section == 'vocabulary':
+            target = max(words, key=len) if words else sentence.split()[0]
+            q_prompt = f'Choose or type the word that completes this material excerpt:\n\n"{sentence.replace(target, "____", 1)}"'
+            q_answer = target.lower()
+            skill_label = 'Vocabulary in Context'
+            explanation = f'The original material uses "{target}" in this context: "{sentence}"'
+            next_step_text = f'Write a new sentence using "{target}".'
+            hints = [
+                'Use the surrounding words to decide what meaning is needed.',
+                'Identify the missing word\'s part of speech.',
+                f'The answer has {len(target)} letters.',
+                f'The answer begins with "{target[0]}" and ends with "{target[-1]}".',
+                f'The answer is "{q_answer}".',
+            ]
+        else:  # grammar / general section
             # Grammar fallback: create fill-in-the-blank on actual grammatical words
             # Target prepositions, auxiliary verbs, articles, conjunctions — real grammar words
             grammar_targets = re.findall(
@@ -545,6 +641,8 @@ def generate_uploaded_questions(files, instruction, *, section='myself', count=1
             next_step_text,
             section=section,
             hints=hints[:5],
+            answer_mode=answer_mode if section == 'vocabulary' else 'typing',
+            difficulty=difficulty,
         ))
         questions[-1]['skill_focus'] = skill_label
 
@@ -559,6 +657,8 @@ def missing_questions(session_key, *, count=10):
             record.fingerprint, record.prompt, record.reference_answer,
             record.explanation, record.next_step, section='missing',
             hints=record.hints if record.hints else None,
+            choices=record.choices,
+            answer_mode='multiple_choice' if record.choices else 'typing',
         )
         for record in records[:count]
     ]
@@ -588,6 +688,7 @@ def remember_missing(session_key, question):
             'explanation': question.get('explanation', ''),
             'next_step': question.get('next_step', ''),
             'hints': question.get('hints', []),
+            'choices': question.get('choices') or [],
         },
     )
 
