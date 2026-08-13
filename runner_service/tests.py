@@ -189,6 +189,21 @@ class RunnerServiceTests(TestCase):
         self.assertEqual(cleanup_command[:3], ['docker', 'rm', '-f'])
 
     @patch('runner_service.server.subprocess.run')
+    def test_docker_failure_includes_runner_diagnostic(self, mocked_run):
+        mocked_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout='', stderr='error during connect: Docker Desktop is not running\n',
+        )
+
+        result = run_in_sandbox({
+            'language': 'python',
+            'source_code': 'def double_numbers(values): return values',
+            'test_case_ids': ['double-public'],
+        })
+
+        self.assertEqual(result['status'], 'NOT_EXECUTED')
+        self.assertIn('Docker Desktop is not running', result['message'])
+
+    @patch('runner_service.server.subprocess.run')
     def test_extra_payload_keys_are_sanitized(self, mocked_run):
         mocked_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,

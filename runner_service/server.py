@@ -41,6 +41,14 @@ def _not_executed(message):
     return {'status': 'NOT_EXECUTED', 'message': message, 'tests': []}
 
 
+def _docker_failure_message(process):
+    detail = (process.stderr or '').strip().replace('\r', ' ').replace('\n', ' ')
+    if detail:
+        detail = detail[:240]
+        return f'Docker could not run the isolated execution image: {detail}'
+    return 'Docker could not run the isolated execution image. Check Docker Desktop and the runner image.'
+
+
 def _docker_command(container_name):
     return [
         'docker', 'run', '--rm', '--name', container_name,
@@ -111,7 +119,7 @@ def run_in_sandbox(payload):
         return _not_executed('The isolated runner could not start the execution container.')
 
     if process.returncode != 0:
-        return _not_executed('Docker could not run the isolated execution image.')
+        return _not_executed(_docker_failure_message(process))
     try:
         result = json.loads(process.stdout.strip().splitlines()[-1])
     except (IndexError, json.JSONDecodeError):
