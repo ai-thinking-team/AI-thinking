@@ -118,6 +118,16 @@ class TeachBackRubricTests(SimpleTestCase):
 
         self.assertEqual(outcome.result, 'CLEAR_UNDERSTANDING')
 
+    def test_approximate_answer_passes_when_most_core_ideas_are_present(self):
+        outcome = evaluate_teach_back({
+            'failure_reason': 'Each number was not changed.',
+            'correction': 'I double the current value and put it in the result.',
+            'concept': 'The loop handles one value at a time.',
+        }, LOOP_VALUES_TEACH_BACK_RUBRIC)
+
+        self.assertEqual(outcome.result, 'CLEAR_UNDERSTANDING')
+        self.assertEqual(outcome.rubric_evidence['grading_mode'], 'core_ideas_majority')
+
     def test_invalid_rubric_fails_closed_with_one_question(self):
         outcome = evaluate_teach_back({'concept': 'Anything'}, {'criteria': [{}]})
 
@@ -797,7 +807,7 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertEqual(response.content.decode().count('Focused follow-up:'), 1)
 
     @override_settings(AI_PROVIDER_CLASS=PARTIAL_TEACH_BACK_PROVIDER)
-    def test_ai_marks_only_wrong_answer_red_and_preserves_all_answers(self):
+    def test_ai_accepts_a_concise_answer_when_core_ideas_are_present(self):
         self.advance_to_revision()
         with override_settings(CODE_RUNNER_GATEWAY_CLASS=PASSING_GATEWAY):
             self.client.post(self.url, {
@@ -819,18 +829,12 @@ class CodingWorkflowBrowserTests(TestCase):
             **{f'teach-{field}': answer for field, answer in submitted.items()},
         })
 
-        self.assertEqual(response.status_code, 200)
-        form = response.context['teach_back_form']
-        for field, answer in submitted.items():
-            self.assertEqual(form[field].value(), answer)
-        self.assertTrue(form['failure_reason'].errors)
-        self.assertFalse(form['correction'].errors)
-        self.assertContains(response, 'answer-needs-revision', count=1)
-        self.assertEqual(LearningSession.objects.get().current_state, WorkflowState.TEACH_BACK)
-        self.assertEqual(TeachBackAttempt.objects.get().rubric_evidence['evaluation_source'], 'AI')
-        refreshed_form = self.client.get(self.url).context['teach_back_form']
-        for field, answer in submitted.items():
-            self.assertEqual(refreshed_form[field].value(), answer)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(LearningSession.objects.get().current_state, WorkflowState.TRANSFER_TASK)
+        teach_back = TeachBackAttempt.objects.get()
+        self.assertEqual(teach_back.evaluation, 'CLEAR_UNDERSTANDING')
+        self.assertEqual(teach_back.rubric_evidence['evaluation_source'], 'AI')
+        self.assertEqual(teach_back.rubric_evidence['minimum_core_fields'], 2)
 
     def test_teach_back_can_report_misconception_remains_with_one_follow_up(self):
         self.advance_to_revision()

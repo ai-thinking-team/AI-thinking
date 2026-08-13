@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 
 
 LOOP_VALUES_TEACH_BACK_RUBRIC = {
@@ -24,7 +25,7 @@ LOOP_VALUES_TEACH_BACK_RUBRIC = {
             'meaning': 'Connects one loop iteration and its current value to the wrong result.',
             'required_groups': [
                 ['each', 'every', 'current', 'item', 'value', 'element', 'mỗi', 'từng', 'phần tử', 'giá trị'],
-                ['unchanged', 'not transform', 'did not transform', 'returned', 'whole list', 'failed',
+                ['unchanged', 'not changed', 'not transform', 'did not transform', 'returned', 'whole list', 'failed',
                  'không đổi', 'không biến đổi', 'trả về', 'cả danh sách', 'thất bại'],
             ],
             'feedback': 'The explanation does not yet connect one loop iteration to the wrong result.',
@@ -142,6 +143,14 @@ def _valid_rubric(rubric):
     return True
 
 
+def _core_understanding_threshold(criteria):
+    """Accept a concise explanation when most required ideas are present."""
+    required = [item for item in criteria if item.get('required_for_clear', True)]
+    if not required:
+        return 1
+    return max(1, math.ceil(len(required) * 0.67))
+
+
 def evaluate_teach_back(response, rubric):
     if not _valid_rubric(rubric):
         return TeachBackEvaluation(
@@ -207,6 +216,28 @@ def evaluate_teach_back(response, rubric):
                 'field_evaluations': field_evaluations,
             },
             misconception_code=misconception['code'],
+        )
+
+    required_criteria = [
+        criterion for criterion in rubric['criteria']
+        if criterion.get('required_for_clear', True)
+    ]
+    passed_required = [
+        criterion['id'] for criterion in required_criteria
+        if criterion['id'] in passed_criteria
+    ]
+    if len(passed_required) >= _core_understanding_threshold(rubric['criteria']):
+        return TeachBackEvaluation(
+            result='CLEAR_UNDERSTANDING',
+            feedback='Your explanation covers the main idea well enough to continue.',
+            follow_up_question='',
+            rubric_evidence={
+                'rubric_valid': True,
+                'grading_mode': 'core_ideas_majority',
+                'passed_criteria': passed_criteria,
+                'passed_required_criteria': passed_required,
+                'field_evaluations': field_evaluations,
+            },
         )
 
     if first_unmet:

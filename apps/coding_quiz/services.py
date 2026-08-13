@@ -588,13 +588,27 @@ def _curated_teach_back_payload(response, rubric, *, hint_level=1, followups=Non
     outcome = evaluate_teach_back(response, rubric)
     field_evaluations = outcome.rubric_evidence.get('field_evaluations', [])
     followups = followups or {}
+    fallback_followup = outcome.follow_up_question
+    if not fallback_followup:
+        unmet = next(
+            (criterion for criterion in rubric['criteria']
+             if not next(
+                 (item['understood'] for item in field_evaluations
+                  if item['field'] == criterion['field']),
+                 False,
+             )),
+            None,
+        )
+        fallback_followup = unmet['follow_up_question'] if unmet else CURATED_TEACH_BACK_FOLLOWUPS[1]
     return {
         'field_evaluations': field_evaluations,
         'misconception_code': outcome.misconception_code or 'none',
         'follow_up_question': (
-            '' if outcome.result == 'CLEAR_UNDERSTANDING'
+            '' if outcome.result == 'CLEAR_UNDERSTANDING' and all(
+                item.get('understood') for item in field_evaluations
+            )
             else (
-                outcome.follow_up_question
+                fallback_followup
                 if hint_level == 1
                 else followups.get(
                     str(hint_level),
@@ -718,10 +732,17 @@ def submit_teach_back(*, learning_session, response, ai_provider=None):
     failed_required_fields = [
         field for field in required_fields if not evaluations[field].understood
     ]
+    passed_required_fields = [
+        field for field in required_fields if evaluations[field].understood
+    ]
+    # A Teach-Back is evidence of understanding, not a terminology exam. For the
+    # coding MVP, most core ideas are sufficient; optional prevention/original-issue
+    # fields remain useful evidence but do not block progress.
+    minimum_core_fields = max(1, (len(required_fields) * 2 + 2) // 3)
     misconception_code = orchestration.response.misconception_code
     if misconception_code != 'none':
         result = 'MISCONCEPTION_REMAINS'
-    elif failed_required_fields:
+    elif len(passed_required_fields) < minimum_core_fields:
         result = 'PARTIAL_UNDERSTANDING'
     else:
         result = 'CLEAR_UNDERSTANDING'
@@ -755,6 +776,9 @@ def submit_teach_back(*, learning_session, response, ai_provider=None):
         'data_minimized': True,
         'required_fields': list(required_fields),
         'failed_required_fields': failed_required_fields,
+        'passed_required_fields': passed_required_fields,
+        'minimum_core_fields': minimum_core_fields,
+        'grading_mode': 'core_ideas_majority',
         'hint_level': hint_level,
         'solution_revealed': assisted_completion,
         'field_evaluations': [item.to_dict() for item in orchestration.response.field_evaluations],
