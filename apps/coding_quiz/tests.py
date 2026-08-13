@@ -195,7 +195,7 @@ class CodingWorkflowBrowserTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 3)
+        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 4)
         exercise = CodingExercise.objects.select_related('activity').get(slug='double-numbers')
         self.assertEqual(response.context['exercise'], exercise)
         self.assertContains(response, 'Double every number')
@@ -247,7 +247,7 @@ class CodingWorkflowBrowserTests(TestCase):
     def test_catalog_validation_command_accepts_the_versioned_catalog(self):
         output = StringIO()
         call_command('validate_coding_catalog', stdout=output)
-        self.assertIn('Catalog valid: 3 exercise(s).', output.getvalue())
+        self.assertIn('Catalog valid: 4 exercise(s).', output.getvalue())
 
     def test_catalog_validation_rejects_unknown_runner_test_id(self):
         invalid_catalog = deepcopy(CODING_CATALOG)

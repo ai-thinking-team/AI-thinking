@@ -63,6 +63,36 @@ def _entry(*, slug, order, title, prompt, starter_code, public_description,
 
 CODING_CATALOG = (
     _entry(
+        slug='lookup-dictionary-grade', order=4,
+        title='Look up a dictionary value',
+        prompt='Write a function that returns a student grade by name, or 0 when the name is missing.',
+        starter_code='def lookup_grade(grades, student_name):\n    return 0',
+        public_description="lookup_grade({'Aki': 92, 'Mina': 85}, 'Mina') should return 85.",
+        public_test_ids=['lookup-public'], hidden_test_ids=['lookup-missing-key', 'lookup-other-key'],
+        operation='looked up by key', operation_terms=['key', 'lookup', 'get', 'dictionary', 'value'],
+        diagnosis_question='How does a dictionary identify the value for one student name, and what happens when that name is missing?',
+        diagnosis_hints={
+            '2': 'A dictionary stores values under keys. Which input is the key?',
+            '3': 'Which dictionary operation retrieves the value for the key "Mina"?',
+            '4': 'Use the student name as a key, then which operation safely retrieves the value?',
+        },
+        diagnosis_answer='The student name is the dictionary key. Use a safe lookup and 0 as the fallback when the key is absent.',
+        revision_hints=[
+            'Which argument identifies the student to find?',
+            'Which data structure should treat the student name as a key rather than a list index?',
+            'A missing key should produce 0; which lookup supports that?',
+            'Which safe dictionary operation completes `return grades.____(student_name, 0)`?',
+        ],
+        revision_solution='Use `return grades.get(student_name, 0)`: the name is a dictionary key and get supplies 0 when absent.',
+        teach_back_answer='The student name is a dictionary key rather than a numeric list index. A safe key lookup supplies 0 when missing.',
+        transfer={
+            'title': 'Look up a dictionary price transfer check',
+            'prompt': 'Return the price for a product name, or -1 when the product is missing.',
+            'test_ids': ['price-public', 'price-missing', 'price-other'],
+            'action_terms': ['key', 'lookup', 'get', 'dictionary', 'value', 'fallback'],
+        },
+    ),
+    _entry(
         slug='double-numbers',
         order=1,
         title='Double every number',

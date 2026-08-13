@@ -8,6 +8,22 @@ from .server import run_in_sandbox
 
 
 class HarnessTests(TestCase):
+    def test_dictionary_lookup_cases(self):
+        result = execute({
+            'language': 'python',
+            'source_code': 'def lookup_grade(grades, student_name):\n    return grades.get(student_name, 0)',
+            'test_case_ids': ['lookup-public', 'lookup-missing-key', 'lookup-other-key'],
+        })
+        self.assertEqual(result['status'], 'PASSED')
+
+    def test_dictionary_transfer_cases(self):
+        result = execute({
+            'language': 'python',
+            'source_code': 'def lookup_price(prices, product):\n    return prices.get(product, -1)',
+            'test_case_ids': ['price-public', 'price-missing', 'price-other'],
+        })
+        self.assertEqual(result['status'], 'PASSED')
+
     def test_curated_public_and_hidden_tests_pass(self):
         result = execute({
             'language': 'python',

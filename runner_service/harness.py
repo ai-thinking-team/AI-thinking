@@ -8,6 +8,12 @@ from pathlib import Path
 
 
 TEST_CATALOG = {
+    'lookup-public': {'function': 'lookup_grade', 'args': ({'Aki': 92, 'Mina': 85}, 'Mina'), 'expected': 85, 'public': True},
+    'lookup-missing-key': {'function': 'lookup_grade', 'args': ({}, 'Mina'), 'expected': 0, 'public': False},
+    'lookup-other-key': {'function': 'lookup_grade', 'args': ({'Aki': 92, 'Mina': 85, 'Ren': 78}, 'Ren'), 'expected': 78, 'public': False},
+    'price-public': {'function': 'lookup_price', 'args': ({'pen': 3, 'book': 12}, 'book'), 'expected': 12, 'public': False},
+    'price-missing': {'function': 'lookup_price', 'args': ({}, 'book'), 'expected': -1, 'public': False},
+    'price-other': {'function': 'lookup_price', 'args': ({'pen': 3, 'book': 12, 'bag': 20}, 'bag'), 'expected': 20, 'public': False},
     'double-public': {
         'function': 'double_numbers',
         'args': ([1, 3],),
