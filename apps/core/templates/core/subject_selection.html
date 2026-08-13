@@ -1,41 +1,26 @@
 <section class="subject-grid" aria-label="Learning areas">
-  <a class="card {% if 'mathematics' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'math_quiz:home' %}">
-    <div class="card-header">
-      <h2>Mathematics</h2>
-      {% if 'mathematics' in mastered_subjects %}
-        <span class="badge badge-mastered">🌟 Mastered!</span>
-      {% endif %}
-    </div>
-    <p>Reason through calculations, formulas, and concepts.</p>
+  <a class="card" href="{% url 'math_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">{% include "components/icons/math.html" %}</svg>
+    <h2>Mathematics</h2>
+    <p>Calculations &amp; concepts.</p>
   </a>
-
-  <a class="card {% if 'coding' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'coding_quiz:home' %}">
-    <div class="card-header">
-      <h2>Coding</h2>
-      {% if 'coding' in mastered_subjects %}
-        <span class="badge badge-mastered">🌟 Mastered!</span>
-      {% endif %}
-    </div>
-    <p>Plan, write, diagnose, revise, teach back, and transfer.</p>
+  <a class="card" href="{% url 'coding_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">{% include "components/icons/coding.html" %}</svg>
+    <h2>Coding</h2>
+    <p>Write, diagnose, transfer.</p>
   </a>
-
-  <a class="card {% if 'languages' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'lang_quiz:home' %}">
-    <div class="card-header">
-      <h2>Languages (言語)</h2>
-      {% if 'languages' in mastered_subjects %}
-        <span class="badge badge-mastered">🌟 Mastered!</span>
-      {% endif %}
-    </div>
-    <p>Practice vocabulary, grammar, reading, file-based AI quizzes, and transfer checks.</p>
+  <a class="card" href="{% url 'lang_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">{% include "components/icons/languages.html" %}</svg>
+    <h2>Languages</h2>
+    <p>Vocabulary &amp; grammar.</p>
   </a>
-
-  <a class="card {% if 'other-subjects' in mastered_subjects %}mastered-card{% endif %}" href="{% url 'other_quiz:home' %}">
-    <div class="card-header">
-      <h2>Other Subjects</h2>
-      {% if 'other-subjects' in mastered_subjects %}
-        <span class="badge badge-mastered">🌟 Mastered!</span>
-      {% endif %}
-    </div>
-    <p>Use rubrics and evidence for broader learning tasks.</p>
+  <a class="card" href="{% url 'other_quiz:home' %}">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">{% include "components/icons/other.html" %}</svg>
+    <h2>Other Subjects</h2>
+    <p>Rubrics &amp; evidence.</p>
   </a>
 </section>

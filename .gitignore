@@ -9,5 +9,7 @@ db.sqlite3
 .DS_Store
 .pytest_cache/
 .coverage
+design_prototype/
 .venv_ubuntu/
 .vscode/
+

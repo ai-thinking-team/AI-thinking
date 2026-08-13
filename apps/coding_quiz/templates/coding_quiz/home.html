@@ -2,9 +2,15 @@
 
 {% block title %}Coding{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Coding" subject_icon="coding" %}{% endblock %}
+
 {% block content %}
 <h1>Coding</h1>
-<p>The first MVP supports beginner Python only. Passing tests is necessary, but Teach-Back and an unassisted Transfer Check are also required for mastery.</p>
+<p>The first MVP supports beginner Python only. Passing tests is necessary, but Teach-Back and an unassisted Transfer
+    Check are also required for mastery.</p>
 {% include "components/progress_bar.html" %}
-<a class="card" href="{% url 'coding_quiz:exercise' %}"><h2>Python loops: Double every number</h2><p>Open the detailed scaffold exercise.</p></a>
+<a class="card" href="{% url 'coding_quiz:exercise' %}">
+    <h2>Python loops: Double every number</h2>
+    <p>Open the detailed scaffold exercise.</p>
+</a>
 {% endblock %}

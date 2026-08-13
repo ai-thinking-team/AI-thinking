@@ -2,6 +2,8 @@
 
 {% block title %}Coding exercise{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Coding" subject_icon="coding" %}{% endblock %}
+
 {% block content %}
 <h1>{{ exercise.title }}</h1>
 {% include "components/progress_bar.html" %}
@@ -25,13 +27,27 @@
   </form>
 </section>
 
-{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status }} — {{ execution_result.message }}</p>{% endif %}
+{% if execution_result %}<p class="status"><strong>Test status:</strong> {{ execution_result.status }} — {{
+  execution_result.message }}</p>{% endif %}
 <section class="subject-grid">
-  <article class="panel"><h2>Diagnosis</h2><p>One focused question examines a possible misconception before direct help.</p></article>
-  <article class="panel"><h2>Revision</h2><p>Each hint must be followed by a new code or reasoning action.</p></article>
-  <article class="panel"><h2>Teach-Back</h2><p>Explain the original error, correction, concept, and prevention strategy.</p></article>
-  <article class="panel"><h2>Transfer Check</h2><p>Solve a parallel Python task with AI and hints disabled.</p></article>
+  <article class="panel">
+    <h2>Diagnosis</h2>
+    <p>One focused question examines a possible misconception before direct help.</p>
+  </article>
+  <article class="panel">
+    <h2>Revision</h2>
+    <p>Each hint must be followed by a new code or reasoning action.</p>
+  </article>
+  <article class="panel">
+    <h2>Teach-Back</h2>
+    <p>Explain the original error, correction, concept, and prevention strategy.</p>
+  </article>
+  <article class="panel">
+    <h2>Transfer Check</h2>
+    <p>Solve a parallel Python task with AI and hints disabled.</p>
+  </article>
 </section>
 {% include "components/hint_panel.html" %}
-<p><strong>AI support:</strong> {% if ai_enabled %}Available for a focused diagnostic question.{% else %}Locked by the server-controlled workflow.{% endif %}</p>
+<p><strong>AI support:</strong> {% if ai_enabled %}Available for a focused diagnostic question.{% else %}Locked by the
+  server-controlled workflow.{% endif %}</p>
 {% endblock %}

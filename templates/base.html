@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {% load static %}
 <!doctype html>
 <html lang="en">
@@ -12,3 +13,21 @@
   <main class="container">{% block content %}{% endblock %}</main>
 </body>
 </html>
+=======
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}gPBL Learning App{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+</head>
+<body>
+  {% block navbar %}{% include "components/navbar.html" %}{% endblock %}
+  <main class="container">{% block content %}{% endblock %}</main>
+</body>
+</html>
+>>>>>>> origin/main

@@ -1,4 +1,35 @@
+<<<<<<< HEAD
 <nav class="navbar" aria-label="Primary navigation">
   <a href="{% url 'core:home' %}">Learning areas</a>
   <a href="{% url 'progress:dashboard' %}">Progress</a>
 </nav>
+=======
+<nav class="navbar" aria-label="Primary navigation">
+  <div class="navbar-back">
+    <button type="button" class="navbar-back-btn" onclick="history.back()" aria-label="Go back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+  </div>
+  <div class="navbar-center">
+    {% if subject_name %}
+      <span class="navbar-subject">
+        <span class="navbar-subject-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            {% if subject_icon == "math" %}{% include "components/icons/math.html" %}
+            {% elif subject_icon == "coding" %}{% include "components/icons/coding.html" %}
+            {% elif subject_icon == "languages" %}{% include "components/icons/languages.html" %}
+            {% elif subject_icon == "other" %}{% include "components/icons/other.html" %}
+            {% else %}{% include "components/icons/generic.html" %}
+            {% endif %}
+          </svg>
+        </span>
+        {{ subject_name }}
+      </span>
+    {% endif %}
+  </div>
+  <div class="navbar-links">
+    <a href="{% url 'core:home' %}">Home</a>
+    <a href="{% url 'progress:dashboard' %}">Progress</a>
+  </div>
+</nav>
+>>>>>>> origin/main
