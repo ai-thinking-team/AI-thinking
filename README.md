@@ -208,6 +208,16 @@ venv\Scripts\python.exe manage.py check_ai_provider
 
 The command reports only a safe status code and latency; it never prints the API key.
 
+Run the opt-in end-to-end Coding check while the local runner is healthy. This executes real
+Dictionary code in Docker and calls the configured AI provider; transient provider rate limits are
+expected to exercise the curated fallback path without blocking the workflow:
+
+```powershell
+$env:RUN_LIVE_CODING_INTEGRATION='1'
+venv\Scripts\python.exe manage.py test apps.coding_quiz.tests.LiveCodingIntegrationTests --settings=config.settings_test
+Remove-Item Env:RUN_LIVE_CODING_INTEGRATION
+```
+
 Do not commit or paste either key into source code. When `AI_PROVIDER_CLASS` is omitted, Django
 selects DeepSeek when `DEEPSEEK_API_KEY` is present, otherwise Gemini when `GEMINI_API_KEY` is
 present. The Coding Diagnosis sends only privacy-minimized

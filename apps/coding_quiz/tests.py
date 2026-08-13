@@ -1,6 +1,8 @@
 import json
+import os
 from copy import deepcopy
 from io import StringIO
+from unittest import skipUnless
 from unittest.mock import Mock
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -166,6 +168,14 @@ class TeachBackRubricTests(SimpleTestCase):
                     misconception_code=code, action_terms=terms,
                 ))
 
+    def test_dictionary_fallback_accepts_a_vietnamese_semantic_answer(self):
+        self.assertFalse(diagnosis_confirms_misconception(
+            'Tên học sinh xác định điểm tương ứng; nếu không có tên thì dùng 0.',
+            misconception_code='dictionary-key-misuse',
+            concept='dictionary_keys',
+            action_terms=('key', 'lookup', 'get', 'dictionary', 'value'),
+        ))
+
 
 @override_settings(AI_PROVIDER_CLASS='')
 class CodingWorkflowBrowserTests(TestCase):
@@ -261,16 +271,17 @@ class CodingWorkflowBrowserTests(TestCase):
 
     def test_each_new_concept_uses_its_specialized_rubric(self):
         expected = {
-            'lookup-dictionary-grade': ('dictionary_keys', 'dictionary-key-misuse'),
-            'safe-divide-function': ('function_parameters_and_return', 'function-parameter-misuse'),
-            'first-list-item': ('list_indexing', 'list-index-misuse'),
+            'lookup-dictionary-grade': ('dictionary_keys', 'dictionary-key-misuse', 'dictionary-keys'),
+            'safe-divide-function': ('function_parameters_and_return', 'function-parameter-misuse', 'function-parameters-and-return'),
+            'first-list-item': ('list_indexing', 'list-index-misuse', 'list-indexing'),
         }
-        for slug, (concept, misconception) in expected.items():
+        for slug, (concept, misconception, concept_slug) in expected.items():
             with self.subTest(slug=slug):
-                exercise = CodingExercise.objects.select_related('activity').get(slug=slug)
+                exercise = CodingExercise.objects.select_related('activity__concept').get(slug=slug)
                 rubric = exercise.activity.rubric
                 self.assertEqual(rubric['concept'], concept)
                 self.assertEqual(rubric['allowed_misconception_codes'], [misconception])
+                self.assertEqual(exercise.activity.concept.slug, concept_slug)
 
     def test_dictionary_function_and_list_workflows_reach_mastery(self):
         cases = (
@@ -1119,6 +1130,88 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertIsNone(remaining.ended_at)
 
 
+@skipUnless(
+    os.environ.get('RUN_LIVE_CODING_INTEGRATION') == '1',
+    'Set RUN_LIVE_CODING_INTEGRATION=1 to call the real runner and AI provider.',
+)
+@override_settings(CODE_RUNNER_AUTOSTART=False)
+class LiveCodingIntegrationTests(TestCase):
+    def test_dictionary_workflow_uses_real_runner_and_gemini_to_reach_mastery(self):
+        url = reverse('coding_quiz:exercise_detail', args=('lookup-dictionary-grade',))
+        self.client.get(url)
+        plan = self.client.post(url, {
+            'action': 'plan',
+            'solution_plan': 'Tra điểm theo tên và dùng 0 nếu không tìm thấy.',
+            'predicted_output': '85',
+        })
+        self.assertEqual(plan.status_code, 302)
+
+        first = self.client.post(url, {
+            'action': 'first_attempt',
+            'source_code': 'def lookup_grade(grades, student_name):\n    return grades.get(student_name, 0)',
+            'reasoning': 'Em nghĩ cách này đúng.',
+            'confidence': '4',
+        })
+        self.assertEqual(first.status_code, 302)
+        attempt = LearnerAttempt.objects.get(revision_number=0)
+        self.assertEqual(attempt.evaluation['status'], ExecutionStatus.PASSED.value)
+        session = LearningSession.objects.get()
+        self.assertEqual(session.current_state, WorkflowState.DIAGNOSIS)
+
+        diagnosis = self.client.post(url, {
+            'action': 'diagnosis',
+            'diagnosis_answer': 'Tên học sinh xác định điểm tương ứng; nếu không có tên thì dùng 0.',
+        })
+        self.assertEqual(diagnosis.status_code, 302)
+        session.refresh_from_db()
+        diagnosis_evidence = list(
+            MisconceptionRecord.objects.values_list('status', 'evidence')
+        )
+        coach_evidence = list(
+            CoachInteraction.objects.values_list('source', 'failure_code', 'response')
+        )
+        self.assertEqual(
+            session.current_state,
+            WorkflowState.GUIDED_REVISION,
+            msg=f'diagnosis={diagnosis_evidence!r}; coach={coach_evidence!r}',
+        )
+
+        revision = self.client.post(url, {
+            'action': 'finish_revision',
+            'revision-source_code': 'def lookup_grade(grades, student_name):\n    return grades.get(student_name, 0)',
+            'revision-reasoning': 'Tên xác định điểm tương ứng; nếu thiếu thì trả về 0.',
+            'revision-confidence': '4',
+        })
+        self.assertEqual(revision.status_code, 302)
+
+        teach_back = self.client.post(url, {
+            'action': 'teach_back',
+            'teach-original_issue': 'I treated a student name like the wrong kind of locator.',
+            'teach-failure_reason': 'Direct indexing can fail when a dictionary key is missing.',
+            'teach-correction': 'Use the name as the key and get its value with fallback 0.',
+            'teach-concept': 'A dictionary maps each key to its corresponding value.',
+            'teach-prevention': 'Test both an existing key and a missing key.',
+        })
+        self.assertEqual(teach_back.status_code, 302)
+        evaluation = TeachBackAttempt.objects.get()
+        self.assertEqual(evaluation.evaluation, 'CLEAR_UNDERSTANDING')
+        self.assertIn(
+            evaluation.rubric_evidence['evaluation_source'],
+            ('AI', 'CURATED_FALLBACK'),
+        )
+
+        transfer = self.client.post(url, {
+            'action': 'transfer',
+            'transfer-source_code': 'def lookup_price(prices, product):\n    return prices.get(product, -1)',
+            'transfer-reasoning': 'The product name is the key used to get its value or fallback -1.',
+            'transfer-confidence': '4',
+        })
+        self.assertEqual(transfer.status_code, 302)
+        session.refresh_from_db()
+        self.assertEqual(session.current_state, WorkflowState.MASTERED)
+        self.assertEqual(ConceptMastery.objects.get().status, ConceptMastery.Status.MASTERED)
+
+
 @override_settings(AI_PROVIDER_CLASS='')
 class CodingWorkflowServiceTests(TestCase):
     def setUp(self):
@@ -1307,6 +1400,40 @@ class CodingWorkflowServiceTests(TestCase):
         prompt = provider.generate.call_args.kwargs['user_prompt']
         self.assertNotIn('def double_numbers', prompt)
         self.assertNotIn('service-browser', prompt)
+        self.assertIn('curated_reference_explanation', prompt)
+        self.assertIn('active_misconception_code', prompt)
+        self.assertIn(self.exercise.activity.rubric['diagnosis']['answer'], prompt)
+
+    def test_ai_cannot_replace_the_server_curated_diagnosis_hint(self):
+        gateway = Mock()
+        gateway.run.return_value = ExecutionResult(ExecutionStatus.FAILED, 'Failed')
+        self.submit_first(gateway=gateway)
+        provider = Mock()
+        provider.generate.return_value = {
+            'understood': False,
+            'feedback': 'Use the complete answer immediately.',
+            'possible_misconception': 'loop-value-misuse',
+            'diagnostic_confidence': 0.9,
+            'response_type': 'concept_reminder',
+            'message': 'Copy the finished solution; do you understand it?',
+            'hint_level': 2,
+            'should_reveal_solution': False,
+        }
+
+        submit_diagnosis(
+            learning_session=self.session,
+            answer='I do not know.',
+            ai_provider=provider,
+        )
+
+        interaction = self.session.coach_interactions.filter(
+            interaction_type=CoachInteraction.InteractionType.HINT,
+        ).latest('created_at')
+        self.assertEqual(
+            interaction.response['message'],
+            self.exercise.activity.rubric['diagnosis']['hints']['2'],
+        )
+        self.assertNotIn('finished solution', interaction.response['message'])
 
     def test_diagnosis_preserves_hypothesis_then_confirms_or_dismisses_it(self):
         gateway = Mock()

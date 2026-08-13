@@ -36,19 +36,33 @@ def diagnosis_confirms_misconception(answer, *, misconception_code=None,
     """Return whether an answer still misses the concept-specific core idea."""
     normalized = answer.casefold()
     if misconception_code == 'dictionary-key-misuse' or concept == 'dictionary_keys':
+        value_terms = tuple(action_terms or ()) + (
+            'value', 'lookup', 'get', 'fallback', 'grade', 'score', 'point',
+            'giá trị', 'điểm', 'tra', 'tìm', 'dùng 0', 'trả về 0',
+        )
         return not (
-            _contains_term(normalized, ('key', 'name', 'student'))
-            and _contains_term(normalized, tuple(action_terms or ('value', 'lookup', 'get', 'fallback')))
+            _contains_term(normalized, ('key', 'name', 'student', 'tên', 'học sinh'))
+            and _contains_term(normalized, value_terms)
         )
     if misconception_code == 'function-parameter-misuse' or concept == 'function_parameters_and_return':
+        return_terms = tuple(action_terms or ()) + (
+            'zero', 'return', 'divide', 'check', 'không', 'trả về', 'chia', 'kiểm tra',
+        )
         return not (
-            _contains_term(normalized, ('parameter', 'argument', 'denominator', 'input'))
-            and _contains_term(normalized, tuple(action_terms or ('zero', 'return', 'divide', 'check')))
+            _contains_term(normalized, (
+                'parameter', 'argument', 'denominator', 'input', 'tham số', 'đối số', 'mẫu số',
+            ))
+            and _contains_term(normalized, return_terms)
         )
     if misconception_code == 'list-index-misuse' or concept == 'list_indexing':
+        boundary_terms = tuple(action_terms or ()) + (
+            'empty', 'none', 'return', 'check', 'rỗng', 'trả về', 'kiểm tra',
+        )
         return not (
-            _contains_term(normalized, ('index', 'position', 'first', 'item'))
-            and _contains_term(normalized, tuple(action_terms or ('empty', 'none', 'return', 'check')))
+            _contains_term(normalized, (
+                'index', 'position', 'first', 'item', 'chỉ số', 'vị trí', 'đầu tiên', 'phần tử',
+            ))
+            and _contains_term(normalized, boundary_terms)
         )
     return diagnosis_confirms_loop_value_misconception(answer, action_terms=action_terms)
 

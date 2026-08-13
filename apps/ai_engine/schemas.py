@@ -306,7 +306,8 @@ class DiagnosisEvaluationResponse:
                 'message': {
                     'type': 'string',
                     'description': (
-                        'The next easier question, or the correct conceptual answer at the final level.'
+                        'Empty when understood is true; otherwise the next easier question, or the '
+                        'correct conceptual answer at the final level.'
                     ),
                 },
                 'hint_level': {'type': 'integer', 'enum': [hint_level]},
@@ -344,12 +345,18 @@ def validate_diagnosis_evaluation(payload, *, allowed_misconception_codes,
         raise InvalidAIResponse('The diagnosis hint level does not match the server-selected level.')
     if payload['should_reveal_solution'] is not should_reveal_solution:
         raise InvalidAIResponse('The diagnosis response cannot control solution reveal.')
-    if not isinstance(message, str) or not message.strip() or len(message.strip()) > 1500:
-        raise InvalidAIResponse('The diagnosis message must be concise and non-empty.')
+    if not isinstance(message, str) or len(message.strip()) > 1500:
+        raise InvalidAIResponse('The diagnosis message must be a concise string.')
     message = message.strip()
     if '```' in message:
         raise InvalidAIResponse('Diagnosis feedback cannot include solution code.')
-    if not should_reveal_solution and (message.count('?') != 1 or not message.endswith('?')):
+    if not understood and not message:
+        raise InvalidAIResponse('An unresolved diagnosis must include the next response.')
+    if (
+        not understood
+        and not should_reveal_solution
+        and (message.count('?') != 1 or not message.endswith('?'))
+    ):
         raise InvalidAIResponse('A progressive diagnosis hint must ask exactly one question.')
 
     return DiagnosisEvaluationResponse(

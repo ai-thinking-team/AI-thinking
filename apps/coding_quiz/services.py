@@ -85,16 +85,16 @@ DIAGNOSIS_HINT_TYPES = {
 }
 DIAGNOSIS_HINT_INSTRUCTIONS = {
     2: (
-        'State that the loop variable is one current item, then ask which operation the '
-        'exercise requires for that item. Do not ask for terminology.'
+        'Restate one core relationship from the supplied target concept, then ask which '
+        'operation the exercise requires. Do not ask for terminology.'
     ),
     3: (
-        'Give one short example using different object names, then ask the learner to map '
-        'that example back to the current number. Ask only one question.'
+        'Give one short example in a different context, then ask the learner to map '
+        'that example back to the current exercise. Ask only one question.'
     ),
     4: (
-        'Give an incomplete verbal sequence: take current number, ___ it, append result. '
-        'Ask the learner to fill only the missing operation.'
+        'Give an incomplete verbal sequence using the target concept and operation. '
+        'Ask the learner to fill only one missing step.'
     ),
 }
 CURATED_DIAGNOSIS_HINTS = {
@@ -410,9 +410,9 @@ def _diagnosis_fallback(*, answer, next_level, response_type, reveal_solution,
     return {
         'understood': understood,
         'feedback': (
-            'Your answer connects the current loop item with the required transformation.'
+            'Your answer explains the exercise concept and the required operation.'
             if understood
-            else 'Your answer does not yet explain both the current loop item and what happens to it.'
+            else 'Your answer does not yet connect the exercise concept to the required operation.'
         ),
         'possible_misconception': misconception_code,
         'diagnostic_confidence': 0.6,
@@ -471,6 +471,8 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
         'target_operation': activity.rubric.get('operation', ''),
         'current_question': interaction.response.get('message', ''),
         'learner_answer': answer,
+        'active_misconception_code': misconception_code,
+        'curated_reference_explanation': diagnosis_config.get('answer', ''),
         'current_hint_level': current_level,
         'server_selected_next_level': next_level,
         'server_selected_response_type': response_type,
@@ -483,22 +485,23 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
         'allowed_misconception_codes': list(allowed_codes),
         'data_minimized': True,
     }
+    curated_fallback = _diagnosis_fallback(
+        answer=answer,
+        next_level=next_level,
+        response_type=response_type,
+        reveal_solution=reveal_solution,
+        misconception_code=misconception_code,
+        action_terms=action_terms,
+        diagnosis_config=diagnosis_config,
+        concept=activity.rubric.get('concept'),
+    )
     orchestration = orchestrate_diagnosis_evaluation(
         system_prompt=DIAGNOSIS_EVALUATION_SYSTEM_PROMPT,
         user_prompt=(
             'Evaluate this privacy-minimized diagnostic answer and prepare the server-selected '
             f'next response:\n{json.dumps(prompt_context, ensure_ascii=False)}'
         ),
-        curated_fallback=_diagnosis_fallback(
-            answer=answer,
-            next_level=next_level,
-            response_type=response_type,
-            reveal_solution=reveal_solution,
-            misconception_code=misconception_code,
-            action_terms=action_terms,
-            diagnosis_config=diagnosis_config,
-            concept=activity.rubric.get('concept'),
-        ),
+        curated_fallback=curated_fallback,
         allowed_misconception_codes=allowed_codes,
         response_type=response_type,
         hint_level=next_level,
@@ -514,13 +517,18 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
         )
     else:
         status = MisconceptionRecord.Status.CONFIRMED
+    safe_feedback = (
+        orchestration.response.feedback
+        if understood
+        else curated_fallback['feedback']
+    )
     record = MisconceptionRecord.objects.create(
         learning_session=locked_session,
         concept=previous.concept,
         code=previous.code,
         evidence=(
             f'{orchestration.source} diagnosis evaluation: '
-            f'{orchestration.response.feedback}'
+            f'{safe_feedback}'
         ),
         status=status,
         supersedes=previous,
@@ -528,6 +536,12 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
     if understood:
         transition_session(locked_session, WorkflowState.GUIDED_REVISION)
     else:
+        safe_response = orchestration.response.to_dict()
+        # Gemini decides only whether the learner understood. The server owns the
+        # progressive hint text so a provider cannot leak the reference answer or
+        # bypass the curated hint ladder through its learner-facing message.
+        safe_response['feedback'] = curated_fallback['feedback']
+        safe_response['message'] = curated_fallback['message']
         CoachInteraction.objects.create(
             learning_session=locked_session,
             learner_attempt=interaction.learner_attempt,
@@ -539,7 +553,7 @@ def submit_diagnosis(*, learning_session, answer, ai_provider=None):
                 'current_hint_level': current_level,
                 'data_minimized': True,
             },
-            response=orchestration.response.to_dict(),
+            response=safe_response,
             failure_code=orchestration.failure_code,
         )
     learning_session.current_state = locked_session.current_state

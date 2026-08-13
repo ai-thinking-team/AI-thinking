@@ -137,17 +137,24 @@ def orchestrate_diagnosis_evaluation(*, system_prompt, user_prompt, curated_fall
         'hint_level': hint_level,
         'should_reveal_solution': should_reveal_solution,
     }
-    try:
-        raw_response = generate_ai_response(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            response_schema=DiagnosisEvaluationResponse.schema_contract(**validation_options),
-            provider=provider,
-        )
-        response = validate_diagnosis_evaluation(raw_response, **validation_options)
-        return OrchestratedDiagnosisEvaluation(response=response, source='AI')
-    except AIEngineError as exc:
-        failure_code = type(exc).__name__
+    failure_code = ''
+    schema = DiagnosisEvaluationResponse.schema_contract(**validation_options)
+    for _attempt in range(2):
+        try:
+            raw_response = generate_ai_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_schema=schema,
+                provider=provider,
+            )
+            response = validate_diagnosis_evaluation(raw_response, **validation_options)
+            return OrchestratedDiagnosisEvaluation(response=response, source='AI')
+        except InvalidAIResponse as exc:
+            failure_code = type(exc).__name__
+            continue
+        except AIEngineError as exc:
+            failure_code = type(exc).__name__
+            break
 
     safe_fallback = validate_diagnosis_evaluation(curated_fallback, **validation_options)
     return OrchestratedDiagnosisEvaluation(

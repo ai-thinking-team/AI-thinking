@@ -82,6 +82,17 @@ class InvalidThenValidProvider:
         return VALID_TEACH_BACK
 
 
+class InvalidThenValidDiagnosisProvider:
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return {**VALID_DIAGNOSIS_EVALUATION, 'mastery': 'MASTERED'}
+        return VALID_DIAGNOSIS_EVALUATION
+
+
 class BrokenProvider:
     def generate(self, **kwargs):
         raise RuntimeError('provider failed')
@@ -192,6 +203,19 @@ class DiagnosisEvaluationSchemaTests(SimpleTestCase):
         self.assertIsInstance(response, DiagnosisEvaluationResponse)
         self.assertFalse(response.understood)
 
+    def test_understood_evaluation_does_not_require_an_unused_next_question(self):
+        response = validate_diagnosis_evaluation(
+            {
+                **VALID_DIAGNOSIS_EVALUATION,
+                'understood': True,
+                'message': '',
+            },
+            **self.options,
+        )
+
+        self.assertTrue(response.understood)
+        self.assertEqual(response.message, '')
+
     def test_ai_cannot_change_hint_level_reveal_or_workflow(self):
         invalid_payloads = (
             {**VALID_DIAGNOSIS_EVALUATION, 'hint_level': 4},
@@ -214,6 +238,20 @@ class DiagnosisEvaluationSchemaTests(SimpleTestCase):
 
         self.assertEqual(result.source, 'CURATED_FALLBACK')
         self.assertTrue(result.failure_code)
+
+    def test_invalid_structured_response_is_retried_once(self):
+        provider = InvalidThenValidDiagnosisProvider()
+
+        result = orchestrate_diagnosis_evaluation(
+            system_prompt='evaluate semantically',
+            user_prompt='privacy-minimized question and answer',
+            curated_fallback=VALID_DIAGNOSIS_EVALUATION,
+            provider=provider,
+            **self.options,
+        )
+
+        self.assertEqual(result.source, 'AI')
+        self.assertEqual(provider.calls, 2)
 
 
 class HintResponseSchemaTests(SimpleTestCase):
