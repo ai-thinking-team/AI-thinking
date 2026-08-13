@@ -2,6 +2,8 @@
 
 {% block title %}{{ exercise.activity.title }}{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Coding" subject_icon="coding" %}{% endblock %}
+
 {% block content %}
 <header class="page-header">
   <div>
