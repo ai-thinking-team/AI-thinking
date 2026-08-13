@@ -191,6 +191,28 @@ class MathWorkflowServiceTests(TestCase):
                 session=self.session, answer=wrong_answer, reasoning='もう一度', confidence=2,
             )
 
+    def test_revision_stage_never_reveals_the_answer_before_it_is_submitted(self):
+        # Regression test for the answer-leak bug: walk through diagnosis
+        # and every hint level, and confirm neither the wrong-answer
+        # explanation nor any hint (including level 5, the last resort)
+        # ever contains the section's correct value before the learner
+        # submits it themselves.
+        correct_value = _correct_answer(self.section, kind='first')
+        wrong_answer = str(int(correct_value) + 1000)
+        attempt = services.submit_first_attempt(
+            session=self.session, answer=wrong_answer, reasoning='勘です', confidence=2,
+        )
+        self.assertNotIn(correct_value, attempt.explanation)
+        services.submit_diagnosis(session=self.session, answer='わかりません')
+
+        for _expected_level in range(1, 6):
+            hint = services.ensure_current_hint(session=self.session)
+            self.assertNotIn(correct_value, hint.content)
+            revised = services.submit_revision(
+                session=self.session, answer=wrong_answer, reasoning='まだ違う考え方です', confidence=2,
+            )
+            self.assertNotIn(correct_value, revised.explanation)
+
     def test_full_success_path_reaches_mastered_and_completes_course(self):
         answer = _correct_answer(self.section, kind='first')
         services.submit_first_attempt(
@@ -272,6 +294,29 @@ class MathViewFlowTests(TestCase):
         self.assertContains(response, '最初の解答')
         new_session = Section.objects.get(id=self.section.id).sessions.get()
         self.assertNotEqual(old_pk, new_session.pk)
+
+    def test_revision_page_html_never_contains_the_answer_before_submission(self):
+        correct_value = _correct_answer(self.section, kind='first')
+        wrong_answer = str(int(correct_value) + 1000)
+        self.client.get(self.url)
+        self._post(action='first_attempt', answer=wrong_answer, reasoning='勘です', confidence=2)
+        self._post(action='diagnosis', answer='わかりません')
+
+        # A short number like "-4" can coincidentally appear inside CSS/JS
+        # in an unrelated page, so check the specific answer-reveal phrasing
+        # rather than a bare substring match of the number.
+        leak_patterns = (f'x = {correct_value}', f'答えは {correct_value}', f'= {correct_value} で合っています')
+        for _ in range(5):
+            self._post(action='revision', answer=wrong_answer, reasoning='まだ違います', confidence=2)
+            # Follow the redirect back to the revision/outcome page and
+            # check the rendered HTML itself — not just the service layer —
+            # since that's what the learner actually sees pre-submission.
+            page = self.client.get(self.url)
+            if b'action" value="revision"' not in page.content:
+                break
+            content = page.content.decode()
+            for pattern in leak_patterns:
+                self.assertNotIn(pattern, content)
 
 
 class MathUnitDiagnosticServiceTests(TestCase):
@@ -493,10 +538,14 @@ class MathWordProblemTests(TestCase):
         self.assertIn('=', problem)
         self.assertNotIn('ノート', problem)
 
-    def test_hint_numbers_agree_with_the_word_problem(self):
-        problem, value = demo_content.build_problem(self.word_section, kind='first')
+    def test_hint_level_5_does_not_reveal_the_final_answer(self):
+        # Level 5 is the last-resort hint, but even it must never state the
+        # final answer before the learner submits their own revised answer
+        # (see ai_prompts.HINT_SYSTEM_PROMPT / demo_content.build_hint).
+        _problem, value = demo_content.build_problem(self.word_section, kind='first')
         hint = demo_content.build_hint(section=self.word_section, level=5, kind='first')
-        self.assertIn(str(value), hint)
+        self.assertNotIn(f'x = {value}', hint)
+        self.assertNotIn(f'= {value}。', hint)
 
     def test_word_problem_is_graded_like_any_other_numeric_answer(self):
         session, _ = services.get_or_create_section_session(
@@ -825,6 +874,17 @@ class MathAIFallbackCatalogTests(TestCase):
         )
         self.assertFalse(is_correct)
         self.assertIn(wrong_note, explanation)
+        # The wrong-answer explanation must never reveal the correct value
+        # itself — only after a correct submission is it shown (above).
+        self.assertNotIn(str(answer), explanation)
+
+    def test_generic_fallback_hint_level_5_does_not_reveal_the_answer(self):
+        unit = Unit.objects.create(name='群論', is_demo=False)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        entry = demo_content._ai_fallback_entry(section, kind='first')
+        for level in range(1, 6):
+            hint = demo_content.build_hint(section=section, level=level, kind='first')
+            self.assertNotIn(str(entry['answer']), hint)
 
     def test_diagnosis_verification_hint_avoid_equation_specific_wording_when_fallback_active(self):
         unit = Unit.objects.create(name='群論', is_demo=False)

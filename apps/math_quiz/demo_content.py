@@ -1316,23 +1316,27 @@ def verification_question(section):
 def _generic_fallback_hint(entry, *, level):
     """Subject-neutral 5-level hint ladder used when a fallback problem
     (see AI_FALLBACK_PROBLEMS) is active — the equation-specific hints
-    below ("移項"/符号 handling) wouldn't apply to an arbitrary subject."""
+    below ("移項"/符号 handling) wouldn't apply to an arbitrary subject.
+    Level 5 is the last-resort hint but, like every other level, must never
+    state the final answer itself — only the submitted revision reveals
+    whether the learner got there (see services._judge)."""
     hints = (
         '問題文をもう一度読んで、何を求められているか整理しましょう。',
         'この分野で使う基本的な公式や定理を思い出してみましょう。',
         '似たような例題を思い浮かべ、同じ手順で進めてみましょう。',
         '途中の計算を1つずつ書き出して、どこで止まっているか確認しましょう。',
-        f"完全な解答のヒント: 答えは {entry['answer']} です。どの手順でこの値にたどり着けるか、"
-        '公式に当てはめて振り返ってみましょう。',
+        '最後のヒントです。使うべき公式や考え方はここまでのヒントで示した通りです。'
+        '問題の数値をその公式にそのまま代入し、計算を最後まで一つずつ実行してみましょう。',
     )
     return hints[level - 1]
 
 
 def build_hint(*, section, level, kind='first', salt=0):
     """`salt` must match whichever variant was actually shown as the
-    problem (see build_unique_problem) — otherwise level 5's answer
-    reveal, or the worked example's numbers, could belong to a different
-    variant than the one the learner is actually solving."""
+    problem (see build_unique_problem) — otherwise the worked example's
+    numbers could belong to a different variant than the one the learner
+    is actually solving. No level (including 5, the last resort) states
+    the final answer itself — see _generic_fallback_hint."""
     fallback = _ai_fallback_entry(section, kind=kind, salt=salt)
     if fallback is not None:
         return _generic_fallback_hint(fallback, level=level)
@@ -1354,8 +1358,8 @@ def build_hint(*, section, level, kind='first', salt=0):
         f'{"引いて" if example_b >= 0 else "足して"} {example_a}x = {example_c - example_b} にします。',
         f'この問題では、まず両辺から{abs(b)}を{"引いて" if b >= 0 else "足して"} {a}x = {step1_c} の形にします。'
         'そのあと両辺を係数で割ります。',
-        f'完全な解答: {_equation_text(a, b, c)} → 両辺から{abs(b)}を{"引いて" if b >= 0 else "足して"} '
-        f'{a}x = {step1_c} → 両辺を{a}で割って x = {x}。',
+        f'最後のステップです。{a}x = {step1_c} の両辺を {a} で割ってください。'
+        '割り算を最後まで計算すれば、答えが求まります。',
     )
     return hints[level - 1]
 
