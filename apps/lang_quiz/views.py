@@ -109,10 +109,11 @@ def start_vocabulary(request, answer_mode):
 def start_course(request, course_slug):
     if course_slug not in COURSES:
         raise Http404('Unknown course')
+    difficulty = difficulty_from_diagnostic(_session_key(request), 'vocabulary')
     return _create_run(
         request,
         section='vocabulary',
-        questions=get_course_questions(course_slug),
+        questions=get_course_questions(course_slug, difficulty=difficulty),
         mode='course',
         course_slug=course_slug,
     )

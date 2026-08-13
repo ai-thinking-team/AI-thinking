@@ -39,6 +39,20 @@ AI_QUESTION_SCHEMA = [{
 
 VOCABULARY_ANSWER_MODES = {'multiple_choice', 'typing'}
 DIFFICULTY_LABELS = {'beginner', 'intermediate', 'advanced'}
+DIFFICULTY_GUIDANCE = {
+    'beginner': (
+        'Use common everyday words, short sentences, direct clues, basic grammar, '
+        'and literal reading comprehension comparable to CEFR A1-A2.'
+    ),
+    'intermediate': (
+        'Use moderately varied vocabulary, multi-clause sentences, common academic contexts, '
+        'and a mix of direct and inferential reasoning comparable to CEFR B1-B2.'
+    ),
+    'advanced': (
+        'Use nuanced academic or professional vocabulary, complex grammar and sentence structures, '
+        'subtle contextual distinctions, and deeper inference comparable to CEFR C1-C2.'
+    ),
+}
 
 
 def _vocabulary_choices(answer, provided=None):
@@ -193,6 +207,7 @@ def course_catalog(session_key):
         for item in LanguageCourseProgress.objects.filter(browser_session_key=session_key)
     }
     catalog = []
+    recommended_difficulty = difficulty_from_diagnostic(session_key, 'vocabulary')
     for slug, course in COURSES.items():
         item = progress.get(slug)
         catalog.append({
@@ -201,6 +216,7 @@ def course_catalog(session_key):
             'description': course['description'],
             'score_percent': item.score_percent if item else 0,
             'completed': item.completed if item else False,
+            'difficulty': recommended_difficulty,
         })
     return catalog
 
@@ -259,7 +275,10 @@ def _questions_from_ai(specs, section, count, *, answer_mode='multiple_choice', 
     return questions
 
 
-def generate_section_questions(section, *, count=10, answer_mode='multiple_choice', difficulty='intermediate'):
+def generate_section_questions(
+    section, *, count=10, answer_mode='multiple_choice',
+    difficulty='intermediate', course_context='', fallback_questions=None,
+):
     if answer_mode not in VOCABULARY_ANSWER_MODES:
         raise ValueError('Unsupported vocabulary answer mode.')
     if difficulty not in DIFFICULTY_LABELS:
@@ -282,6 +301,8 @@ def generate_section_questions(section, *, count=10, answer_mode='multiple_choic
                 ),
                 user_prompt=(
                     f'Section: {section}. Difficulty: {difficulty}. Create {count} fresh questions. '
+                    f'Difficulty requirements: {DIFFICULTY_GUIDANCE[difficulty]} '
+                    f'Course theme: {course_context or "General English practice"}. '
                     f'Vocabulary answer mode: {answer_mode}. '
                     'For diagnostic, mix vocabulary, grammar, and short reading questions. '
                     'Avoid duplicates and keep prompts self-contained.'
@@ -296,7 +317,15 @@ def generate_section_questions(section, *, count=10, answer_mode='multiple_choic
         except AIEngineError:
             pass
 
-    if section == 'vocabulary':
+    if fallback_questions is not None:
+        pool = []
+        for original in fallback_questions:
+            question = dict(original)
+            question['difficulty'] = difficulty
+            question['hints'] = list(original.get('hints', []))
+            question['choices'] = list(original.get('choices', []))
+            pool.append(question)
+    elif section == 'vocabulary':
         pool = _vocabulary_questions(answer_mode=answer_mode, difficulty=difficulty)
     elif section == 'grammar':
         pool = _grammar_questions(difficulty=difficulty)
@@ -313,11 +342,19 @@ def generate_section_questions(section, *, count=10, answer_mode='multiple_choic
     return random.sample(pool, min(count, len(pool)))
 
 
-def get_course_questions(course_slug):
+def get_course_questions(course_slug, *, difficulty='intermediate'):
     course = COURSES.get(course_slug)
     if course is None:
         raise ValueError('The selected course was not found.')
-    return [dict(question) for question in course['questions']]
+    generated = generate_section_questions(
+        'vocabulary',
+        count=10,
+        answer_mode='multiple_choice',
+        difficulty=difficulty,
+        course_context=f'{course["title"]}: {course["description"]}',
+        fallback_questions=course['questions'],
+    )
+    return generated
 
 
 def _extract_pdf_text(data: bytes) -> str:

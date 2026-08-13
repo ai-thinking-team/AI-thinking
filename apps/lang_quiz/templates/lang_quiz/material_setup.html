@@ -40,7 +40,7 @@
   <div class="course-grid">
     {% for course in courses %}
       <article class="course-card {% if course.completed %}course-complete{% endif %}">
-        <div class="course-topline"><span>10 QUESTIONS</span>{% if course.completed %}<strong>Complete!</strong>{% endif %}</div>
+        <div class="course-topline"><span>10 QUESTIONS · {{ course.difficulty|upper }}</span>{% if course.completed %}<strong>Complete!</strong>{% endif %}</div>
         <h3>{{ course.title }}</h3>
         <p>{{ course.description }}</p>
         <div class="course-progress"><span style="width: {{ course.score_percent }}%"></span></div>

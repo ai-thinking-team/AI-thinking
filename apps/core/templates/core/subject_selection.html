@@ -1,3 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Learning Areas{% endblock %}
+{% block navbar %}{% endblock %}
+{% block content %}
+<section class="home-split">
+  <div class="home-bg-block" aria-hidden="true"></div>
+  <div class="home-orb home-orb-1" aria-hidden="true"></div>
+  <div class="home-orb home-orb-2" aria-hidden="true"></div>
+  <div class="home-main">
+    <header class="home-hero-text">
+      <span class="home-eyebrow">gPBL Learning App</span>
+      <h1>Think first.<br>Learn for real.</h1>
+      <p>Choose a learning area, diagnose what you know, and turn mistakes into your next step.</p>
+    </header>
+    <div class="home-cards-panel">
 <section class="subject-grid" aria-label="Learning areas">
   <a class="card" href="{% url 'math_quiz:home' %}">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
@@ -24,3 +39,7 @@
     <p>Rubrics &amp; evidence.</p>
   </a>
 </section>
+    </div>
+  </div>
+</section>
+{% endblock %}

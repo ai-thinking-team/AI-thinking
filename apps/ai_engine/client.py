@@ -7,7 +7,21 @@ from urllib.request import Request, urlopen
 from .exceptions import AIServiceUnavailable, InvalidAIResponse
 
 
-OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
+GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions'
+DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b'
+
+
+def _http_error_detail(exc):
+    """Return Groq's safe error message without ever exposing an API key."""
+    try:
+        body = json.loads(exc.read().decode('utf-8'))
+        message = body.get('error', {}).get('message', '')
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        return ''
+    if not isinstance(message, str) or not message.strip():
+        return ''
+    sanitized = re.sub(r'gsk_[A-Za-z0-9_-]+', '[redacted]', message.strip())
+    return f': {sanitized[:300]}'
 
 
 def _json_schema(schema):
@@ -31,28 +45,29 @@ def _json_schema(schema):
 
 
 def _extract_output_text(body):
-    if isinstance(body.get('output_text'), str):
-        return body['output_text']
-    for output in body.get('output', []):
-        for content in output.get('content', []):
-            if content.get('type') == 'output_text' and isinstance(content.get('text'), str):
-                return content['text']
-    raise InvalidAIResponse('OpenAI returned no readable output.')
+    choices = body.get('choices', [])
+    if choices:
+        content = choices[0].get('message', {}).get('content')
+        if isinstance(content, str):
+            return content
+    raise InvalidAIResponse('Groq returned no readable output.')
 
 
 def generate_ai_response(*, system_prompt, user_prompt, response_schema=None):
-    """Call OpenAI Responses API behind one validated application boundary."""
-    api_key = os.environ.get('OPENAI_API_KEY', '').strip()
+    """Call Groq's Chat Completions API behind one validated boundary."""
+    api_key = os.environ.get('GROQ_API_KEY', '').strip()
     if not api_key:
         raise AIServiceUnavailable(
-            'AI support is unavailable because OPENAI_API_KEY is not configured.'
+            'AI support is unavailable because GROQ_API_KEY is not configured.'
         )
 
     payload = {
-        'model': os.environ.get('OPENAI_MODEL', 'gpt-5.6-luna'),
-        'instructions': system_prompt,
-        'input': user_prompt,
-        'max_output_tokens': 6000,
+        'model': os.environ.get('GROQ_MODEL', '').strip() or DEFAULT_GROQ_MODEL,
+        'messages': [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_prompt},
+        ],
+        'max_completion_tokens': 6000,
     }
     unwrap_array = False
     if response_schema:
@@ -66,9 +81,9 @@ def generate_ai_response(*, system_prompt, user_prompt, response_schema=None):
                 'additionalProperties': False,
             }
             unwrap_array = True
-        payload['text'] = {
-            'format': {
-                'type': 'json_schema',
+        payload['response_format'] = {
+            'type': 'json_schema',
+            'json_schema': {
                 'name': 'app_response',
                 'strict': True,
                 'schema': converted,
@@ -76,11 +91,12 @@ def generate_ai_response(*, system_prompt, user_prompt, response_schema=None):
         }
 
     request = Request(
-        OPENAI_RESPONSES_URL,
+        GROQ_CHAT_COMPLETIONS_URL,
         data=json.dumps(payload).encode('utf-8'),
         headers={
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
+            'User-Agent': 'AI-thinking/1.0',
         },
         method='POST',
     )
@@ -88,9 +104,12 @@ def generate_ai_response(*, system_prompt, user_prompt, response_schema=None):
         with urlopen(request, timeout=45) as response:
             body = json.loads(response.read().decode('utf-8'))
     except HTTPError as exc:
-        raise AIServiceUnavailable(f'OpenAI API request failed (HTTP {exc.code}).') from exc
+        detail = _http_error_detail(exc)
+        raise AIServiceUnavailable(
+            f'Groq API request failed (HTTP {exc.code}){detail}.'
+        ) from exc
     except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-        raise AIServiceUnavailable('OpenAI API could not be reached safely.') from exc
+        raise AIServiceUnavailable('Groq API could not be reached safely.') from exc
 
     text = _extract_output_text(body)
     if not response_schema:
@@ -99,7 +118,7 @@ def generate_ai_response(*, system_prompt, user_prompt, response_schema=None):
         result = json.loads(text)
         return result['items'] if unwrap_array else result
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
-        raise InvalidAIResponse('OpenAI returned invalid structured output.') from exc
+        raise InvalidAIResponse('Groq returned invalid structured output.') from exc
 
 
 _MATERIAL_QUESTION_SCHEMA = [{
@@ -113,7 +132,7 @@ _MATERIAL_QUESTION_SCHEMA = [{
 
 
 def generate_questions_from_text(raw_text, subject_name='Languages', count=10, section='reading'):
-    """Compatibility entry point for the legacy upload workflow, now using OpenAI."""
+    """Compatibility entry point for the legacy upload workflow, now using Groq."""
     material = (raw_text or '').strip()[:12000]
     if not material:
         return []

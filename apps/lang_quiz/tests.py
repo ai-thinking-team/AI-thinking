@@ -242,7 +242,7 @@ class TenQuestionLanguageQuizTests(TestCase):
         self.assertContains(response, 'CORRECT', count=len(run.questions))
 
     @patch('apps.lang_quiz.quiz_engine.generate_ai_response', side_effect=AIServiceUnavailable('offline'))
-    def test_latest_diagnostic_sets_section_difficulty(self, _mock_ai):
+    def test_latest_diagnostic_sets_each_section_difficulty(self, _mock_ai):
         session = self.client.session
         session.save()
         LanguageQuizRun.objects.create(
@@ -251,13 +251,67 @@ class TenQuestionLanguageQuizTests(TestCase):
             mode='random',
             finished=True,
             questions=[
-                {'section': 'grammar', 'is_correct': False},
-                {'section': 'grammar', 'is_correct': False},
+                {'section': 'vocabulary', 'is_correct': False},
+                {'section': 'vocabulary', 'is_correct': False},
+                {'section': 'vocabulary', 'is_correct': False},
+                {'section': 'reading', 'is_correct': True},
+                {'section': 'reading', 'is_correct': True},
+                {'section': 'reading', 'is_correct': False},
+                {'section': 'grammar', 'is_correct': True},
+                {'section': 'grammar', 'is_correct': True},
                 {'section': 'grammar', 'is_correct': True},
             ],
         )
-        run = self._start('grammar')
-        self.assertTrue(all(question['difficulty'] == 'beginner' for question in run.questions))
+        expected = {
+            'vocabulary': 'beginner',
+            'reading': 'intermediate',
+            'grammar': 'advanced',
+        }
+        for section, difficulty in expected.items():
+            with self.subTest(section=section):
+                run = self._start(section)
+                self.assertTrue(all(
+                    question['difficulty'] == difficulty for question in run.questions
+                ))
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_vocabulary_course_is_ai_generated_at_diagnostic_difficulty(self, mock_ai):
+        mock_ai.return_value = [
+            {
+                'prompt': f'Advanced academic context question {index}',
+                'answer': f'term{index}',
+                'skill_focus': 'Academic vocabulary',
+                'explanation': 'The term fits the academic context.',
+                'next_step': 'Use the term in a formal paragraph.',
+                'hints': [f'Hint {level}' for level in range(1, 6)],
+                'choices': [f'term{index}', 'option-a', 'option-b', 'option-c', 'option-d'],
+            }
+            for index in range(10)
+        ]
+        session = self.client.session
+        session.save()
+        LanguageQuizRun.objects.create(
+            browser_session_key=session.session_key,
+            section='diagnostic',
+            mode='random',
+            finished=True,
+            questions=[
+                {'section': 'vocabulary', 'is_correct': True},
+                {'section': 'vocabulary', 'is_correct': True},
+                {'section': 'vocabulary', 'is_correct': True},
+            ],
+        )
+
+        response = self.client.get(reverse(
+            'lang_quiz:start_course', args=['academic-words'],
+        ))
+        self.assertEqual(response.status_code, 302)
+        run = LanguageQuizRun.objects.latest('created_at')
+        self.assertTrue(all(question['difficulty'] == 'advanced' for question in run.questions))
+        prompt = mock_ai.call_args.kwargs['user_prompt']
+        self.assertIn('Difficulty: advanced', prompt)
+        self.assertIn('CEFR C1-C2', prompt)
+        self.assertIn('Academic Word Builder', prompt)
 
     def test_correct_missing_answer_removes_it(self):
         original = self._start('vocabulary').questions[0]
