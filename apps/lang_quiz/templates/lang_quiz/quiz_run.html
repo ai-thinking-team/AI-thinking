@@ -2,6 +2,8 @@
 
 {% block title %}{{ section_label }} - {{ total_questions }}-Question Quiz{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
 {% block content %}
 <div class="quiz-shell">
   <header class="quiz-topbar">

@@ -1,12 +1,14 @@
 from django.shortcuts import render
+
 from apps.learning_core.models import LearningSession
 
 
-def home(request):
-    return subject_selection(request)
+def _mastered_context(request):
+    """Subjects this browser session has already mastered.
 
-
-def subject_selection(request):
+    Both entry points below render the same subject cards, so the lookup lives
+    here rather than being duplicated or tied to just one of them.
+    """
     session_key = request.session.session_key
     mastered_subjects = set()
     mastered_sessions = []
@@ -19,8 +21,15 @@ def subject_selection(request):
             if s.topic and s.topic.subject:
                 mastered_subjects.add(s.topic.subject.slug)
 
-    return render(request, 'core/subject_selection.html', {
+    return {
         'mastered_subjects': mastered_subjects,
         'mastered_sessions': mastered_sessions,
-    })
+    }
 
+
+def home(request):
+    return render(request, 'core/home.html', _mastered_context(request))
+
+
+def subject_selection(request):
+    return render(request, 'core/subject_selection.html', _mastered_context(request))

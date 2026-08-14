@@ -2,6 +2,8 @@
 
 {% block title %}{% if section == 'reading' %}Reading{% elif section == 'grammar' %}Grammar{% elif section == 'vocabulary' %}Vocabulary{% else %}My Materials{% endif %} - Upload & Generate{% endblock %}
 
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
 {% block content %}
 <div class="page-heading">
   <a href="{% url 'lang_quiz:home' %}" class="back-link">← Language Learning Hub</a>
