@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ section_label }} - 10-Question Quiz{% endblock %}
+{% block title %}{{ section_label }} - {{ total_questions }}-Question Quiz{% endblock %}
 
 {% block content %}
 <div class="quiz-shell">
@@ -14,7 +14,7 @@
     <section class="result-summary">
       <span class="result-eyebrow">SESSION COMPLETE</span>
       <div class="score-ring" style="--score: {{ score_percent }}"><strong>{{ score_percent }}%</strong><span>{{ run.correct_count }} / {{ total_questions }}</span></div>
-      <h1>Great work — 10 questions done!</h1>
+      <h1>Great work — {{ total_questions }} questions done!</h1>
       {% if score_percent == 100 %}<div class="complete-banner">Complete!</div>{% endif %}
       <p>Questions you got wrong have been saved to Missing. Questions you answered correctly are automatically removed from Missing.</p>
       {% if run.section == 'diagnostic' %}
@@ -42,8 +42,8 @@
       <div class="result-actions">
         {% if run.mode == 'course' %}
           <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_course' run.course_slug %}">Retry this course</a>
-        {% elif run.mode == 'upload' %}
-          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">Generate 10 more from another file</a>
+        {% elif run.mode == 'upload' or run.mode == 'upload_exact' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">Upload another file</a>
         {% elif run.section == 'vocabulary' and run.mode == 'typing' %}
           <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_vocabulary' 'typing' %}">Try 10 new typing questions</a>
         {% elif run.section == 'vocabulary' and run.mode == 'multiple_choice' %}

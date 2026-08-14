@@ -71,7 +71,7 @@
 
 <section class="setup-section upload-studio">
   <div>
-    <span class="section-kicker">UPLOAD &amp; GENERATE</span>
+    <span class="section-kicker">UPLOAD &amp; CREATE</span>
     <h2>
       {% if section == 'vocabulary' %}Generate from your vocabulary material
       {% elif section == 'reading' %}Upload your reading passage
@@ -79,22 +79,58 @@
       {% else %}Upload your material
       {% endif %}
     </h2>
-    <p>Supported formats: TXT / Markdown / CSV / JSON / PDF. You can select multiple files at once.</p>
+    <p>AI作問では複数形式・複数ファイルを利用できます。原文出題では、問題と解答一覧を含むテキストPDFを1つ選択してください。</p>
     <p class="micro-note">If using a folder, select all target files inside the folder together.</p>
   </div>
   <form method="post" enctype="multipart/form-data" action="{% url 'lang_quiz:start_material_quiz' section %}" class="material-form">
     {% csrf_token %}
     {{ form.non_field_errors }}
+    <div class="form-group mode-options">
+      {{ form.import_mode.label_tag }}
+      {{ form.import_mode }}
+      {{ form.import_mode.errors }}
+      <p id="import-mode-help" class="micro-note">教材を参考に、AIが新しい10問を作成します。</p>
+    </div>
     <div class="form-group">{{ form.files.label_tag }}{{ form.files }}{{ form.files.errors }}</div>
-    <div class="form-group">
+    <div class="form-group" id="folder-file-group">
       <label for="folder-files">Or select a material folder</label>
       <input id="folder-files" type="file" name="files" multiple webkitdirectory directory accept=".txt,.md,.csv,.json,.pdf">
     </div>
-    <div class="form-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
+    <div class="form-group" id="instruction-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
     {% if section == 'vocabulary' %}
-      <div class="form-group">{{ form.answer_mode.label_tag }}{{ form.answer_mode }}{{ form.answer_mode.errors }}</div>
+      <div class="form-group" id="answer-mode-group">{{ form.answer_mode.label_tag }}{{ form.answer_mode }}{{ form.answer_mode.errors }}</div>
     {% endif %}
-    <button type="submit" class="btn btn-primary btn-lg">Generate 10 Questions →</button>
+    <button id="material-submit" type="submit" class="btn btn-primary btn-lg">AIで10問作成 →</button>
   </form>
 </section>
+<script>
+  (() => {
+    const modeInputs = document.querySelectorAll('input[name="import_mode"]');
+    const fileInput = document.querySelector('.material-form input[name="files"]');
+    const folderGroup = document.getElementById('folder-file-group');
+    const instructionGroup = document.getElementById('instruction-group');
+    const answerModeGroup = document.getElementById('answer-mode-group');
+    const help = document.getElementById('import-mode-help');
+    const submit = document.getElementById('material-submit');
+
+    function updateImportMode() {
+      const selected = document.querySelector('input[name="import_mode"]:checked');
+      const exact = selected && selected.value === 'exact_pdf';
+      folderGroup.hidden = exact;
+      instructionGroup.hidden = exact;
+      if (answerModeGroup) answerModeGroup.hidden = exact;
+      if (fileInput) {
+        fileInput.accept = exact ? '.pdf,application/pdf' : '.txt,.md,.csv,.json,.pdf';
+        fileInput.multiple = !exact;
+      }
+      help.textContent = exact
+        ? 'PDF内の問題文・選択肢・解答を変更せず、検出した全問題を番号順に出題します。'
+        : '教材を参考に、AIが新しい10問を作成します。';
+      submit.textContent = exact ? 'PDFの問題をそのまま開始 →' : 'AIで10問作成 →';
+    }
+
+    modeInputs.forEach((input) => input.addEventListener('change', updateImportMode));
+    updateImportMode();
+  })();
+</script>
 {% endblock %}

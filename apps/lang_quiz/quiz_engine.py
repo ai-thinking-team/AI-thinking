@@ -358,10 +358,17 @@ def get_course_questions(course_slug, *, difficulty='intermediate'):
 
 
 def _extract_pdf_text(data: bytes) -> str:
-    """Extract plain text from PDF bytes using pypdf. Returns empty string on failure."""
+    """Extract PDF text while distinguishing setup and file errors."""
     try:
         import io as _io
         from pypdf import PdfReader
+    except ImportError as exc:
+        raise ValueError(
+            'PDF support is not installed. Run "pip install -r requirements.txt" '
+            'in the active virtual environment and restart the server.'
+        ) from exc
+
+    try:
         reader = PdfReader(_io.BytesIO(data))
         pages = []
         for page in reader.pages:
@@ -369,8 +376,10 @@ def _extract_pdf_text(data: bytes) -> str:
             if text.strip():
                 pages.append(text)
         return '\n'.join(pages)
-    except Exception:
-        return ''
+    except Exception as exc:
+        raise ValueError(
+            'The PDF could not be read. It may be damaged, encrypted, or unsupported.'
+        ) from exc
 
 
 def _decode_upload(upload) -> str:
@@ -400,6 +409,112 @@ def _decode_upload(upload) -> str:
         except (UnicodeDecodeError, UnicodeError):
             continue
     return data.decode('latin-1', errors='ignore')
+
+
+_EXACT_ANSWER_KEY_HEADING = re.compile(
+    r'(?im)^(?:解答一覧|answer\s+key|answers?)\s*$'
+)
+_EXACT_NUMBERED_LINE = re.compile(r'(?m)^(?P<number>\d{1,3})\.\s*(?P<text>.+?)\s*$')
+_EXACT_CHOICE_LINE = re.compile(r'^([A-E])\.\s*(.+?)\s*$')
+_EXACT_ANSWER_LINE = re.compile(r'(?m)^(\d{1,3})\.\s*([A-E])(?:\.|\s)+(.+?)\s*$')
+
+
+def _parse_exact_pdf_quiz(text, *, section='vocabulary', source_name='uploaded.pdf'):
+    """Parse a numbered five-choice PDF quiz without rewriting its content."""
+    heading = _EXACT_ANSWER_KEY_HEADING.search(text or '')
+    if not heading:
+        raise ValueError(
+            '解答一覧を検出できませんでした。「解答一覧」または「Answer Key」を含むPDFを選択してください。'
+        )
+
+    question_text = text[:heading.start()]
+    answer_text = text[heading.end():]
+    answers = {}
+    for match in _EXACT_ANSWER_LINE.finditer(answer_text):
+        number = int(match.group(1))
+        if number in answers:
+            raise ValueError(f'解答一覧に問題{number}の解答が重複しています。')
+        answers[number] = (match.group(2), match.group(3).strip())
+
+    matches = list(_EXACT_NUMBERED_LINE.finditer(question_text))
+    if not matches:
+        raise ValueError('PDFから番号付きの問題を検出できませんでした。')
+
+    parsed = []
+    seen_numbers = set()
+    for index, match in enumerate(matches):
+        number = int(match.group('number'))
+        if number in seen_numbers:
+            raise ValueError(f'問題番号{number}が重複しています。')
+        seen_numbers.add(number)
+        block_end = matches[index + 1].start() if index + 1 < len(matches) else len(question_text)
+        lines = [line.strip() for line in question_text[match.end():block_end].splitlines() if line.strip()]
+        choices_by_letter = {}
+        context_lines = []
+        for line in lines:
+            choice_match = _EXACT_CHOICE_LINE.match(line)
+            if choice_match:
+                letter, choice_text = choice_match.groups()
+                choices_by_letter[letter] = f'{letter}. {choice_text}'
+            elif not choices_by_letter:
+                context_lines.append(line)
+
+        if list(choices_by_letter) != list('ABCDE'):
+            raise ValueError(f'問題{number}の選択肢A〜Eを正しく検出できませんでした。')
+        if number not in answers:
+            raise ValueError(f'解答一覧に問題{number}の解答がありません。')
+
+        answer_letter, answer_text_value = answers[number]
+        answer_choice = choices_by_letter.get(answer_letter)
+        if not answer_choice:
+            raise ValueError(f'問題{number}の正解記号{answer_letter}が選択肢にありません。')
+        choice_value = answer_choice.split('.', 1)[1].strip()
+        if choice_value.casefold() != answer_text_value.casefold():
+            raise ValueError(
+                f'問題{number}の選択肢と解答一覧が一致しません。'
+            )
+
+        original_prompt = f'{match.group("number")}. {match.group("text")}'
+        if context_lines:
+            original_prompt += '\n' + '\n'.join(context_lines)
+        choices = [choices_by_letter[letter] for letter in 'ABCDE']
+        key = hashlib.sha256(
+            f'exact-pdf|{source_name}|{number}|{original_prompt}|{answer_choice}'.encode('utf-8')
+        ).hexdigest()[:24]
+        question = _question(
+            key,
+            original_prompt,
+            answer_choice,
+            f'PDFの解答一覧では「{answer_choice}」が正解です。',
+            '正解語を入れた文を声に出して読み、文脈と語彙を確認しましょう。',
+            section=section,
+            answer_mode='multiple_choice',
+            choices=choices,
+        )
+        question['skill_focus'] = 'PDF原文問題'
+        question['source_number'] = number
+        question['source_answer_letter'] = answer_letter
+        parsed.append(question)
+
+    if set(answers) != seen_numbers:
+        missing_questions = sorted(set(answers) - seen_numbers)
+        raise ValueError(
+            f'解答一覧に対応する問題がありません: {missing_questions}'
+        )
+    return parsed
+
+
+def import_pdf_questions_exact(files, *, section='vocabulary'):
+    """Import one text-based PDF quiz exactly, without calling AI."""
+    files = list(files)
+    if len(files) != 1 or not files[0].name.lower().endswith('.pdf'):
+        raise ValueError('そのまま出題モードではPDFを1ファイルだけ選択してください。')
+    upload = files[0]
+    text = _decode_upload(upload)
+    questions = _parse_exact_pdf_quiz(
+        text, section=section, source_name=upload.name,
+    )
+    return questions, upload.name
 
 
 _UPLOAD_SYSTEM_PROMPTS = {

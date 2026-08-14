@@ -24,6 +24,7 @@ from .quiz_engine import (
     diagnostic_recommendations,
     generate_section_questions,
     generate_uploaded_questions,
+    import_pdf_questions_exact,
     get_course_questions,
     missing_questions,
     remember_missing,
@@ -133,16 +134,26 @@ def start_material_quiz(request, section):
     if not form.is_valid():
         return render(request, 'lang_quiz/material_setup.html', {'form': form, 'section': section}, status=400)
     try:
-        answer_mode = form.cleaned_data.get('answer_mode') or 'multiple_choice'
-        difficulty = difficulty_from_diagnostic(_session_key(request), section)
-        questions, source_name = generate_uploaded_questions(
-            form.cleaned_data['files'],
-            form.cleaned_data['instruction'],
-            section=section,
-            count=10,
-            answer_mode=answer_mode,
-            difficulty=difficulty,
-        )
+        import_mode = form.cleaned_data.get('import_mode') or 'ai_generate'
+        if import_mode == 'exact_pdf':
+            questions, source_name = import_pdf_questions_exact(
+                form.cleaned_data['files'], section=section,
+            )
+            run_mode = 'upload_exact'
+            instruction = 'PDFの問題をそのまま出題'
+        else:
+            answer_mode = form.cleaned_data.get('answer_mode') or 'multiple_choice'
+            difficulty = difficulty_from_diagnostic(_session_key(request), section)
+            questions, source_name = generate_uploaded_questions(
+                form.cleaned_data['files'],
+                form.cleaned_data['instruction'],
+                section=section,
+                count=10,
+                answer_mode=answer_mode,
+                difficulty=difficulty,
+            )
+            run_mode = 'upload'
+            instruction = form.cleaned_data['instruction']
     except ValueError as exc:
         form.add_error('files', exc)
         return render(request, 'lang_quiz/material_setup.html', {'form': form, 'section': section}, status=400)
@@ -150,9 +161,9 @@ def start_material_quiz(request, section):
         request,
         section=section,
         questions=questions,
-        mode='upload',
+        mode=run_mode,
         source_name=source_name,
-        instruction=form.cleaned_data['instruction'],
+        instruction=instruction,
     )
 
 

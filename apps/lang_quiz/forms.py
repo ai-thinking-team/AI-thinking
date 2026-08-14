@@ -54,6 +54,16 @@ class FileUploadForm(forms.Form):
 
 
 class MaterialQuizForm(forms.Form):
+    import_mode = forms.ChoiceField(
+        label='出題方法',
+        choices=(
+            ('ai_generate', 'AIで新しい問題を作る'),
+            ('exact_pdf', 'PDFの問題をそのまま出題する'),
+        ),
+        initial='ai_generate',
+        required=False,
+        widget=forms.RadioSelect,
+    )
     answer_mode = forms.ChoiceField(
         label='Vocabulary answer format',
         choices=(
@@ -75,6 +85,7 @@ class MaterialQuizForm(forms.Form):
     instruction = forms.CharField(
         label='What kind of questions would you like?',
         max_length=1000,
+        required=False,
         widget=forms.Textarea(attrs={
             'rows': 3,
             'placeholder': 'e.g. Create reading comprehension questions based on the main ideas in this passage.',
@@ -86,6 +97,22 @@ class MaterialQuizForm(forms.Form):
         if not files:
             raise forms.ValidationError('Please select at least one material file or folder.')
         return files
+
+    def clean(self):
+        cleaned_data = super().clean()
+        import_mode = cleaned_data.get('import_mode') or 'ai_generate'
+        files = cleaned_data.get('files') or []
+        instruction = (cleaned_data.get('instruction') or '').strip()
+        cleaned_data['import_mode'] = import_mode
+
+        if import_mode == 'ai_generate' and not instruction:
+            self.add_error('instruction', 'AIに作らせたい問題の指示を入力してください。')
+        elif import_mode == 'exact_pdf':
+            if len(files) != 1:
+                self.add_error('files', 'そのまま出題モードではPDFを1ファイルだけ選択してください。')
+            elif not files[0].name.lower().endswith('.pdf'):
+                self.add_error('files', 'そのまま出題モードで使用できるのはPDFファイルだけです。')
+        return cleaned_data
 
 
 class QuizAnswerForm(forms.Form):

@@ -16,7 +16,11 @@ from apps.lang_quiz.models import (
     LanguageQuizRun,
     MissingLanguageQuestion,
 )
-from apps.lang_quiz.quiz_engine import remember_missing
+from apps.lang_quiz.quiz_engine import (
+    _decode_upload,
+    _parse_exact_pdf_quiz,
+    remember_missing,
+)
 from apps.lang_quiz.services import (
     LANGUAGE_GAP_TYPES,
     begin_teach_back,
@@ -58,11 +62,107 @@ class LanguageRouteTests(TestCase):
 
 
 class TenQuestionLanguageQuizTests(TestCase):
+    EXACT_PDF_TEXT = '''
+Chinese Vocabulary Fill-in Quiz
+01. 我每天早上七点（ ）。
+日本語：私は毎朝7時に（ ）。
+A. 起床
+B. 睡觉
+C. 下班
+D. 洗澡
+E. 回家
+02. 今天很冷，出门要穿（ ）。
+日本語：今日は寒いので（ ）を着ます。
+A. 帽子
+B. 外套
+C. 鞋子
+D. 裙子
+E. 手表
+解答一覧
+01. A 起床
+02. B 外套
+'''
+
     def _start(self, section):
         response = self.client.get(reverse('lang_quiz:start_quiz', args=[section]))
         self.assertEqual(response.status_code, 302)
         run_id = response.url.rstrip('/').split('/')[-1]
         return LanguageQuizRun.objects.get(id=run_id)
+
+    def test_damaged_pdf_is_not_reported_as_scanned(self):
+        upload = SimpleUploadedFile(
+            'damaged.pdf', b'not a pdf', content_type='application/pdf',
+        )
+
+        with self.assertRaisesRegex(ValueError, 'could not be read'):
+            _decode_upload(upload)
+
+    def test_pdf_without_text_is_reported_as_scanned(self):
+        from io import BytesIO
+        from pypdf import PdfWriter
+
+        stream = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.write(stream)
+        upload = SimpleUploadedFile(
+            'image-only.pdf', stream.getvalue(), content_type='application/pdf',
+        )
+
+        with self.assertRaisesRegex(ValueError, 'scanned image'):
+            _decode_upload(upload)
+
+    def test_exact_pdf_parser_preserves_prompts_choice_order_and_answers(self):
+        questions = _parse_exact_pdf_quiz(
+            self.EXACT_PDF_TEXT,
+            section='vocabulary',
+            source_name='quiz.pdf',
+        )
+
+        self.assertEqual(len(questions), 2)
+        self.assertEqual(
+            questions[0]['prompt'],
+            '01. 我每天早上七点（ ）。\n日本語：私は毎朝7時に（ ）。',
+        )
+        self.assertEqual(
+            questions[0]['choices'],
+            ['A. 起床', 'B. 睡觉', 'C. 下班', 'D. 洗澡', 'E. 回家'],
+        )
+        self.assertEqual(questions[0]['answer'], 'A. 起床')
+        self.assertEqual(questions[1]['answer'], 'B. 外套')
+
+    @patch('apps.lang_quiz.views.import_pdf_questions_exact')
+    def test_exact_pdf_mode_creates_run_without_ai_generation(self, mock_import):
+        mock_import.return_value = (
+            _parse_exact_pdf_quiz(self.EXACT_PDF_TEXT, source_name='quiz.pdf'),
+            'quiz.pdf',
+        )
+        upload = SimpleUploadedFile('quiz.pdf', b'%PDF-test', content_type='application/pdf')
+
+        response = self.client.post(
+            reverse('lang_quiz:start_material_quiz', args=['vocabulary']),
+            {
+                'import_mode': 'exact_pdf',
+                'files': upload,
+                'instruction': '',
+                'answer_mode': 'typing',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        run = LanguageQuizRun.objects.latest('created_at')
+        self.assertEqual(run.mode, 'upload_exact')
+        self.assertEqual(run.instruction, 'PDFの問題をそのまま出題')
+        self.assertEqual(len(run.questions), 2)
+        self.assertEqual(run.questions[0]['choices'][0], 'A. 起床')
+        mock_import.assert_called_once()
+
+    def test_material_setup_shows_both_import_modes(self):
+        response = self.client.get(
+            reverse('lang_quiz:material_setup', args=['vocabulary'])
+        )
+        self.assertContains(response, 'AIで新しい問題を作る')
+        self.assertContains(response, 'PDFの問題をそのまま出題する')
 
     def test_each_standard_section_starts_with_ten_fresh_questions(self):
         first = self._start('vocabulary')
@@ -237,7 +337,7 @@ class TenQuestionLanguageQuizTests(TestCase):
         self.assertEqual(run.correct_count, len(run.questions))
         self.assertContains(response, '診断テスト結果一覧')
         for prompt, explanation in zip(expected_prompts, expected_explanations):
-            self.assertContains(response, prompt)
+            self.assertContains(response, escape(prompt))
             self.assertContains(response, escape(explanation))
         self.assertContains(response, 'CORRECT', count=len(run.questions))
 

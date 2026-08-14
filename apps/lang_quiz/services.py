@@ -92,6 +92,12 @@ def create_questions_from_file_upload(file_obj):
             # Use pypdf to properly extract text from PDF binary
             try:
                 from pypdf import PdfReader
+            except ImportError as exc:
+                raise ValueError(
+                    'PDF support is not installed. Run "pip install -r requirements.txt" '
+                    'in the active virtual environment and restart the server.'
+                ) from exc
+            try:
                 reader = PdfReader(_io.BytesIO(content_bytes))
                 pages = []
                 for page in reader.pages:
@@ -99,8 +105,10 @@ def create_questions_from_file_upload(file_obj):
                     if page_text.strip():
                         pages.append(page_text)
                 raw_text = '\n'.join(pages)
-            except Exception:
-                raw_text = ''
+            except Exception as exc:
+                raise ValueError(
+                    'The PDF could not be read. It may be damaged, encrypted, or unsupported.'
+                ) from exc
             if not raw_text.strip():
                 raise ValueError(
                     'The PDF appears to be a scanned image with no extractable text. '
