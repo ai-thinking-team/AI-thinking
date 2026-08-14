@@ -23,7 +23,7 @@ class AIClientTests(SimpleTestCase):
         with self.assertRaises(AIServiceUnavailable):
             generate_ai_response(system_prompt='system', user_prompt='learner')
 
-    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'})
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'}, clear=True)
     @patch.object(client, '_generate_gemini_response', return_value='gemini answered')
     @patch.object(client, '_generate_openai_response', side_effect=AIServiceUnavailable('quota exhausted'))
     def test_falls_through_to_the_next_provider_when_the_first_is_configured_but_broken(
@@ -38,14 +38,14 @@ class AIClientTests(SimpleTestCase):
         mock_openai.assert_called_once()
         mock_gemini.assert_called_once()
 
-    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'})
+    @patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test'}, clear=True)
     @patch.object(client, '_generate_gemini_response', side_effect=AIServiceUnavailable('also broken'))
     @patch.object(client, '_generate_openai_response', side_effect=AIServiceUnavailable('quota exhausted'))
     def test_raises_when_every_configured_provider_fails(self, mock_openai, mock_gemini):
         with self.assertRaises(AIServiceUnavailable):
             generate_ai_response(system_prompt='system', user_prompt='learner')
 
-    @patch.dict(os.environ, {'GEMINI_API_KEY': 'gm-test'})
+    @patch.dict(os.environ, {'GEMINI_API_KEY': 'gm-test'}, clear=True)
     @patch('urllib.request.urlopen', side_effect=TimeoutError('The read operation timed out'))
     def test_a_bare_read_timeout_is_reported_as_ai_unavailable_not_a_crash(self, mock_urlopen):
         """A read timeout past the deadline raises a bare TimeoutError from
@@ -96,6 +96,78 @@ class AIClientTests(SimpleTestCase):
         self.assertEqual(content[0]['type'], 'text')
         image_types = [block['image_url']['url'].split(';')[0] for block in content[1:]]
         self.assertEqual(image_types, ['data:image/png', 'data:image/jpeg'])
+
+    @patch.dict(os.environ, {'GROQ_API_KEY': 'gsk-test'}, clear=True)
+    @patch('urllib.request.urlopen')
+    def test_groq_request_uses_the_openai_compatible_shape(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_urlopen_response(
+            {'choices': [{'message': {'content': '{}'}}]}
+        )
+        generate_ai_response(system_prompt='system', user_prompt='learner')
+        request = mock_urlopen.call_args[0][0]
+        self.assertEqual(request.full_url, client.GROQ_ENDPOINT)
+        payload = json.loads(request.data)
+        self.assertEqual(payload['model'], client.DEFAULT_GROQ_MODEL)
+        self.assertEqual(
+            payload['messages'],
+            [{'role': 'system', 'content': 'system'}, {'role': 'user', 'content': 'learner'}],
+        )
+
+    @patch.dict(os.environ, {'GROQ_API_KEY': 'gsk-test', 'GROQ_MODEL': 'openai/gpt-oss-120b'}, clear=True)
+    @patch('urllib.request.urlopen')
+    def test_groq_model_can_be_overridden_by_env_var(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_urlopen_response(
+            {'choices': [{'message': {'content': '{}'}}]}
+        )
+        generate_ai_response(system_prompt='system', user_prompt='learner')
+        payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(payload['model'], 'openai/gpt-oss-120b')
+
+    @patch.dict(os.environ, {'GROQ_API_KEY': 'gsk-test'}, clear=True)
+    @patch('urllib.request.urlopen')
+    def test_groq_ignores_files_since_vision_support_is_not_reliable(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_urlopen_response(
+            {'choices': [{'message': {'content': '{}'}}]}
+        )
+        generate_ai_response(
+            system_prompt='system', user_prompt='learner',
+            files=[(b'img-bytes', 'image/png')],
+        )
+        payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(payload['messages'][1]['content'], 'learner')
+
+    @patch.dict(
+        os.environ,
+        {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test', 'GROQ_API_KEY': 'gsk-test'},
+        clear=True,
+    )
+    def test_default_provider_order_is_openai_then_gemini_then_groq(self):
+        self.assertEqual(client._provider_order(), ('openai', 'gemini', 'groq'))
+
+    @patch.dict(
+        os.environ,
+        {
+            'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test', 'GROQ_API_KEY': 'gsk-test',
+            'AI_PROVIDER': 'groq',
+        },
+        clear=True,
+    )
+    def test_ai_provider_env_var_moves_the_chosen_provider_first_without_dropping_fallback(self):
+        self.assertEqual(client._provider_order(), ('groq', 'openai', 'gemini'))
+
+    @patch.dict(
+        os.environ,
+        {'OPENAI_API_KEY': 'sk-test', 'GEMINI_API_KEY': 'gm-test', 'GROQ_API_KEY': 'gsk-test'},
+        clear=True,
+    )
+    @patch.object(client, '_generate_groq_response', return_value='groq answered')
+    @patch.object(client, '_generate_openai_response', side_effect=AIServiceUnavailable('quota exhausted'))
+    def test_ai_provider_preference_is_actually_tried_first(self, mock_openai, mock_groq):
+        with patch.dict(os.environ, {'AI_PROVIDER': 'groq'}):
+            result = generate_ai_response(system_prompt='system', user_prompt='learner')
+        self.assertEqual(result, 'groq answered')
+        mock_groq.assert_called_once()
+        mock_openai.assert_not_called()
 
     def test_ai_response_schema_has_no_mastery_control(self):
         response = DiagnosticResponse(
