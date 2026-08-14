@@ -353,6 +353,11 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=(), star
     demo_content.build_unique_problem). `start_salt` only affects that
     deterministic fallback — see _next_problem_salt."""
     exclude = set(exclude)
+    # Compared via normalize_problem_text, not raw equality, so an
+    # AI-returned problem that only differs from something already used by
+    # incidental whitespace still counts as a duplicate — see
+    # demo_content.normalize_problem_text.
+    normalized_exclude = {demo_content.normalize_problem_text(item) for item in exclude}
     # Telling the AI what's already been used (in the same call it's
     # already making — no extra request) lets it dodge a collision on its
     # own; the exclude check below still catches it deterministically if
@@ -391,7 +396,7 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=(), star
                 if (
                     isinstance(problem, str) and problem.strip()
                     and demo_content.looks_like_subject(section, problem)
-                    and problem not in exclude
+                    and demo_content.normalize_problem_text(problem) not in normalized_exclude
                 ):
                     return problem
             except Exception:

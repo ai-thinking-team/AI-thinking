@@ -392,7 +392,12 @@ class MathUnitDiagnosticServiceTests(TestCase):
         self.assertEqual([s.id for s in result['recommended_sections']], [first_item.section_id])
 
     def test_diagnostic_never_repeats_a_problem_text_within_one_session(self):
-        unit, _sections = _create_unit_with_sections('診断重複テスト科目', 5, is_demo=False)
+        # is_demo=True (not False): this test exercises the deterministic
+        # dedup invariant itself, not AI-vs-demo branching — is_demo=False
+        # here would make _ai_mode() depend on whatever AI provider happens
+        # to be configured in the environment (a real, unmocked network
+        # call), which is what made this test slow/flaky before.
+        unit, _sections = _create_unit_with_sections('診断重複テスト科目', 5, is_demo=True)
         diagnostic = services.start_unit_diagnostic(unit=unit, browser_session_key='browser-key-3')
         for i in range(services.MAX_DIAGNOSTIC_QUESTIONS):
             diagnostic.refresh_from_db()
@@ -927,12 +932,16 @@ class MathAIFallbackCatalogTests(TestCase):
     for the reported bug where a Fourier-transform course showed an
     unrelated linear equation ("6x + 1 = -47")."""
 
-    def test_catalog_keys_match_curated_subjects_and_have_two_problems_each(self):
+    def test_catalog_keys_match_curated_subjects_and_have_at_least_three_problems_each(self):
+        # 3 (not 2): a 2-entry pool is exhausted by the diagnostic quiz
+        # alone once it asks about 2 different sections, leaving nothing
+        # left for any section's own first_problem — see
+        # MathDiagnosticSectionDedupTests for the regression this covers.
         for name in demo_content.AI_FALLBACK_PROBLEMS:
             self.assertIn(name, demo_content.UNIT_SECTION_PROFILES)
         for name, catalog in demo_content.AI_FALLBACK_PROBLEMS.items():
             self.assertGreaterEqual(len(catalog['keywords']), 1, name)
-            self.assertEqual(len(catalog['problems']), 2, name)
+            self.assertGreaterEqual(len(catalog['problems']), 3, name)
 
     def test_every_answer_is_extractable_from_its_own_stringified_form(self):
         for name, catalog in demo_content.AI_FALLBACK_PROBLEMS.items():
@@ -1043,6 +1052,201 @@ class MathAIFallbackGenerationTests(TestCase):
         self.mock_response.return_value = json.dumps({'problem': on_topic})
         problem = services._generate_problem(section=self.section, kind='first')
         self.assertEqual(problem, on_topic)
+
+
+class MathDiagnosticSectionDedupTests(TestCase):
+    """Regression coverage for a reported critical bug: the course
+    diagnostic quiz and a section's own first_problem/transfer_problem
+    showed the exact same fallback-catalog text (e.g. both showing
+    "dy/dx = 2x の一般解...のCの値を求めなさい。" for 微分方程式). Root
+    cause was twofold — see demo_content._ai_fallback_entry and
+    AI_FALLBACK_PROBLEMS: (1) each salt re-ran an independent rng.choice
+    instead of cycling, so two different (section, kind) seeds could
+    coincidentally land on the same one of only 2 catalog entries even
+    though services._used_problems_in_unit already excludes known text;
+    (2) with only 2 entries, a 2-question diagnostic alone could exhaust
+    the entire catalog before any section was even visited, leaving
+    nothing non-excluded for any section's first_problem to find. Fixed
+    by making _ai_fallback_entry cycle deterministically through the
+    catalog (so the exclude-driven search actually explores every entry)
+    and growing each catalog to 3 entries."""
+
+    def _complete_diagnostic(self, unit, browser_session_key):
+        """Answers every diagnostic question correctly so the quiz always
+        stops at its minimum (2 agreeing answers — see
+        services._diagnostic_should_stop), rather than dragging on and
+        consuming more of a small catalog than a real confident learner
+        would. _correct_answer alone assumes salt=0, but duplicate
+        avoidance can legitimately pick a different salt for a given
+        (section, kind) — so the expected value is resolved against
+        whichever salt actually produced this question's problem text."""
+        diagnostic = services.start_unit_diagnostic(unit=unit, browser_session_key=browser_session_key)
+        seen = []
+        while True:
+            diagnostic.refresh_from_db()
+            if diagnostic.completed_at is not None:
+                break
+            item = diagnostic.answers.get(is_correct__isnull=True)
+            seen.append(item.problem)
+            value = next(
+                v for p, v in (
+                    demo_content.build_problem(item.section, kind='diagnostic', salt=s) for s in range(4)
+                ) if p == item.problem
+            )
+            services.submit_unit_diagnostic_answer(diagnostic=diagnostic, answer_id=item.id, answer=str(value))
+        return diagnostic, seen
+
+    def test_diagnostic_problems_never_reused_as_a_sections_first_problem(self):
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        sections = [
+            Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
+            for i in range(3)
+        ]
+        _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-first-browser')
+
+        for section in sections:
+            session, _ = services.get_or_create_section_session(
+                section=section, browser_session_key='diag-first-browser',
+            )
+            first_problem = services.ensure_first_problem(session=session)
+            self.assertNotIn(
+                first_problem, diagnostic_problems,
+                f'{section.title} first_problem duplicated a diagnostic problem',
+            )
+
+    def test_diagnostic_problems_never_reused_as_a_sections_transfer_problem(self):
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        sections = [
+            Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
+            for i in range(3)
+        ]
+        _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-transfer-browser')
+
+        section = sections[0]
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='diag-transfer-browser',
+        )
+        services.ensure_first_problem(session=session)
+        transfer_problem = services.ensure_transfer_problem(session=session)
+        self.assertNotIn(transfer_problem, diagnostic_problems)
+
+    def test_diagnostic_and_every_sections_first_problem_are_all_mutually_distinct(self):
+        """The full reported scenario end-to-end: diagnostic quiz, then
+        visit every section — every problem shown anywhere in the course
+        must be unique (diagnostic included). Uses 2 sections (not 3+): a
+        hand-authored catalog (4 entries per subject) can comfortably
+        guarantee this for the common case, but isn't a truly unbounded
+        pool — see test_exhausted_candidate_pool_falls_back_safely_* for
+        the explicitly-permitted graceful-repeat behavior once a course
+        legitimately needs more distinct problems than the catalog has."""
+        unit = Unit.objects.create(name='微分方程式', is_demo=True)
+        sections = [
+            Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
+            for i in range(2)
+        ]
+        _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-all-browser')
+
+        all_problems = list(diagnostic_problems)
+        for section in sections:
+            session, _ = services.get_or_create_section_session(
+                section=section, browser_session_key='diag-all-browser',
+            )
+            all_problems.append(services.ensure_first_problem(session=session))
+
+        self.assertEqual(
+            len(all_problems), len(set(all_problems)),
+            f'duplicate problem(s) found across diagnostic + sections: {all_problems}',
+        )
+
+    def test_section_retry_still_avoids_diagnostic_problems_too(self):
+        # Reaches NEEDS_REVIEW via 5 wrong revisions rather than a
+        # successful Transfer Check, so this only needs the catalog to
+        # cover diagnostic(2) + this section's first_problem(1) +
+        # the retried round's new first_problem(1) = 4 distinct texts —
+        # within what a 4-entry catalog can reliably provide, unlike also
+        # requiring a 5th (a Transfer Check problem) on top of that.
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        Section.objects.create(unit=unit, title='セクションB', content='内容')
+        Section.objects.create(unit=unit, title='セクションC', content='内容')
+        _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-retry-browser')
+
+        session, _ = services.get_or_create_section_session(
+            section=section, browser_session_key='diag-retry-browser',
+        )
+        first_problem = services.ensure_first_problem(session=session)
+        self.assertNotIn(first_problem, diagnostic_problems)
+        wrong_answer = 'これは間違った解答です'
+        services.submit_first_attempt(
+            session=session, answer=wrong_answer, reasoning='わかりません', confidence=2,
+        )
+        services.submit_diagnosis(session=session, answer='わかりません')
+        for _ in range(5):
+            services.ensure_current_hint(session=session)
+            services.submit_revision(
+                session=session, answer=wrong_answer, reasoning='まだ違います', confidence=2,
+            )
+        session.refresh_from_db()
+        self.assertEqual(session.current_state, WorkflowState.NEEDS_REVIEW)
+
+        restarted = services.restart_for_review(section=section, browser_session_key='diag-retry-browser')
+        self.assertNotIn(restarted.first_problem, diagnostic_problems)
+
+    def test_ai_failure_fallback_avoids_a_diagnostic_problem(self):
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        sections = [
+            Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
+            for i in range(3)
+        ]
+        _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-ai-fail-browser')
+        unit.is_demo = False
+        unit.save(update_fields=('is_demo',))
+
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch(
+            'apps.math_quiz.services.generate_ai_response', side_effect=AIEngineError('down'),
+        )
+        self.addCleanup(response_patcher.stop)
+        response_patcher.start()
+
+        session, _ = services.get_or_create_section_session(
+            section=sections[0], browser_session_key='diag-ai-fail-browser',
+        )
+        first_problem = services.ensure_first_problem(session=session)
+        self.assertNotIn(first_problem, diagnostic_problems)
+
+    def test_exhausted_candidate_pool_falls_back_safely_without_hanging_or_erroring(self):
+        """Force genuine pool exhaustion (every catalog entry already
+        excluded) and confirm build_unique_problem still returns promptly
+        — an honest repeat, not an infinite loop or exception."""
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        all_entries = {
+            demo_content.build_problem(section, kind='first', salt=s)[0] for s in range(4)
+        }
+        problem, value = demo_content.build_unique_problem(section, kind='first', exclude=all_entries)
+        self.assertIn(problem, all_entries)  # honest repeat, not a crash
+        self.assertIsNotNone(value)
+
+    def test_exhausted_pool_at_the_service_layer_still_returns_promptly(self):
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        all_entries = {
+            demo_content.build_problem(section, kind='first', salt=s)[0] for s in range(4)
+        }
+        problem = services._generate_problem(section=section, kind='first', exclude=all_entries)
+        self.assertIn(problem, all_entries)
+
+    def test_dedup_treats_whitespace_only_differences_as_the_same_problem(self):
+        section = _create_section(name='正規化重複テスト単元')
+        problem0, _value0 = demo_content.build_problem(section, kind='first', salt=0)
+        padded = f'  {problem0}\n\n'  # same problem, incidental extra whitespace
+        unique_problem, _value = demo_content.build_unique_problem(
+            section, kind='first', exclude={padded},
+        )
+        self.assertNotEqual(unique_problem, problem0)
 
 
 class MathProblemDedupTests(TestCase):
