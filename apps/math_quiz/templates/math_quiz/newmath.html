@@ -1,10 +1,11 @@
+{% extends "base.html" %}
 {% load i18n %}
-<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% trans "新しい科目を追加" %} | MathPath</title>
+
+{% block title %}{% trans "新しい科目を追加" %} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
 {% include "math_quiz/_style.html" %}
 <style>
   .wrap { display: flex; justify-content: center; padding: 2.5rem 1.25rem 4rem; }
@@ -31,17 +32,10 @@
 
   .note { font-size: .8rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem .9rem; }
 </style>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
-    <div style="display:flex; align-items:center; gap:1rem;">
-      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
-      {% include "math_quiz/_language_switcher.html" %}
-    </div>
-  </header>
+{% endblock %}
 
-  <div class="wrap">
+{% block content %}
+<div class="wrap">
     <form class="card form-card" method="post" action="{% url 'math_quiz:add_unit' %}" enctype="multipart/form-data">
       {% csrf_token %}
       <div>
@@ -110,5 +104,4 @@
       }
     });
   </script>
-</body>
-</html>
+{% endblock %}

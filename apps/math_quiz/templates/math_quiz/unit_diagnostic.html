@@ -1,10 +1,11 @@
+{% extends "base.html" %}
 {% load i18n %}
-<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% trans "診断クイズ" %} — {{ unit.name }} | MathPath</title>
+
+{% block title %}{% trans "診断クイズ" %} — {{ unit.name }} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
 {% include "math_quiz/_style.html" %}
 <style>
   .page { max-width: 640px; margin: 0 auto; padding: 0 1.25rem 5rem; }
@@ -38,17 +39,10 @@
   .recommend-list a:hover { border-color: var(--primary); color: var(--primary-dark); }
   .panel h3.block-title { font-size: .88rem; margin: 1.1rem 0 .3rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 </style>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
-    <div style="display:flex; align-items:center; gap:1rem;">
-      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
-      {% include "math_quiz/_language_switcher.html" %}
-    </div>
-  </header>
+{% endblock %}
 
-  <div class="page">
+{% block content %}
+<div class="page">
     {% if not done %}
       <div class="head">
         <p class="eyebrow">{% trans "診断クイズ" %}</p>
@@ -116,5 +110,4 @@
       </section>
     {% endif %}
   </div>
-</body>
-</html>
+{% endblock %}

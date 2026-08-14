@@ -1,30 +1,23 @@
+{% extends "base.html" %}
 {% load i18n %}
-<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ section.title }} | MathPath</title>
+
+{% block title %}{{ section.title }} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
 {% include "math_quiz/_style.html" %}
 <style>
-  .menu-wrapper { position: relative; }
-  .hamburger-btn {
-    width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border);
-    background: var(--surface); font-size: 1.1rem; cursor: pointer; color: var(--muted);
+  /* Restarting is a page action, so it sits at the foot of the quiz rather than
+     behind a menu button this section alone would have had. */
+  .restart-row { margin: 2.5rem 0 0; display: flex; justify-content: center; }
+  .restart-row form { margin: 0; }
+  .restart-btn {
+    padding: .55rem 1.1rem; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--muted); font: inherit; font-size: .85rem;
+    font-weight: 600; cursor: pointer;
   }
-  .menu-dropdown {
-    display: none; flex-direction: column; position: absolute; top: 48px; right: 0;
-    min-width: 190px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-md); box-shadow: var(--shadow); overflow: hidden; z-index: 20;
-  }
-  .menu-dropdown.open { display: flex; }
-  .menu-dropdown form { margin: 0; }
-  .menu-dropdown a, .menu-item-button {
-    display: block; width: 100%; box-sizing: border-box; text-align: left;
-    padding: .75rem 1rem; font-size: .88rem; font-weight: 600; background: var(--surface);
-    color: var(--ink); border: none; text-decoration: none; cursor: pointer; font-family: inherit;
-  }
-  .menu-dropdown a:hover, .menu-item-button:hover { background: var(--bg); }
+  .restart-btn:hover { border-color: var(--primary); color: var(--primary); }
 
   .page { max-width: 680px; margin: 0 auto; padding: 0 1.25rem 5rem; }
   .section-head { margin: .5rem 0 1.4rem; }
@@ -102,27 +95,10 @@
   .record dt { font-weight: 700; font-size: .8rem; color: var(--muted); }
   .record dd { margin: .1rem 0 .6rem; }
 </style>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{% url 'math_quiz:unit_detail' section.unit_id %}"><span class="brand-mark">M</span>{{ section.unit.name }}</a>
-    <div style="display:flex; align-items:center; gap:1rem;">
-      {% include "math_quiz/_language_switcher.html" %}
-      <div class="menu-wrapper">
-        <button id="menuBtn" class="hamburger-btn" title="{% trans 'メニュー' %}" aria-haspopup="true" aria-expanded="false">☰</button>
-        <div id="menuDropdown" class="menu-dropdown">
-          <a href="{% url 'math_quiz:home' %}">{% trans "ホームに戻る" %}</a>
-          <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="reset">
-            <button class="menu-item-button" type="submit">{% trans "最初からやり直す" %}</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </header>
+{% endblock %}
 
-  <div class="page">
+{% block content %}
+<div class="page">
     <div class="section-head">
       <p class="eyebrow">{{ current_stage_label }}</p>
       <h1>{{ section.title }}</h1>
@@ -288,22 +264,12 @@
 
     <a class="btn btn-primary" href="{% url 'math_quiz:home' %}">{% trans "ホームに戻る" %}</a>
     {% endif %}
+    <div class="restart-row">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset">
+        <button class="restart-btn" type="submit">{% trans "最初からやり直す" %}</button>
+      </form>
+    </div>
   </div>
-
-  <script>
-    const menuBtn = document.getElementById('menuBtn');
-    const menuDropdown = document.getElementById('menuDropdown');
-    menuBtn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const open = menuDropdown.classList.toggle('open');
-      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    document.addEventListener('click', (event) => {
-      if (!menuDropdown.contains(event.target) && event.target !== menuBtn) {
-        menuDropdown.classList.remove('open');
-        menuBtn.setAttribute('aria-expanded', 'false');
-      }
-    });
-  </script>
-</body>
-</html>
+{% endblock %}

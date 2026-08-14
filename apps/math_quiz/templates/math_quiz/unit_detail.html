@@ -1,10 +1,11 @@
+{% extends "base.html" %}
 {% load i18n %}
-<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ unit.name }} | MathPath</title>
+
+{% block title %}{{ unit.name }} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
 {% include "math_quiz/_style.html" %}
 <style>
   .head { padding: .5rem clamp(1.25rem, 4vw, 3rem) 1.25rem; max-width: 720px; }
@@ -37,17 +38,10 @@
 
   .empty { padding: 2rem; color: var(--muted); }
 </style>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{% url 'math_quiz:home' %}"><span class="brand-mark">M</span>MathPath</a>
-    <div style="display:flex; align-items:center; gap:1rem;">
-      <a class="top-link" href="{% url 'math_quiz:home' %}">← {% trans "ホームに戻る" %}</a>
-      {% include "math_quiz/_language_switcher.html" %}
-    </div>
-  </header>
+{% endblock %}
 
-  <section class="head">
+{% block content %}
+<section class="head">
     <p class="eyebrow">{% trans "科目" %}</p>
     <h1>{{ unit.name }}</h1>
     {% if unit.file %}<a class="file-link" href="{{ unit.file.url }}">↓ {% trans "参考ファイルをダウンロード" %}</a>{% endif %}
@@ -102,5 +96,4 @@
     <p class="empty">{% trans "セクションがまだありません。" %}</p>
     {% endfor %}
   </div>
-</body>
-</html>
+{% endblock %}
