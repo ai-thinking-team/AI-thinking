@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n math_extras %}
 
 {% block title %}{{ section.title }} | Trellis{% endblock %}
 
@@ -121,22 +121,42 @@
 
     {% if current_stage == 'first' %}
     <section class="panel card">
-      <div class="equation">{{ session.first_problem }}</div>
-      <form class="stage-form" method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="first_attempt">
-        <div class="field"><label>{% trans "解答" %}</label><textarea name="answer" class="answer-box" placeholder="{% trans 'ここに解答を入力してください' %}" required></textarea></div>
-        <div class="field"><label>{% trans "考え方の説明" %}</label><textarea name="reasoning" placeholder="{% trans 'どう考えて解いたか説明してください' %}" required></textarea></div>
-        {% include "math_quiz/_confidence.html" %}
-        <button type="submit" class="btn btn-primary">{% trans "提出" %}</button>
-      </form>
+      <div class="equation">{{ session.first_problem|latexify }}</div>
+      {% if dont_know_hint %}
+        <div class="hint-block" style="border-top: none; margin-top: 0; padding-top: 0;">
+          <h3>{% trans "ヒント レベル1" %}</h3>
+          <div class="hint-card">
+            <span class="level-tag">1</span>
+            <p>{{ dont_know_hint }}</p>
+          </div>
+        </div>
+        <form class="stage-form" method="post" style="margin-top: 1.2rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="think_again">
+          <button type="submit" class="btn btn-primary">{% trans "もう一度考える" %}</button>
+        </form>
+      {% else %}
+        <form class="stage-form" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="first_attempt">
+          <div class="field"><label>{% trans "解答" %}</label><textarea name="answer" class="answer-box" placeholder="{% trans 'ここに解答を入力してください' %}" required></textarea></div>
+          <div class="field"><label>{% trans "考え方の説明" %}</label><textarea name="reasoning" placeholder="{% trans 'どう考えて解いたか説明してください' %}" required></textarea></div>
+          {% include "math_quiz/_confidence.html" %}
+          <button type="submit" class="btn btn-primary">{% trans "提出" %}</button>
+        </form>
+        <form class="stage-form" method="post" style="margin-top: .7rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="dont_know">
+          <button type="submit" class="btn btn-ghost">{% trans "わからない" %}</button>
+        </form>
+      {% endif %}
     </section>
 
     {% elif current_stage == 'diagnosis' %}
     <section class="panel card">
-      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation }}</p>{% endif %}
+      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation|latexify }}</p>{% endif %}
       <p class="prompt-note">{% trans "不正解でした。誤解を明らかにするための質問です。" %}</p>
-      <p class="prompt">{{ first_attempt.diagnosis_question }}</p>
+      <p class="prompt">{{ first_attempt.diagnosis_question|latexify }}</p>
       <form class="stage-form" method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="diagnosis">
@@ -148,7 +168,7 @@
     {% elif current_stage == 'verification' %}
     <section class="panel card">
       <p class="status-banner success">{% trans "正解でした！自信度が低かったので、理解を確認します。" %}</p>
-      <p class="prompt">{{ first_attempt.verification_question }}</p>
+      <p class="prompt">{{ first_attempt.verification_question|latexify }}</p>
       <form class="stage-form" method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="verification">
@@ -159,8 +179,8 @@
 
     {% elif current_stage == 'revision' %}
     <section class="panel card">
-      <div class="equation">{{ session.first_problem }}</div>
-      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation }}</p>{% endif %}
+      <div class="equation">{{ session.first_problem|latexify }}</div>
+      {% if latest_attempt.explanation %}<p class="status-banner error">{{ latest_attempt.explanation|latexify }}</p>{% endif %}
       <form class="stage-form" method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="revision">
@@ -175,14 +195,14 @@
         {% if current_hint %}
         <div class="hint-card{% if current_hint.level == 5 %} level-5{% endif %}">
           <span class="level-tag">{{ current_hint.level }}</span>
-          <p>{{ current_hint.content }}</p>
+          <p>{{ current_hint.content|latexify }}</p>
         </div>
         {% endif %}
         {% if hint_usage|length > 1 %}
         <details class="hint-history">
           <summary>{% blocktrans with count_hints=hint_usage|length %}これまでのヒントを見る（{{ count_hints }}件）{% endblocktrans %}</summary>
           {% for hint in hint_usage %}
-            <div class="hint-history-item"><strong>{% blocktrans with level=hint.level %}レベル{{ level }}:{% endblocktrans %}</strong> {{ hint.content }}</div>
+            <div class="hint-history-item"><strong>{% blocktrans with level=hint.level %}レベル{{ level }}:{% endblocktrans %}</strong> {{ hint.content|latexify }}</div>
           {% endfor %}
         </details>
         {% endif %}
@@ -194,10 +214,10 @@
       <p class="prompt-note">{% trans "最後に、今回の考え方を自分の言葉で確認してみましょう。長い説明は必要ありません（目安10〜20秒、1〜2文でOKです）。" %}</p>
       {% if teach_back_attempts %}
         {% with latest_teach_back=teach_back_attempts|last %}
-          <p class="status-banner warning">{{ latest_teach_back.feedback }}</p>
+          <p class="status-banner warning">{{ latest_teach_back.feedback|latexify }}</p>
         {% endwith %}
       {% endif %}
-      <p class="prompt">{{ current_teach_back.question }}</p>
+      <p class="prompt">{{ current_teach_back.question|latexify }}</p>
       <form class="stage-form" method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="teach_back">
@@ -209,7 +229,7 @@
     {% elif current_stage == 'transfer' %}
     <section class="panel card">
       <p class="locked-note">{% trans "AIのヒントなしで解いてください。" %}</p>
-      <div class="equation">{{ session.transfer_problem }}</div>
+      <div class="equation">{{ session.transfer_problem|latexify }}</div>
       <form class="stage-form" method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="transfer">
@@ -252,13 +272,13 @@
         {% endif %}
       {% endfor %}
       {% if hint_usage %}
-        <details><summary>{% blocktrans with count_hints=hint_usage|length %}使用したヒント（{{ count_hints }}件）{% endblocktrans %}</summary><dl>{% for hint in hint_usage %}<dt>{% blocktrans with level=hint.level %}レベル{{ level }}{% endblocktrans %}</dt><dd>{{ hint.content }}</dd>{% endfor %}</dl></details>
+        <details><summary>{% blocktrans with count_hints=hint_usage|length %}使用したヒント（{{ count_hints }}件）{% endblocktrans %}</summary><dl>{% for hint in hint_usage %}<dt>{% blocktrans with level=hint.level %}レベル{{ level }}{% endblocktrans %}</dt><dd>{{ hint.content|latexify }}</dd>{% endfor %}</dl></details>
       {% endif %}
       {% if teach_back_attempts %}
-        <details><summary>Teach-Back</summary><dl>{% for item in teach_back_attempts %}<dt>{{ item.evaluation }}</dt><dd>{{ item.feedback }}</dd>{% endfor %}</dl></details>
+        <details><summary>Teach-Back</summary><dl>{% for item in teach_back_attempts %}<dt>{{ item.evaluation }}</dt><dd>{{ item.feedback|latexify }}</dd>{% endfor %}</dl></details>
       {% endif %}
       {% if transfer_attempt %}
-        <details><summary>Transfer Check</summary><dl><dt>{% if transfer_attempt.is_correct %}{% trans "正解" %}{% else %}{% trans "不正解" %}{% endif %}</dt><dd>{{ transfer_attempt.explanation }}</dd></dl></details>
+        <details><summary>Transfer Check</summary><dl><dt>{% if transfer_attempt.is_correct %}{% trans "正解" %}{% else %}{% trans "不正解" %}{% endif %}</dt><dd>{{ transfer_attempt.explanation|latexify }}</dd></dl></details>
       {% endif %}
     </section>
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n math_extras %}
 
 {% block title %}{% trans "診断クイズ" %} — {{ unit.name }} | Trellis{% endblock %}
 
@@ -14,9 +14,10 @@
   .head h1 { font-size: 1.35rem; margin: .3rem 0 .1rem; }
   .head p { color: var(--muted); margin: .3rem 0 0; font-size: .9rem; }
 
-  .progress-dots { display: flex; gap: .4rem; margin: 1.2rem 0 1.6rem; }
-  .progress-dots span { flex: 1; height: 6px; border-radius: 999px; background: var(--primary-soft); }
-  .progress-dots span.done { background: linear-gradient(90deg, var(--primary), #8a3ff0); }
+  .progress-summary { margin: 1rem 0 1.4rem; }
+  .progress-summary p { margin: 0 0 .4rem; color: var(--muted); font-size: .85rem; }
+  .progress-track { height: 8px; border-radius: 999px; background: var(--primary-soft); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #8a3ff0); }
 
   .panel { padding: 1.6rem 1.6rem 1.75rem; margin-bottom: 1.1rem; }
   .equation { font-family: 'Space Mono', ui-monospace, monospace; font-size: 1.3rem; background: var(--primary-soft); color: var(--primary-dark); border-radius: var(--radius-sm); padding: 1.1rem; margin: 0 0 1.3rem; text-align: center; }
@@ -50,15 +51,15 @@
         <p>{% trans "この科目に入る前に、いくつかの問題を解いて今の理解度を確認しましょう。" %}</p>
       </div>
 
-      <div class="progress-dots">
-        {% for is_done in progress_dots %}
-          <span class="{% if is_done %}done{% endif %}"></span>
-        {% endfor %}
+      <div class="progress-summary">
+        <p>{% blocktrans %}診断問題 {{ current }} / {{ total }}{% endblocktrans %}</p>
+        <div class="progress-track" role="progressbar" aria-valuenow="{{ progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" style="width: {{ progress_percent }}%;"></div>
+        </div>
       </div>
 
       <section class="panel card">
-        <p class="prompt-note" style="color:var(--muted); font-size:.85rem; margin:0 0 .6rem;">{% blocktrans with current=answered_count|add:1 %}問題 {{ current }} / {{ total }}{% endblocktrans %}</p>
-        <div class="equation">{{ current_item.problem }}</div>
+        <div class="equation">{{ current_item.problem|latexify }}</div>
         <form class="stage-form" method="post">
           {% csrf_token %}
           <input type="hidden" name="action" value="answer">
@@ -79,7 +80,7 @@
           <span class="score">{{ result.correct_count }}</span>
           <span class="of">/ {% blocktrans with total=result.total %}{{ total }} 問正解{% endblocktrans %}</span>
         </div>
-        <p class="feedback-text">{{ result.feedback }}</p>
+        <p class="feedback-text">{{ result.feedback|latexify }}</p>
 
         {% if result.answers %}
         <ul class="answer-list">
@@ -87,7 +88,7 @@
           <li>
             <span class="answer-badge {% if item.is_correct %}correct{% else %}incorrect{% endif %}">{% if item.is_correct %}✓{% else %}✕{% endif %}</span>
             {{ item.section.title }}
-            <span class="eq">{{ item.problem }}</span>
+            <span class="eq">{{ item.problem|latexify }}</span>
           </li>
           {% endfor %}
         </ul>

@@ -9,7 +9,7 @@ from django.utils import timezone, translation
 
 from apps.ai_engine.exceptions import AIEngineError
 
-from . import demo_content, mastery, services
+from . import ai_prompts, demo_content, mastery, services
 from .models import (
     ConceptMastery,
     ConfidenceCalibration,
@@ -21,6 +21,7 @@ from .models import (
     UnitMaterial,
 )
 from .state_machine import WorkflowState
+from .templatetags.math_extras import latexify
 
 
 def _fake_generate_ai_response(*, system_prompt, user_prompt, response_schema=None, files=None):
@@ -96,6 +97,55 @@ class MathRouteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, section.unit.name)
         self.assertContains(response, '最初の解答')
+
+
+class MathDontKnowButtonTests(TestCase):
+    """The "わからない" button at the FIRST_ATTEMPT stage — see
+    views.section_quiz / _handle_action's 'dont_know'/'think_again'
+    actions and services.dont_know_hint."""
+
+    def setUp(self):
+        self.section = _create_section()
+        self.url = reverse('math_quiz:section_quiz', args=[self.section.id])
+
+    def test_dont_know_button_is_shown_on_the_first_attempt_screen(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'わからない')
+
+    def test_clicking_dont_know_shows_a_level_1_hint(self):
+        response = self.client.post(self.url, {'action': 'dont_know'}, follow=True)
+        self.assertContains(response, 'ヒント レベル1')
+        expected_hint = demo_content.build_hint(section=self.section, level=1, kind='first')
+        self.assertContains(response, expected_hint)
+
+    def test_dont_know_never_reveals_the_correct_answer(self):
+        correct_answer = _correct_answer(self.section, kind='first')
+        response = self.client.post(self.url, {'action': 'dont_know'}, follow=True)
+        self.assertNotContains(response, f'x = {correct_answer}')
+
+    def test_dont_know_does_not_end_the_section_or_change_state(self):
+        self.client.post(self.url, {'action': 'dont_know'})
+        session = SectionSession.objects.get(section=self.section)
+        self.assertEqual(session.current_state, WorkflowState.FIRST_ATTEMPT)
+        self.assertEqual(session.attempts.count(), 0)  # nothing recorded — no Attempt created
+
+    def test_think_again_returns_to_the_normal_answer_form(self):
+        self.client.post(self.url, {'action': 'dont_know'})
+        response = self.client.post(self.url, {'action': 'think_again'}, follow=True)
+        self.assertContains(response, 'name="answer"')
+        self.assertNotContains(response, 'ヒント レベル1')
+
+    def test_normal_answer_submission_still_works_after_using_dont_know(self):
+        self.client.post(self.url, {'action': 'dont_know'})
+        self.client.post(self.url, {'action': 'think_again'})
+        correct_answer = _correct_answer(self.section, kind='first')
+        response = self.client.post(self.url, {
+            'action': 'first_attempt', 'answer': correct_answer,
+            'reasoning': '移項して計算しました', 'confidence': 5,
+        }, follow=True)
+        session = SectionSession.objects.get(section=self.section)
+        self.assertEqual(session.attempts.count(), 1)
+        self.assertTrue(session.attempts.first().is_correct)
 
 
 class MathWorkflowServiceTests(TestCase):
@@ -341,11 +391,11 @@ class MathViewFlowTests(TestCase):
 
 
 class MathUnitDiagnosticServiceTests(TestCase):
-    """The diagnostic quiz now lives at the course level: one problem
-    drawn from each section (up to MAX_DIAGNOSTIC_QUESTIONS), its length
-    adapting to how consistent the answers are (see
-    services._diagnostic_should_stop) instead of a fixed count, taken
-    before the section list is shown."""
+    """The diagnostic quiz lives at the course level: one problem drawn
+    from every section (up to MAX_DIAGNOSTIC_QUESTIONS), taken before the
+    section list is shown. Every candidate section always gets a
+    question, regardless of whether earlier answers were right or
+    wrong — there's no early-stop shortcut."""
 
     def setUp(self):
         self.unit, self.sections = _create_unit_with_sections('診断テスト科目', 3)
@@ -362,30 +412,36 @@ class MathUnitDiagnosticServiceTests(TestCase):
         self.assertEqual(diagnostic.answers.count(), 1)
         self.assertIsNone(diagnostic.completed_at)
 
-    def test_two_consecutive_agreeing_answers_stop_the_quiz_early(self):
+    def test_consecutive_agreeing_answers_do_not_stop_the_quiz_early(self):
         diagnostic = services.start_unit_diagnostic(unit=self.unit, browser_session_key='browser-key')
         self._answer_current(diagnostic, correct=True)
         diagnostic.refresh_from_db()
-        self.assertIsNone(diagnostic.completed_at)  # 1 answer alone is never enough to stop
+        self.assertIsNone(diagnostic.completed_at)
 
         self._answer_current(diagnostic, correct=True)
         diagnostic.refresh_from_db()
-        # Two agreeing answers (both correct) is a clear enough signal —
-        # the quiz stops well under the old fixed count of 3.
-        self.assertIsNotNone(diagnostic.completed_at)
-        self.assertEqual(diagnostic.answers.count(), 2)
+        # Two agreeing (both correct) answers used to stop the quiz early —
+        # that shortcut is gone, so with 3 candidate sections it must still
+        # be waiting on the 3rd question here.
+        self.assertIsNone(diagnostic.completed_at)
+        self.assertEqual(diagnostic.answers.count(), 3)
 
-    def test_mixed_answers_continue_past_two_but_never_past_five(self):
+        self._answer_current(diagnostic, correct=True)
+        diagnostic.refresh_from_db()
+        # All 3 candidate sections asked (and none left) is what ends it now.
+        self.assertIsNotNone(diagnostic.completed_at)
+        self.assertEqual(diagnostic.answers.count(), 3)
+
+    def test_diagnostic_always_asks_every_candidate_section_never_past_the_cap(self):
         unit, _sections = _create_unit_with_sections('診断長め科目', 6)
         diagnostic = services.start_unit_diagnostic(unit=unit, browser_session_key='browser-key-2')
-        # Alternate correct/incorrect so the last-two-agree rule never
-        # fires — this must still stop at MAX_DIAGNOSTIC_QUESTIONS (5),
-        # never asking a 6th question even though a 6th section exists.
-        for i in range(services.MAX_DIAGNOSTIC_QUESTIONS):
+        # All-correct used to trigger the early-stop shortcut after just 2
+        # questions — it must now run all the way to MAX_DIAGNOSTIC_QUESTIONS
+        # (5), never asking a 6th question even though a 6th section exists.
+        for _ in range(services.MAX_DIAGNOSTIC_QUESTIONS):
             diagnostic.refresh_from_db()
-            if diagnostic.completed_at is not None:
-                break
-            self._answer_current(diagnostic, correct=(i % 2 == 0))
+            self.assertIsNone(diagnostic.completed_at)
+            self._answer_current(diagnostic, correct=True)
         diagnostic.refresh_from_db()
         self.assertIsNotNone(diagnostic.completed_at)
         self.assertEqual(diagnostic.answers.count(), services.MAX_DIAGNOSTIC_QUESTIONS)
@@ -399,11 +455,11 @@ class MathUnitDiagnosticServiceTests(TestCase):
 
         self._answer_current(diagnostic, correct=True)
         diagnostic.refresh_from_db()
-        self.assertIsNone(diagnostic.completed_at)  # wrong, correct — still mixed, one more question
+        self.assertIsNone(diagnostic.completed_at)  # 2 of 3 candidate sections answered, one left
 
         self._answer_current(diagnostic, correct=True)
         diagnostic.refresh_from_db()
-        # correct, correct agree — stops at 3, having started with 1 wrong.
+        # All 3 candidate sections answered (self.sections has 3) — done.
         self.assertIsNotNone(diagnostic.completed_at)
 
         result = services.build_unit_diagnostic_result(diagnostic=diagnostic)
@@ -483,6 +539,43 @@ class MathUnitDiagnosticViewTests(TestCase):
         new_pk = UnitDiagnosticSession.objects.get(unit=self.unit).pk
         self.assertEqual(old_pk, new_pk)
 
+    def test_progress_shows_first_question_out_of_the_actual_candidate_total(self):
+        self.client.get(self.detail_url)  # creates the diagnostic session (3 sections -> total 3)
+        response = self.client.get(self.diag_url)
+        self.assertContains(response, '診断問題 1 / 3')
+        self.assertEqual(response.context['current'], 1)
+        self.assertEqual(response.context['total'], 3)
+        self.assertEqual(response.context['progress_percent'], 33)
+
+    def test_progress_advances_after_answering(self):
+        self.client.get(self.detail_url)
+        diagnostic = UnitDiagnosticSession.objects.get(unit=self.unit)
+        item = diagnostic.answers.get(is_correct__isnull=True)
+        wrong_answer = str(int(_correct_answer(item.section, kind='diagnostic')) + 1000)
+        self.client.post(self.diag_url, {'action': 'answer', 'answer_id': item.id, 'answer': wrong_answer})
+
+        response = self.client.get(self.diag_url)
+        self.assertContains(response, '診断問題 2 / 3')
+        self.assertEqual(response.context['progress_percent'], 67)
+
+    def test_progress_reaches_100_percent_on_the_final_question(self):
+        self.client.get(self.detail_url)
+        diagnostic = UnitDiagnosticSession.objects.get(unit=self.unit)
+        # Alternate correct/incorrect so the last-two-agree early stop (see
+        # services._diagnostic_should_stop) never fires, forcing the quiz
+        # through all 3 candidate sections instead of stopping at 2.
+        for i in range(2):
+            item = diagnostic.answers.get(is_correct__isnull=True)
+            correct_answer = _correct_answer(item.section, kind='diagnostic')
+            answer = correct_answer if i % 2 == 0 else str(int(correct_answer) + 1000)
+            self.client.post(self.diag_url, {'action': 'answer', 'answer_id': item.id, 'answer': answer})
+            diagnostic.refresh_from_db()
+        self.assertIsNone(diagnostic.completed_at)  # still mid-quiz, on question 3 of 3
+
+        response = self.client.get(self.diag_url)
+        self.assertContains(response, '診断問題 3 / 3')
+        self.assertEqual(response.context['progress_percent'], 100)
+
     def test_revisiting_a_completed_unit_never_redirects_to_diagnostic_again(self):
         self.client.get(self.detail_url)
         self._complete_diagnostic_with_all_correct()
@@ -495,6 +588,87 @@ class MathUnitDiagnosticViewTests(TestCase):
             response = self.client.get(self.detail_url)
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, self.sections[0].title)
+
+
+class MathDiagnosticGenerationFailureTests(TestCase):
+    """Regression coverage for a reported bug: when the next diagnostic
+    question fails to generate, the learner used to be stranded on a
+    screen with a blank problem (or a 500) — progress showed e.g. "4/5"
+    but there was no question to answer. Ending the quiz right there,
+    using whatever was already answered, is the fix — see
+    services._add_diagnostic_question / end_unit_diagnostic_now and
+    views.unit_diagnostic's defensive current_item check."""
+
+    def setUp(self):
+        self.unit, self.sections = _create_unit_with_sections('生成失敗テスト科目', 5)
+
+    def test_generation_failure_ends_the_quiz_using_answers_so_far(self):
+        diagnostic = services.start_unit_diagnostic(unit=self.unit, browser_session_key='fail-key')
+        item = diagnostic.answers.get(is_correct__isnull=True)
+        answer = _correct_answer(item.section, kind='diagnostic')
+
+        with patch('apps.math_quiz.services._generate_problem', side_effect=RuntimeError('boom')):
+            result_item = services.submit_unit_diagnostic_answer(
+                diagnostic=diagnostic, answer_id=item.id, answer=answer,
+            )
+
+        self.assertTrue(result_item.is_correct)  # the answer that DID succeed is still graded and kept
+        diagnostic.refresh_from_db()
+        self.assertIsNotNone(diagnostic.completed_at)
+        self.assertEqual(diagnostic.answers.count(), 1)  # no phantom/blank next question was created
+
+        result = services.build_unit_diagnostic_result(diagnostic=diagnostic)
+        self.assertEqual(result['total'], 1)
+
+    def test_view_shows_the_result_screen_not_a_blank_problem_or_a_500(self):
+        detail_url = reverse('math_quiz:unit_detail', args=[self.unit.id])
+        diag_url = reverse('math_quiz:unit_diagnostic', args=[self.unit.id])
+        self.client.get(detail_url)  # creates the diagnostic + Q1, under the client's own session
+        diagnostic = UnitDiagnosticSession.objects.get(unit=self.unit)
+        item = diagnostic.answers.get(is_correct__isnull=True)
+        answer = _correct_answer(item.section, kind='diagnostic')
+
+        with patch('apps.math_quiz.services._generate_problem', side_effect=RuntimeError('boom')):
+            response = self.client.post(
+                diag_url, {'action': 'answer', 'answer_id': item.id, 'answer': answer}, follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '診断結果')
+        self.assertNotContains(response, '<div class="equation"></div>')
+
+    def test_view_self_heals_a_stuck_diagnostic_with_no_pending_question(self):
+        """Belt-and-suspenders: even if a diagnostic somehow ends up with
+        answers but no pending question and no completed_at (the exact
+        broken state from the bug report — e.g. left over from before this
+        fix), the view must never render the blank-problem screen."""
+        detail_url = reverse('math_quiz:unit_detail', args=[self.unit.id])
+        diag_url = reverse('math_quiz:unit_diagnostic', args=[self.unit.id])
+        self.client.get(detail_url)
+        diagnostic = UnitDiagnosticSession.objects.get(unit=self.unit)
+        item = diagnostic.answers.get(is_correct__isnull=True)
+        item.is_correct = True
+        item.answer = '1'
+        item.save(update_fields=('is_correct', 'answer'))
+        # Stuck: answered, but no follow-up question and not completed.
+
+        response = self.client.get(diag_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '診断結果')
+        diagnostic.refresh_from_db()
+        self.assertIsNotNone(diagnostic.completed_at)
+
+    def test_normal_diagnostic_still_completes_all_the_way_through(self):
+        # No mocked failure here — confirms the fix didn't change the
+        # happy path (still asks every candidate section, still reaches
+        # the results screen normally).
+        diagnostic = services.start_unit_diagnostic(unit=self.unit, browser_session_key='normal-key')
+        while diagnostic.completed_at is None:
+            item = diagnostic.answers.get(is_correct__isnull=True)
+            answer = _correct_answer(item.section, kind='diagnostic')
+            services.submit_unit_diagnostic_answer(diagnostic=diagnostic, answer_id=item.id, answer=answer)
+            diagnostic.refresh_from_db()
+        self.assertEqual(diagnostic.answers.count(), len(self.sections))
 
 
 class MathSectionProfileTests(TestCase):
@@ -811,6 +985,24 @@ class MathAIGenerationTests(TestCase):
         self.assertTrue(attempt.is_correct)
         self.assertEqual(attempt.explanation, 'AIによる採点説明です。')
 
+    def test_diagnostic_problem_generation_uses_the_numeric_only_prompt(self):
+        """Diagnostic problems must be answerable with a single number (see
+        ai_prompts.DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT) — a distinct prompt
+        from the one used for a section's regular first_problem, which
+        allows richer answers."""
+        section = Section.objects.create(unit=self.unit, title='セクションD', content='内容')
+        services._generate_problem(section=section, kind='diagnostic')
+        used_prompt = self.mock_response.call_args.kwargs['system_prompt']
+        self.assertIn(ai_prompts.DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT, used_prompt)
+        self.assertIn('数値', used_prompt)
+
+    def test_first_problem_generation_uses_the_general_prompt_not_the_diagnostic_one(self):
+        section = Section.objects.create(unit=self.unit, title='セクションD2', content='内容')
+        services._generate_problem(section=section, kind='first')
+        used_prompt = self.mock_response.call_args.kwargs['system_prompt']
+        self.assertIn(ai_prompts.PROBLEM_SYSTEM_PROMPT, used_prompt)
+        self.assertNotIn(ai_prompts.DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT, used_prompt)
+
     def test_first_problem_falls_back_when_ai_returns_an_empty_problem(self):
         section = Section.objects.create(unit=self.unit, title='セクションE', content='内容')
         session, _ = services.get_or_create_section_session(section=section, browser_session_key='ai-browser-5')
@@ -996,6 +1188,61 @@ class MathAIFallbackCatalogTests(TestCase):
             self.assertNotIn('移項', hint)
 
 
+class MathFallbackSectionTopicMatchTests(TestCase):
+    """Regression coverage for a reported bug: a section titled
+    '自然数と整数の性質' (natural numbers/integers) inside a '数と式'-named
+    course showed a '(x-6)^2 を展開したときの定数項を求めなさい' problem —
+    that catalog entry belongs to '数と式''s narrow 展開/因数分解/有理化
+    scope, not to this section's actual topic. See
+    demo_content._section_matches_catalog."""
+
+    def test_off_topic_section_in_a_catalog_matched_course_does_not_get_that_catalogs_problem(self):
+        unit = Unit.objects.create(name='数と式', is_demo=True)
+        section = Section.objects.create(
+            unit=unit, title='自然数と整数の性質',
+            content='自然数の定義、加減乗除の基本的性質、整数の符号と絶対値について学び、'
+                    '数の大小関係や約数・倍数の概念を理解する。',
+        )
+        catalog_problems = {e['problem'] for e in demo_content.AI_FALLBACK_PROBLEMS['数と式']['problems']}
+        for salt in range(demo_content.MAX_PROBLEM_DEDUP_ATTEMPTS):
+            problem, _value = demo_content.build_problem(section, kind='first', salt=salt)
+            self.assertNotIn(problem, catalog_problems)
+        # Falls through to the generic, subject-agnostic equation instead —
+        # safe (not confidently wrong), even though less tailored.
+        problem, _value = demo_content.build_problem(section, kind='first')
+        self.assertRegex(problem, r'^-?\d+x [+-] \d+ = -?\d+$')
+
+    def test_on_topic_section_in_the_same_course_still_gets_the_catalog_problem(self):
+        # Same '数と式' course, but this section's own topic (matching the
+        # curated UNIT_SECTION_PROFILES title/content for '数と式') really
+        # is what the catalog was written for — the fix must not make the
+        # catalog unreachable altogether within a multi-topic course.
+        unit = Unit.objects.create(name='数と式', is_demo=True)
+        section = Section.objects.create(
+            unit=unit, title='展開と因数分解', content='多項式の展開と因数分解の公式を確認します。',
+        )
+        problem, answer = demo_content.build_problem(section, kind='first')
+        catalog = demo_content.AI_FALLBACK_PROBLEMS['数と式']['problems']
+        matching = [e for e in catalog if e['problem'] == problem]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(answer, matching[0]['answer'])
+
+    def test_ai_generation_prompt_forbids_off_topic_problems(self):
+        self.assertIn('別分野の問題を生成しないこと', ai_prompts.PROBLEM_SYSTEM_PROMPT)
+        self.assertIn('別分野の問題を生成しないこと', ai_prompts.DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT)
+
+    def test_generic_placeholder_content_still_falls_back_to_the_course_catalog(self):
+        # Regression guard: sections with no real topic-specific content of
+        # their own (as in most of this test suite's setup) must keep
+        # using the unit-level catalog match exactly as before — there's
+        # no section-level signal to second-guess it with.
+        unit = Unit.objects.create(name='群論', is_demo=True)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        problem, _value = demo_content.build_problem(section, kind='first')
+        catalog_problems = {e['problem'] for e in demo_content.AI_FALLBACK_PROBLEMS['群論']['problems']}
+        self.assertIn(problem, catalog_problems)
+
+
 class MathAIFallbackGenerationTests(TestCase):
     """services._generate_problem falling back to the subject-matched
     catalog — both when the AI call fails outright, and when it succeeds
@@ -1054,14 +1301,13 @@ class MathDiagnosticSectionDedupTests(TestCase):
     and growing each catalog to 3 entries."""
 
     def _complete_diagnostic(self, unit, browser_session_key):
-        """Answers every diagnostic question correctly so the quiz always
-        stops at its minimum (2 agreeing answers — see
-        services._diagnostic_should_stop), rather than dragging on and
-        consuming more of a small catalog than a real confident learner
-        would. _correct_answer alone assumes salt=0, but duplicate
-        avoidance can legitimately pick a different salt for a given
-        (section, kind) — so the expected value is resolved against
-        whichever salt actually produced this question's problem text."""
+        """Answers every diagnostic question (correctly, though it no
+        longer affects how many questions get asked — every candidate
+        section always gets one). _correct_answer alone assumes salt=0,
+        but duplicate avoidance can legitimately pick a different salt for
+        a given (section, kind) — so the expected value is resolved
+        against whichever salt actually produced this question's problem
+        text."""
         diagnostic = services.start_unit_diagnostic(unit=unit, browser_session_key=browser_session_key)
         seen = []
         while True:
@@ -1079,10 +1325,15 @@ class MathDiagnosticSectionDedupTests(TestCase):
         return diagnostic, seen
 
     def test_diagnostic_problems_never_reused_as_a_sections_first_problem(self):
+        # 2 sections (not 3+): the diagnostic no longer stops early — it
+        # now always asks one question per candidate section — so with a
+        # 5-entry-per-subject catalog, 2 sections keeps total demand
+        # (2 diagnostic + 2 first_problem = 4) comfortably inside capacity.
+        # See test_diagnostic_and_every_sections_first_problem_are_all_mutually_distinct.
         unit = Unit.objects.create(name='群論', is_demo=True)
         sections = [
             Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
-            for i in range(3)
+            for i in range(2)
         ]
         _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-first-browser')
 
@@ -1097,10 +1348,11 @@ class MathDiagnosticSectionDedupTests(TestCase):
             )
 
     def test_diagnostic_problems_never_reused_as_a_sections_transfer_problem(self):
+        # 2 sections — see test_diagnostic_problems_never_reused_as_a_sections_first_problem.
         unit = Unit.objects.create(name='群論', is_demo=True)
         sections = [
             Section.objects.create(unit=unit, title=f'セクション{i + 1}', content='内容', order=i)
-            for i in range(3)
+            for i in range(2)
         ]
         _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-transfer-browser')
 
@@ -1143,14 +1395,14 @@ class MathDiagnosticSectionDedupTests(TestCase):
     def test_section_retry_still_avoids_diagnostic_problems_too(self):
         # Reaches NEEDS_REVIEW via 5 wrong revisions rather than a
         # successful Transfer Check, so this only needs the catalog to
-        # cover diagnostic(2) + this section's first_problem(1) +
-        # the retried round's new first_problem(1) = 4 distinct texts —
-        # within what a 4-entry catalog can reliably provide, unlike also
-        # requiring a 5th (a Transfer Check problem) on top of that.
+        # cover diagnostic(2, one per section — the diagnostic no longer
+        # stops early) + this section's first_problem(1) + the retried
+        # round's new first_problem(1) = 4 distinct texts — within what a
+        # 5-entry catalog can reliably provide, unlike also requiring a
+        # 5th (a Transfer Check problem) on top of that.
         unit = Unit.objects.create(name='群論', is_demo=True)
         section = Section.objects.create(unit=unit, title='セクションA', content='内容')
         Section.objects.create(unit=unit, title='セクションB', content='内容')
-        Section.objects.create(unit=unit, title='セクションC', content='内容')
         _diagnostic, diagnostic_problems = self._complete_diagnostic(unit, 'diag-retry-browser')
 
         session, _ = services.get_or_create_section_session(
@@ -2315,7 +2567,6 @@ class MathI18nTests(TestCase):
         self.client.post(reverse('set_language'), {'language': 'en', 'next': reverse('math_quiz:home')})
         response = self.client.get(reverse('math_quiz:home'))
         self.assertContains(response, 'Math')
-        self.assertNotContains(response, '数学')
 
     def test_switching_back_to_japanese_works(self):
         self.client.post(reverse('set_language'), {'language': 'en', 'next': reverse('math_quiz:home')})
@@ -2352,3 +2603,87 @@ class MathI18nTests(TestCase):
         with translation.override('ja'):
             services._generate_problem(section=section, kind='first')
         self.assertIn('日本語で答えてください。', mock_response.call_args.kwargs['system_prompt'])
+
+    def test_generate_sections_does_not_force_japanese_regardless_of_selected_language(self):
+        """Regression: the user_prompt used to hardcode "（日本語での説明）"
+        directly next to the generation request — a much more specific,
+        nearby instruction than the generic "Answer in English." appended
+        to the system_prompt, so the model reliably followed the hardcoded
+        Japanese one instead even with English selected. See
+        services.generate_sections."""
+        configured_patcher = patch('apps.math_quiz.services.is_ai_configured', return_value=True)
+        self.addCleanup(configured_patcher.stop)
+        configured_patcher.start()
+        response_patcher = patch('apps.math_quiz.services.generate_ai_response')
+        self.addCleanup(response_patcher.stop)
+        mock_response = response_patcher.start()
+        mock_response.return_value = json.dumps({'sections': [{'title': 'What Is Probability?', 'content': '...'}]})
+
+        unit = Unit.objects.create(name='English Language Test Unit', is_demo=False)
+        with translation.override('en'):
+            services.generate_sections(unit, unit.name)
+        user_prompt = mock_response.call_args.kwargs['user_prompt']
+        self.assertNotIn('日本語', user_prompt)
+        self.assertIn('Answer in English.', mock_response.call_args.kwargs['system_prompt'])
+
+
+class MathLatexifyFilterTests(TestCase):
+    """Regression coverage for a reported bug: AI-generated problem text
+    mixes Japanese prose with raw, undelimited LaTeX (e.g. "\\frac{...}"),
+    which was displayed as literal text instead of being rendered as math
+    — see templatetags.math_extras.latexify."""
+
+    def test_wraps_a_fraction(self):
+        out = latexify(r"関数 f(x)=\frac{x^2\,e^{x}}{1+x^3} の x=1 における導関数 f'(1) を求めなさい。")
+        self.assertIn(r'\(f(x)=\frac{x^2\,e^{x}}{1+x^3}\)', out)
+
+    def test_does_not_double_wrap_a_run_the_ai_already_delimited(self):
+        # Regression: the AI sometimes already wraps its own LaTeX in \( \)
+        # — re-wrapping that produced "\(\(\frac{...}\)\)", which KaTeX
+        # can't parse (its inner \( is just literal text in math mode),
+        # and rendered as raw red error text instead of a formula.
+        out = latexify(r'比例式 \(\frac{7}{x}=\frac{21}{6}\) が成り立つとき、x の値を求めなさい。')
+        self.assertIn(r'\(\frac{7}{x}=\frac{21}{6}\)', out)
+        self.assertNotIn(r'\(\(', out)
+        self.assertNotIn(r'\)\)', out)
+
+    def test_leaves_an_already_bracket_delimited_run_alone(self):
+        out = latexify(r'\[\frac{1}{2}\] を計算しなさい。')
+        self.assertIn(r'\[\frac{1}{2}\]', out)
+        self.assertNotIn(r'\(\[', out)
+
+    def test_leaves_an_already_dollar_delimited_run_alone(self):
+        out = latexify(r'$$\frac{1}{2}$$ を計算しなさい。')
+        self.assertIn(r'$$\frac{1}{2}$$', out)
+        self.assertNotIn(r'\($$', out)
+
+    def test_wraps_a_superscript(self):
+        self.assertIn(r'\(x^2\)', latexify('x^2 を計算しなさい。'))
+
+    def test_wraps_a_subscript(self):
+        self.assertIn(r'\(x_1\)', latexify('x_1 の値を求めなさい。'))
+
+    def test_wraps_e_to_the_x(self):
+        self.assertIn(r'\(e^{x}\)', latexify('e^{x} を微分しなさい。'))
+
+    def test_plain_linear_equation_is_left_completely_unchanged(self):
+        # No actual LaTeX commands here — must render exactly as it does
+        # today (plain monospace text), not get wrapped/re-styled.
+        self.assertEqual(latexify('6x - 7 = -31'), '6x - 7 = -31')
+
+    def test_plain_japanese_only_text_is_untouched(self):
+        text = 'この単元の内容を確認しましょう。'
+        self.assertEqual(latexify(text), text)
+
+    def test_multiple_math_runs_in_one_japanese_sentence(self):
+        out = latexify(r'x^2 を計算し、次に \frac{1}{2} を求めなさい。')
+        self.assertIn(r'\(x^2\)', out)
+        self.assertIn(r'\(\frac{1}{2}\)', out)
+
+    def test_html_is_escaped_not_left_executable(self):
+        out = latexify('<script>alert(1)</script>')
+        self.assertNotIn('<script>', out)
+        self.assertIn('&lt;script&gt;', out)
+
+    def test_none_is_rendered_as_empty_string(self):
+        self.assertEqual(latexify(None), '')

@@ -114,6 +114,9 @@ msgstr "学習の記録"
 msgid "提出"
 msgstr "提出"
 
+msgid "わからない"
+msgstr "わからない"
+
 msgid "数学"
 msgstr "数学"
 
@@ -219,8 +222,8 @@ msgstr "修正 %(n)s"
 msgid "使用したヒント（%(count_hints)s件）"
 msgstr "使用したヒント（%(count_hints)s件）"
 
-msgid "問題 %(current)s / %(total)s"
-msgstr "問題 %(current)s / %(total)s"
+msgid "診断問題 %(current)s / %(total)s"
+msgstr "診断問題 %(current)s / %(total)s"
 
 msgid "%(total)s 問正解"
 msgstr "%(total)s 問正解"

@@ -1,7 +1,7 @@
 """System prompts and JSON schemas for AI-generated math coaching content.
 
-These are only used when an AI provider is configured (OPENAI_API_KEY or
-GEMINI_API_KEY) and the unit isn't the no-AI demo unit — see
+These are only used when an AI provider is configured (GEMINI_API_KEY or
+GROQ_API_KEY) and the unit isn't the no-AI demo unit — see
 `services._ai_mode`. Otherwise, and whenever a call here fails, services.py
 falls back to the deterministic generators in demo_content.py.
 
@@ -50,6 +50,8 @@ SECTIONS_SCHEMA = {
 
 PROBLEM_SYSTEM_PROMPT = (
     'あなたは数学教育の専門家です。指定されたセクションの内容にふさわしい練習問題を1問作成してください。'
+    'この問題は必ず指定されたセクションの学習内容に直接対応させること。'
+    'セクションで扱っていない別分野の問題を生成しないこと。'
     '【必須要件】過去に出題された問題（既出問題リスト）が提供されている場合は、'
     'それらと数値・文字・問われ方が重複しない、新しいバリエーションの問題を作成してください。'
 )
@@ -59,6 +61,17 @@ PROBLEM_SCHEMA = {
     'required': ['problem'],
     'additionalProperties': False,
 }
+
+DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT = (
+    'あなたは数学教育の専門家です。指定されたセクションの内容にふさわしい診断用の練習問題を1問作成してください。'
+    'この問題は必ず指定されたセクションの学習内容に直接対応させること。'
+    'セクションで扱っていない別分野の問題を生成しないこと。'
+    '学習者の理解度を短時間で確認するための問題なので、最終的な答えが単一の数値だけになる問題にしてください'
+    '（例:「xの値を求めなさい」「計算しなさい」）。説明・式・証明・グラフを答えさせる問題や、'
+    '複数の値を答えさせる問題にはしないでください。'
+    '【必須要件】過去に出題された問題（既出問題リスト）が提供されている場合は、'
+    'それらと数値・文字・問われ方が重複しない、新しいバリエーションの問題を作成してください。'
+)
 
 JUDGE_SYSTEM_PROMPT = (
     'あなたは数学教育の専門家です。学習者の解答を採点してください。正解かどうかを'

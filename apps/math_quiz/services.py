@@ -1,5 +1,6 @@
 import datetime
 import json
+from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -27,7 +28,6 @@ from .models import (
 from .state_machine import WorkflowState, hints_allowed, validate_transition
 
 MAX_HINT_LEVEL = demo_content.MAX_HINT_LEVEL
-MIN_DIAGNOSTIC_QUESTIONS = 2
 MAX_DIAGNOSTIC_QUESTIONS = 5
 REVIEW_INTERVAL = datetime.timedelta(hours=24)  # first spaced-recheck gap; queue UI itself is P2
 
@@ -109,7 +109,7 @@ def generate_sections(unit, name, files=None):
                 system_prompt=ai_prompts.SECTIONS_SYSTEM_PROMPT,
                 user_prompt=(
                     f'単元名: {name}\n\nこの単元を学ぶ上で必要なセクションを、タイトルと内容'
-                    '（日本語での説明）の組でJSON形式で答えてください。ファイルが添付されている'
+                    'の組でJSON形式で答えてください。ファイルが添付されている'
                     '場合は、そのすべての内容を踏まえてセクション構成を決めてください。'
                 ),
                 response_schema=ai_prompts.SECTIONS_SCHEMA,
@@ -336,8 +336,12 @@ def _generate_problem(*, section, kind, reference_problem=None, exclude=(), star
                         response_schema=ai_prompts.TRANSFER_PROBLEM_SCHEMA,
                     )
                 else:
+                    system_prompt = (
+                        ai_prompts.DIAGNOSTIC_PROBLEM_SYSTEM_PROMPT if kind == 'diagnostic'
+                        else ai_prompts.PROBLEM_SYSTEM_PROMPT
+                    )
                     data = _ai_json(
-                        system_prompt=ai_prompts.PROBLEM_SYSTEM_PROMPT,
+                        system_prompt=system_prompt,
                         user_prompt=(
                             f'単元: {section.unit.name}\nセクション: {section.title}\n'
                             f'セクションの内容: {section.content}{exclude_note}'
@@ -450,37 +454,63 @@ def _diagnostic_candidate_sections(unit):
     return list(unit.sections.all()[:MAX_DIAGNOSTIC_QUESTIONS])
 
 
-def _diagnostic_should_stop(results):
-    """results: is_correct values (oldest first) for every diagnostic
-    question answered so far in this session. Stops as soon as the two
-    most recent answers agree — a consistent (rather than mixed) signal
-    is treated as diagnostic enough, so the quiz doesn't ask more
-    questions than it needs to. Never considered before
-    MIN_DIAGNOSTIC_QUESTIONS answers exist; the caller separately caps at
-    MAX_DIAGNOSTIC_QUESTIONS regardless of this."""
-    if len(results) < MIN_DIAGNOSTIC_QUESTIONS:
-        return False
-    return results[-1] == results[-2]
+def diagnostic_question_count(unit):
+    """How many questions this unit's diagnostic quiz asks, for progress
+    display (see views.unit_diagnostic) — derived from the same candidate
+    list start_unit_diagnostic/submit_unit_diagnostic_answer already use,
+    so it's always consistent with the actual quiz and never hardcoded.
+    Every candidate section gets a question (see submit_unit_diagnostic_answer),
+    so this is exact, not just an upper bound."""
+    return len(_diagnostic_candidate_sections(unit))
+
+
+def end_unit_diagnostic_now(diagnostic):
+    """Marks a diagnostic session complete on the spot, using whatever
+    questions have been answered so far — used when the next question
+    can't be produced (see _add_diagnostic_question) and, defensively, by
+    views.unit_diagnostic if a stuck session (no pending question, not yet
+    marked complete) is ever found. No new state: same completed_at field
+    every normal completion already sets."""
+    diagnostic.completed_at = timezone.now()
+    diagnostic.save(update_fields=('completed_at',))
 
 
 def _add_diagnostic_question(*, diagnostic, section, order):
+    # Runs outside any transaction (see start_unit_diagnostic's docstring),
+    # so a failure here can't be rolled back — the previous question's
+    # grade (and the resulting progress count) is already committed. If we
+    # can't produce the next question, leaving the session "in progress"
+    # with no pending question would strand the learner on a screen with
+    # no problem to answer (a reported bug) — ending the quiz here, on
+    # whatever was answered so far, is the only safe move.
     exclude = _used_problems_in_unit(unit=diagnostic.unit, browser_session_key=diagnostic.browser_session_key)
-    problem = _generate_problem(section=section, kind='diagnostic', exclude=exclude)
-    UnitDiagnosticAnswer.objects.create(session=diagnostic, section=section, order=order, problem=problem)
+    try:
+        problem = _generate_problem(section=section, kind='diagnostic', exclude=exclude)
+        UnitDiagnosticAnswer.objects.create(session=diagnostic, section=section, order=order, problem=problem)
+    except Exception:
+        end_unit_diagnostic_now(diagnostic)
 
 
-@transaction.atomic
 def start_unit_diagnostic(*, unit, browser_session_key):
     """Always a fresh quiz: one problem drawn from each of the course's
-    sections, to gauge current understanding of the whole subject — its
-    length adapts (see MIN_/MAX_DIAGNOSTIC_QUESTIONS and
-    _diagnostic_should_stop) instead of always asking a fixed count, and
-    only the first question is created here; submit_unit_diagnostic_answer
-    decides whether to add another after each answer. Any previous
+    sections (up to MAX_DIAGNOSTIC_QUESTIONS), to gauge current
+    understanding of the whole subject — every candidate section gets a
+    question regardless of how earlier answers turned out, and only the
+    first question is created here; submit_unit_diagnostic_answer adds
+    the rest, one per answer. Any previous
     attempt (finished or not) for this browser is discarded — the
-    diagnostic resets every time the learner (re)enters the course."""
-    UnitDiagnosticSession.objects.filter(unit=unit, browser_session_key=browser_session_key).delete()
-    diagnostic = UnitDiagnosticSession.objects.create(unit=unit, browser_session_key=browser_session_key)
+    diagnostic resets every time the learner (re)enters the course.
+
+    The delete+create is wrapped tightly, but _add_diagnostic_question
+    (which can make a slow AI call — see _generate_problem) deliberately
+    runs after that block exits, not inside it: SQLite allows only one
+    writer at a time for the whole file, so holding a transaction open
+    across a slow/retried AI call would block every other write in the
+    app for as long as that call takes (this is what caused "database is
+    locked" errors here)."""
+    with transaction.atomic():
+        UnitDiagnosticSession.objects.filter(unit=unit, browser_session_key=browser_session_key).delete()
+        diagnostic = UnitDiagnosticSession.objects.create(unit=unit, browser_session_key=browser_session_key)
     sections = _diagnostic_candidate_sections(unit)
     if sections:
         _add_diagnostic_question(diagnostic=diagnostic, section=sections[0], order=0)
@@ -502,37 +532,59 @@ def get_or_create_unit_diagnostic(*, unit, browser_session_key):
     return diagnostic
 
 
-@transaction.atomic
 def submit_unit_diagnostic_answer(*, diagnostic, answer_id, answer):
-    locked = UnitDiagnosticSession.objects.select_for_update().get(pk=diagnostic.pk)
-    if locked.completed_at is not None:
+    """Judges the answer (see _judge — this can make a slow, possibly
+    retried AI call) before opening any transaction, then does the actual
+    write in one short atomic block — see start_unit_diagnostic's
+    docstring for why: SQLite only allows one writer at a time for the
+    whole file, so holding a transaction open across a slow AI call would
+    block every other write in the app for as long as that call takes.
+    The existence/already-answered checks are done both here (to fail
+    fast before spending an AI call on a stale request) and again inside
+    the atomic block (the actual guarantee against a genuine double
+    submission race in the gap between the two)."""
+    diagnostic.refresh_from_db()
+    if diagnostic.completed_at is not None:
         raise ValidationError(_('この診断クイズはすでに完了しています。'))
     try:
-        item = locked.answers.select_for_update().get(pk=answer_id, is_correct__isnull=True)
+        item = diagnostic.answers.get(pk=answer_id, is_correct__isnull=True)
     except UnitDiagnosticAnswer.DoesNotExist:
         raise ValidationError(_('この問題はすでに回答済みか、存在しません。'))
     answer = answer.strip()
     if not answer:
         raise ValidationError(_('回答を入力してください。'))
+
     is_correct, explanation, _quality = _judge(
         section=item.section, problem=item.problem, answer=answer, kind='diagnostic',
     )
-    item.answer = answer
-    item.is_correct = is_correct
-    item.explanation = explanation
-    item.save(update_fields=('answer', 'is_correct', 'explanation'))
 
-    results = list(
-        locked.answers.exclude(is_correct__isnull=True).order_by('order').values_list('is_correct', flat=True)
-    )
-    sections = _diagnostic_candidate_sections(locked.unit)
-    next_order = len(results)
-    if next_order < len(sections) and not _diagnostic_should_stop(results):
-        _add_diagnostic_question(diagnostic=locked, section=sections[next_order], order=next_order)
-    else:
-        locked.completed_at = timezone.now()
-        locked.save(update_fields=('completed_at',))
-    return item
+    needs_next = False
+    with transaction.atomic():
+        locked = UnitDiagnosticSession.objects.select_for_update().get(pk=diagnostic.pk)
+        if locked.completed_at is not None:
+            raise ValidationError(_('この診断クイズはすでに完了しています。'))
+        try:
+            locked_item = locked.answers.select_for_update().get(pk=answer_id, is_correct__isnull=True)
+        except UnitDiagnosticAnswer.DoesNotExist:
+            raise ValidationError(_('この問題はすでに回答済みか、存在しません。'))
+        locked_item.answer = answer
+        locked_item.is_correct = is_correct
+        locked_item.explanation = explanation
+        locked_item.save(update_fields=('answer', 'is_correct', 'explanation'))
+
+        answered_count = locked.answers.exclude(is_correct__isnull=True).count()
+        sections = _diagnostic_candidate_sections(locked.unit)
+        next_order = answered_count
+        needs_next = next_order < len(sections)
+        if needs_next:
+            next_section = sections[next_order]
+        else:
+            locked.completed_at = timezone.now()
+            locked.save(update_fields=('completed_at',))
+
+    if needs_next:
+        _add_diagnostic_question(diagnostic=diagnostic, section=next_section, order=next_order)
+    return locked_item
 
 
 def build_unit_diagnostic_result(*, diagnostic):
@@ -792,6 +844,19 @@ def _generate_hint(*, section, level, attempt):
     # it — see demo_content.build_hint.
     salt = fallback[0] if fallback else 0
     return demo_content.build_hint(section=section, level=level, kind='first', salt=salt)
+
+
+def dont_know_hint(*, section, first_problem):
+    """Level-1 hint for a learner who taps "わからない" at the FIRST_ATTEMPT
+    stage, before any Attempt exists yet (see views.section_quiz /
+    _handle_action's 'dont_know' action) — reuses _generate_hint, the same
+    content generation the guided-revision hint ladder uses, via a
+    throwaway stand-in with no answer/reasoning yet (nothing to reference
+    at level 1: "誘導質問のみ", see ai_prompts.HINT_SYSTEM_PROMPT). Nothing
+    is persisted here — no Attempt, no HintUsage row, no state change —
+    this is a transient peek, not a recorded hint use."""
+    placeholder_attempt = SimpleNamespace(problem=first_problem, answer='', reasoning='')
+    return _generate_hint(section=section, level=1, attempt=placeholder_attempt)
 
 
 @transaction.atomic

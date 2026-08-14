@@ -15,6 +15,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from django.db.backends.signals import connection_created
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -92,8 +94,38 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # SQLite's default rollback-journal mode takes an exclusive lock on
+        # the whole file for any write, so two requests writing around the
+        # same time easily trip "database is locked" under Django's default
+        # 5s wait — bump that wait here, and switch to WAL mode below
+        # (readers no longer block writers, which is most of what this app
+        # actually does concurrently). 60s because some of this app's writes
+        # sit behind a slow/retried AI API call (see services.py's various
+        # @transaction.atomic functions) — the most AI-call-heavy of those
+        # are being restructured to not hold the lock during the AI call at
+        # all, but this stays as a safety margin for the rest.
+        #
+        # transaction_mode='IMMEDIATE': Django's sqlite backend otherwise
+        # opens atomic() blocks with plain "BEGIN" (DEFERRED), which only
+        # takes a read lock up front. If two concurrent transactions each
+        # then try to upgrade to a write lock, that upgrade race raises
+        # "database is locked" immediately — busy_timeout only governs the
+        # wait for an *initial* lock, not this upgrade conflict. IMMEDIATE
+        # takes the write lock at BEGIN, so a second writer just queues
+        # (and correctly waits out busy_timeout) instead of racing.
+        'OPTIONS': {'timeout': 60, 'transaction_mode': 'IMMEDIATE'},
     }
 }
+
+
+def _enable_sqlite_wal_mode(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA journal_mode=WAL;')
+            cursor.execute('PRAGMA busy_timeout=60000;')
+
+
+connection_created.connect(_enable_sqlite_wal_mode)
 
 
 # Password validation

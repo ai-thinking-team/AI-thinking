@@ -2040,13 +2040,53 @@ def _ai_fallback_entry(section, *, kind, salt=0):
     offset's own draw is unaffected by how many entries the catalog has
     (Python's randrange/choice share the same underlying draw for adjacent
     sizes here), so this stays consistent with the original salt=0
-    selection from before the catalog grew."""
+    selection from before the catalog grew.
+
+    The catalog is keyed by unit (course) name only, but one course can
+    have sections on quite different sub-topics (e.g. unit '数と式' with a
+    section on '自然数と整数の性質' alongside one on '展開と因数分解') — a
+    unit-name match alone doesn't mean THIS section is what the catalog's
+    fixed problem set was written for. _section_matches_catalog guards
+    against handing back a same-course but off-topic problem (e.g. an
+    expansion problem for a natural-numbers section) — see its docstring."""
     catalog = AI_FALLBACK_PROBLEMS.get(section.unit.name.strip())
-    if not catalog:
+    if not catalog or not _section_matches_catalog(section, catalog):
         return None
     problems = catalog['problems']
     offset = _rng(section.id, kind, 'ai_fallback').randrange(len(problems))
     return problems[(offset + salt) % len(problems)]
+
+
+def _section_matches_catalog(section, catalog):
+    """Whether this specific section's own title/content actually relates
+    to a unit-level fallback catalog entry, or at least doesn't clearly
+    belong to a *different* one. A course can have sections on quite
+    different sub-topics under one unit name (e.g. unit '数と式' with a
+    section on '自然数と整数の性質' alongside one on '展開と因数分解') — a
+    unit-name match alone doesn't mean THIS section is what the catalog's
+    fixed problem set was written for.
+
+    Reuses the keywords every catalog already has (the same ones
+    looks_like_subject checks AI output against, just the other
+    direction): a section mentioning this catalog's own vocabulary is a
+    clear match. One that mentions nothing from it but clearly matches a
+    *different* catalog's vocabulary instead (e.g. '約数'/'倍数', which
+    belong to '整数の性質', not '数と式') is a clear mismatch — that
+    course-level match gets skipped in favor of the generic,
+    subject-agnostic equation generator instead (safe, if less tailored,
+    beats confidently wrong). Generic/placeholder section content that
+    matches nothing at all either way falls through to the unit-level
+    trust this always had — there's simply no section-level signal to
+    second-guess it with."""
+    haystack = f'{section.title}{section.content}'
+    if any(term in haystack for term in catalog['keywords']):
+        return True
+    for other_catalog in AI_FALLBACK_PROBLEMS.values():
+        if other_catalog is catalog:
+            continue
+        if any(term in haystack for term in other_catalog['keywords']):
+            return False
+    return True
 
 
 def fallback_notes(section, *, kind, salt=0):

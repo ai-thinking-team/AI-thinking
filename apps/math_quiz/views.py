@@ -178,14 +178,32 @@ def unit_diagnostic(request, unit_id):
 
     answers = list(diagnostic.answers.all())
     current_item = next((item for item in answers if item.is_correct is None), None)
+    if current_item is None:
+        # Defensive: normally _add_diagnostic_question ends the quiz
+        # itself the moment it can't produce a next question, so this
+        # shouldn't be reachable — but never show the answer screen with
+        # no question to answer (the reported "空白問題" bug), whatever
+        # the reason.
+        services.end_unit_diagnostic_now(diagnostic)
+        result = services.build_unit_diagnostic_result(diagnostic=diagnostic)
+        return render(request, 'math_quiz/unit_diagnostic.html', {
+            'unit': unit, 'done': True, 'result': result,
+        })
     answered_count = sum(1 for item in answers if item.is_correct is not None)
+    # total is the course's actual candidate-section count (capped at
+    # MAX_DIAGNOSTIC_QUESTIONS), not len(answers) — the next question isn't
+    # created until the current one is answered, so len(answers) would
+    # always equal the current question number and never show how many
+    # remain. See services.diagnostic_question_count.
+    total = services.diagnostic_question_count(unit)
+    current = answered_count + 1
     return render(request, 'math_quiz/unit_diagnostic.html', {
         'unit': unit,
         'done': False,
         'current_item': current_item,
-        'answered_count': answered_count,
-        'total': len(answers),
-        'progress_dots': [item.is_correct is not None for item in answers],
+        'current': current,
+        'total': total,
+        'progress_percent': round(current / total * 100) if total else 0,
     })
 
 
@@ -246,6 +264,10 @@ def _just_completed_key(section_id):
     return f'math_quiz_just_completed_{section_id}'
 
 
+def _dont_know_key(section_id):
+    return f'math_quiz_dont_know_{section_id}'
+
+
 def _browser_section_session(request, section):
     if request.session.session_key is None:
         request.session.create()
@@ -264,6 +286,7 @@ def _browser_section_session(request, section):
         session = services.restart_for_review(
             section=section, browser_session_key=request.session.session_key,
         )
+        request.session.pop(_dont_know_key(section.id), None)
         messages.info(request, _('新しい問題から、この学習セッションを始めます。'))
     return session
 
@@ -272,6 +295,7 @@ def _handle_action(request, session):
     action = request.POST.get('action', '')
 
     if action == 'first_attempt':
+        request.session.pop(_dont_know_key(session.section_id), None)
         attempt = services.submit_first_attempt(
             session=session,
             answer=request.POST.get('answer', ''),
@@ -283,6 +307,13 @@ def _handle_action(request, session):
             messages.success(request, f'{attempt.explanation} {next_note}')
         else:
             messages.warning(request, f'{attempt.explanation} {next_note}')
+    elif action == 'dont_know':
+        # No grading, no state change, nothing persisted — just a session
+        # flag flipped so the next render shows a Level 1 hint instead of
+        # the answer form (see section_quiz / services.dont_know_hint).
+        request.session[_dont_know_key(session.section_id)] = True
+    elif action == 'think_again':
+        request.session.pop(_dont_know_key(session.section_id), None)
     elif action == 'verification':
         services.submit_verification(session=session, answer=request.POST.get('answer', ''))
         next_note = demo_content.NEXT_STEP_LABELS.get(session.current_state, '')
@@ -334,6 +365,7 @@ def _handle_action(request, session):
         services.reset_section_session(
             section=session.section, browser_session_key=request.session.session_key,
         )
+        request.session.pop(_dont_know_key(session.section_id), None)
         messages.success(request, _('この学習セッションをリセットしました。'))
     else:
         return HttpResponseBadRequest(_('不明な操作です。'))
@@ -356,8 +388,11 @@ def section_quiz(request, section_id):
     current_stage = STATE_TO_STAGE[WorkflowState(session.current_state)]
     current_hint = None
     current_teach_back = None
+    dont_know_hint = None
     if current_stage == 'first':
         services.ensure_first_problem(session=session)
+        if request.session.get(_dont_know_key(section.id)):
+            dont_know_hint = services.dont_know_hint(section=section, first_problem=session.first_problem)
     elif current_stage == 'revision':
         current_hint = services.ensure_current_hint(session=session)
     elif current_stage == 'teach_back':
@@ -415,6 +450,7 @@ def section_quiz(request, section_id):
         'attempts': list(session.attempts.order_by('revision_number', 'created_at')),
         'hint_usage': hint_usage,
         'current_hint': current_hint,
+        'dont_know_hint': dont_know_hint,
         'current_teach_back': current_teach_back,
         'teach_back_max_rounds': mastery.MAX_TEACH_BACK_ROUNDS,
         'transfer_attempt': transfer_attempt,
