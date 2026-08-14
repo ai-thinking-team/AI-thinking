@@ -10,3 +10,4 @@ db.sqlite3
 .pytest_cache/
 .coverage
 design_prototype/
+docs/decisions.md
