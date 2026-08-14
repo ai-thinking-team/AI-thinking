@@ -44,3 +44,35 @@ class WorkflowStateMachineTests(SimpleTestCase):
             repeated_misconception_codes=('loop-value-misuse',),
         )
         self.assertEqual(decision.status, ConceptMastery.Status.NEEDS_REVIEW)
+
+    def test_mastery_recommendation_uses_the_repeated_concept(self):
+        decision = evaluate_mastery(
+            original_passed=True,
+            teach_back_clear=True,
+            transfer_passed=True,
+            transfer_unassisted=True,
+            repeated_misconception_codes=('dictionary-key-misuse',),
+            repeated_misconception_recommendations={
+                'dictionary-key-misuse': (
+                    'Review dictionary key lookup and missing-key fallbacks before retrying.'
+                ),
+            },
+        )
+        self.assertEqual(
+            decision.recommendation,
+            'Review dictionary key lookup and missing-key fallbacks before retrying.',
+        )
+        self.assertNotIn('loop', decision.recommendation.casefold())
+
+    def test_mastery_recommendation_has_a_safe_generic_fallback(self):
+        decision = evaluate_mastery(
+            original_passed=True,
+            teach_back_clear=True,
+            transfer_passed=True,
+            transfer_unassisted=True,
+            repeated_misconception_codes=('unknown-misconception',),
+        )
+        self.assertEqual(
+            decision.recommendation,
+            'Review the confirmed misconception and complete a corrective exercise before retrying.',
+        )

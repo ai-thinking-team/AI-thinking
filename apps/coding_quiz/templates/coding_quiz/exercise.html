@@ -29,7 +29,7 @@
 </section>{% endif %}
 
 {% if latest_evaluation and current_stage != 'transfer' %}
-  <p class="status"><strong>Execution status:</strong> {{ latest_evaluation.status }} — {{ latest_evaluation.message }}</p>
+  <p class="status"><strong>Execution status:</strong> {{ latest_execution_feedback.label }} ({{ latest_execution_feedback.status }}) — {{ latest_evaluation.message }}<br>{{ latest_execution_feedback.guidance }}</p>
 {% endif %}
 
 {% if current_stage == 'plan' or current_stage == 'first' %}
@@ -41,9 +41,9 @@
   <form method="post" data-disable-on-submit>
     {% csrf_token %}
     <input type="hidden" name="action" value="plan">
-    {{ plan_form.non_field_errors }}
-    <label>{{ plan_form.solution_plan.label }}{{ plan_form.solution_plan }}{{ plan_form.solution_plan.errors }}</label>
-    <label>{{ plan_form.predicted_output.label }}{{ plan_form.predicted_output }}{{ plan_form.predicted_output.errors }}</label>
+    {% include "components/form_errors.html" with form=plan_form %}
+    {% include "components/form_field.html" with field=plan_form.solution_plan %}
+    {% include "components/form_field.html" with field=plan_form.predicted_output %}
     <button type="submit">Save plan and continue</button>
   </form>
 </section>
@@ -51,12 +51,12 @@
 <section class="panel" id="first-attempt">
   <h2>2. Think-First / First Attempt</h2>
   <p>Submit code, your plan, and confidence. AI and hints remain locked until this is stored.</p>
-  <form method="post" data-disable-on-submit>
+  <form method="post" data-disable-on-submit data-default-action="save_revision">
     {% csrf_token %}
     <input type="hidden" name="action" value="first_attempt">
-    {{ first_form.non_field_errors }}
-    <label>{{ first_form.source_code.label }}{{ first_form.source_code }}{{ first_form.source_code.errors }}</label>
-    <label>{{ first_form.reasoning.label }}{{ first_form.reasoning }}{{ first_form.reasoning.errors }}</label>
+    {% include "components/form_errors.html" with form=first_form %}
+    {% include "components/form_field.html" with field=first_form.source_code %}
+    {% include "components/form_field.html" with field=first_form.reasoning %}
     {% include "components/confidence_selector.html" with form=first_form %}
     <button type="submit">Store first attempt</button>
   </form>
@@ -91,8 +91,8 @@
     <form method="post" data-disable-on-submit>
       {% csrf_token %}
       <input type="hidden" name="action" value="diagnosis">
-      {{ diagnosis_form.non_field_errors }}
-      <label>{{ diagnosis_form.diagnosis_answer.label }}{{ diagnosis_form.diagnosis_answer }}{{ diagnosis_form.diagnosis_answer.errors }}</label>
+      {% include "components/form_errors.html" with form=diagnosis_form %}
+      {% include "components/form_field.html" with field=diagnosis_form.diagnosis_answer %}
       <button type="submit">Check my answer</button>
     </form>
   {% endif %}
@@ -116,11 +116,11 @@
   <h2>4. Revision</h2>
   <p>This creates a new revision. Your first attempt remains unchanged.</p>
   <p class="locked-note">Teach-Back opens only after an isolated runner verifies this exercise as <strong>PASSED</strong>. If the status is NOT_EXECUTED, your revision is still saved but the workflow remains here.</p>
-  <form method="post" data-disable-on-submit>
+  <form method="post" data-disable-on-submit data-default-action="save_revision">
     {% csrf_token %}
-    {{ revision_form.non_field_errors }}
-    <label>{{ revision_form.source_code.label }}{{ revision_form.source_code }}{{ revision_form.source_code.errors }}</label>
-    <label>{{ revision_form.reasoning.label }}{{ revision_form.reasoning }}{{ revision_form.reasoning.errors }}</label>
+    {% include "components/form_errors.html" with form=revision_form %}
+    {% include "components/form_field.html" with field=revision_form.source_code %}
+    {% include "components/form_field.html" with field=revision_form.reasoning %}
     {% include "components/confidence_selector.html" with form=revision_form %}
     <div class="button-row">
       <button type="submit" name="action" value="save_revision">Save revision and keep working</button>
@@ -150,9 +150,9 @@
         <form method="post" data-disable-on-submit>
           {% csrf_token %}
           <input type="hidden" name="action" value="teach_back">
-          {{ teach_back_form.non_field_errors }}
+          {% include "components/form_errors.html" with form=teach_back_form %}
           {% for field in teach_back_form %}
-            <label{% if field.errors %} class="answer-needs-revision"{% endif %}>{{ field.label }}{{ field }}{{ field.errors }}</label>
+            {% include "components/form_field.html" with field=field %}
           {% endfor %}
           <button type="submit">Save Teach-Back</button>
         </form>
@@ -162,9 +162,9 @@
     <form method="post" data-disable-on-submit>
       {% csrf_token %}
       <input type="hidden" name="action" value="teach_back">
-      {{ teach_back_form.non_field_errors }}
+      {% include "components/form_errors.html" with form=teach_back_form %}
       {% for field in teach_back_form %}
-        <label{% if field.errors %} class="answer-needs-revision"{% endif %}>{{ field.label }}{{ field }}{{ field.errors }}</label>
+        {% include "components/form_field.html" with field=field %}
       {% endfor %}
       <button type="submit">Save Teach-Back</button>
     </form>
@@ -181,9 +181,9 @@
   <form method="post" data-disable-on-submit>
     {% csrf_token %}
     <input type="hidden" name="action" value="transfer">
-    {{ transfer_form.non_field_errors }}
-    <label>{{ transfer_form.source_code.label }}{{ transfer_form.source_code }}{{ transfer_form.source_code.errors }}</label>
-    <label>{{ transfer_form.reasoning.label }}{{ transfer_form.reasoning }}{{ transfer_form.reasoning.errors }}</label>
+    {% include "components/form_errors.html" with form=transfer_form %}
+    {% include "components/form_field.html" with field=transfer_form.source_code %}
+    {% include "components/form_field.html" with field=transfer_form.reasoning %}
     {% include "components/confidence_selector.html" with form=transfer_form %}
     <button type="submit">Submit Transfer Check</button>
   </form>
@@ -229,17 +229,32 @@
   <h2>Support status</h2>
   <p><strong>AI Coach:</strong> {{ ai_status.label }}</p>
   <p class="locked-note">{{ ai_status.detail }}</p>
-  <p><strong>Code runner:</strong> {% if latest_evaluation.status == 'NOT_EXECUTED' %}Not configured. Code is stored but never executed in Django.{% else %}Results are accepted only through the isolated runner gateway.{% endif %}</p>
+  <p><strong>Code runner:</strong> {{ code_runner_status.label }}</p>
+  <p class="locked-note">{{ code_runner_status.detail }}</p>
   {% if current_stage == 'transfer' %}<p><strong>Hints:</strong> Locked during Transfer Check.</p>{% endif %}
 </section>
 
 <script>
   document.querySelectorAll('[data-disable-on-submit]').forEach((form) => {
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', (event) => {
+      if (!form.checkValidity()) return;
+      const submitter = event.submitter;
+      const existingAction = form.querySelector('input[type="hidden"][name="action"]');
+      const selectedAction = submitter?.name ? submitter.value : form.dataset.defaultAction;
+      if (!existingAction && selectedAction) {
+        const action = document.createElement('input');
+        action.type = 'hidden';
+        action.name = 'action';
+        action.value = selectedAction;
+        form.append(action);
+      }
+      form.setAttribute('aria-busy', 'true');
       form.querySelectorAll('button[type="submit"]').forEach((button) => {
-        window.setTimeout(() => { button.disabled = true; }, 0);
+        button.disabled = true;
       });
+      if (submitter) submitter.textContent = 'Submitting…';
     });
   });
+  document.querySelector('[data-error-summary]')?.focus();
 </script>
 {% endblock %}

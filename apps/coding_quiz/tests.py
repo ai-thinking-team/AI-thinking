@@ -39,6 +39,7 @@ from apps.ai_engine.client import ai_provider_status
 from .services import (
     acknowledge_diagnosis_solution,
     ensure_demo_exercise,
+    execution_status_feedback,
     get_demo_session,
     request_curated_hint,
     submit_diagnosis,
@@ -114,6 +115,27 @@ PARTIAL_TEACH_BACK_PROVIDER = 'apps.coding_quiz.tests.PartialTeachBackProvider'
 
 
 class TeachBackRubricTests(SimpleTestCase):
+    def test_execution_status_feedback_gives_a_safe_next_action_for_each_runner_state(self):
+        expected = {
+            ExecutionStatus.PASSED: 'Passed',
+            ExecutionStatus.OUTPUT_MISMATCH: 'Output mismatch',
+            ExecutionStatus.LOGIC_ERROR: 'Logic or boundary error',
+            ExecutionStatus.SYNTAX_ERROR: 'Syntax error',
+            ExecutionStatus.RUNTIME_ERROR: 'Runtime error',
+            ExecutionStatus.TIMEOUT: 'Timed out',
+            ExecutionStatus.NOT_EXECUTED: 'Not executed',
+        }
+        for status, label in expected.items():
+            with self.subTest(status=status):
+                feedback = execution_status_feedback(status)
+                self.assertEqual(feedback['label'], label)
+                self.assertTrue(feedback['guidance'])
+
+    def test_unknown_runner_status_fails_closed_in_the_learner_message(self):
+        feedback = execution_status_feedback('UNRECOGNIZED')
+        self.assertEqual(feedback['label'], 'Not evaluated')
+        self.assertIn('unrecognized', feedback['guidance'])
+
     def test_ai_status_explains_safe_fallback_without_external_api(self):
         with override_settings(AI_PROVIDER_CLASS=''):
             status = ai_provider_status(assistance_enabled=True)
@@ -254,6 +276,44 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertContains(response, 'Curated fallback ready')
         self.assertNotContains(response, 'name="source_code"')
 
+    def test_coding_page_has_a_keyboard_skip_link_and_all_seven_workflow_stages(self):
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'href="#main-content"')
+        self.assertContains(response, 'id="main-content"')
+        self.assertContains(response, "mainContent?.focus()")
+        self.assertContains(response, 'aria-label="Back to home"')
+        self.assertNotContains(response, 'onclick="history.back()"')
+        self.assertContains(response, 'aria-label="Learning workflow"')
+        self.assertContains(response, 'Understand &amp; Plan')
+        self.assertContains(response, 'Transfer Check')
+        self.assertContains(response, 'aria-current="step"')
+        self.assertEqual(response.content.count(b'<li class="'), 7)
+
+    def test_invalid_form_has_focused_error_summary_and_field_association(self):
+        self.client.get(self.url)
+
+        response = self.post_plan(solution_plan='')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-error-summary')
+        self.assertContains(response, 'role="alert"')
+        self.assertContains(response, 'href="#id_solution_plan"')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.assertContains(response, 'aria-describedby="id_solution_plan_error"')
+        self.assertContains(response, 'document.querySelector(\'[data-error-summary]\')?.focus()')
+
+    def test_submit_forms_expose_busy_state_without_losing_named_revision_action(self):
+        self.advance_to_revision()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'form.setAttribute(\'aria-busy\', \'true\')')
+        self.assertContains(response, 'data-default-action="save_revision"')
+        self.assertContains(response, "action.name = 'action'")
+        self.assertContains(response, 'name="action" value="save_revision"')
+        self.assertContains(response, 'name="action" value="finish_revision"')
+
     def test_catalog_lists_database_exercises_and_routes_by_slug(self):
         response = self.client.get(reverse('coding_quiz:home'))
 
@@ -269,19 +329,47 @@ class CodingWorkflowBrowserTests(TestCase):
         square_page = self.client.get(square_url)
         self.assertContains(square_page, 'square_numbers([2, -3])')
 
+    def test_local_demo_check_can_skip_runner_for_offline_django_setup(self):
+        output = StringIO()
+        call_command('check_local_demo', '--skip-runner', stdout=output)
+        self.assertIn('Django checks: OK', output.getvalue())
+        self.assertIn('Runner check: skipped', output.getvalue())
+
     def test_each_new_concept_uses_its_specialized_rubric(self):
         expected = {
-            'lookup-dictionary-grade': ('dictionary_keys', 'dictionary-key-misuse', 'dictionary-keys'),
-            'safe-divide-function': ('function_parameters_and_return', 'function-parameter-misuse', 'function-parameters-and-return'),
-            'first-list-item': ('list_indexing', 'list-index-misuse', 'list-indexing'),
+            'lookup-dictionary-grade': ('dictionary_keys', 'dictionary-key-misuse', 'dictionary-keys', 'dictionary price'),
+            'safe-divide-function': ('function_parameters_and_return', 'function-parameter-misuse', 'function-parameters-and-return', 'safe percentage'),
+            'first-list-item': ('list_indexing', 'list-index-misuse', 'list-indexing', 'last-item'),
         }
-        for slug, (concept, misconception, concept_slug) in expected.items():
+        for slug, (concept, misconception, concept_slug, recommendation_phrase) in expected.items():
             with self.subTest(slug=slug):
                 exercise = CodingExercise.objects.select_related('activity__concept').get(slug=slug)
                 rubric = exercise.activity.rubric
                 self.assertEqual(rubric['concept'], concept)
                 self.assertEqual(rubric['allowed_misconception_codes'], [misconception])
+                self.assertIn(
+                    recommendation_phrase,
+                    rubric['mastery_recommendations'][misconception],
+                )
                 self.assertEqual(exercise.activity.concept.slug, concept_slug)
+
+    def test_all_six_exercises_have_complete_revision_and_transfer_evidence_contract(self):
+        self.assertEqual(len(CODING_CATALOG), 6)
+        for entry in CODING_CATALOG:
+            with self.subTest(slug=entry['slug']):
+                self.assertTrue(entry['starter_code'])
+                self.assertTrue(entry['transfer']['test_ids'])
+                original_ids = set(entry['public_test_ids']) | set(entry['hidden_test_ids'])
+                transfer_ids = set(entry['transfer']['test_ids'])
+                self.assertTrue(original_ids)
+                self.assertTrue(transfer_ids.isdisjoint(original_ids))
+                rubric = entry['rubric']
+                self.assertTrue(rubric['revision_solution'])
+                self.assertTrue(rubric['teach_back_answer'])
+                self.assertTrue(rubric['diagnosis']['question'])
+                self.assertTrue(rubric['diagnosis']['answer'])
+                self.assertTrue(rubric['teach_back']['criteria'])
+                self.assertTrue(rubric['mastery_recommendations'])
 
     def test_dictionary_function_and_list_workflows_reach_mastery(self):
         cases = (
@@ -380,6 +468,18 @@ class CodingWorkflowBrowserTests(TestCase):
         call_command('validate_coding_catalog', stdout=output)
         self.assertIn('Catalog valid: 6 exercise(s).', output.getvalue())
 
+    def test_every_catalog_exercise_has_recovery_guidance_for_its_allowed_misconception(self):
+        self.assertEqual(len(CODING_CATALOG), 6)
+        for item in CODING_CATALOG:
+            with self.subTest(slug=item['slug']):
+                rubric = item['rubric']
+                recommendations = rubric['mastery_recommendations']
+                self.assertEqual(
+                    set(recommendations),
+                    set(rubric['allowed_misconception_codes']),
+                )
+                self.assertTrue(all(text.strip() for text in recommendations.values()))
+
     def test_catalog_validation_rejects_unknown_runner_test_id(self):
         invalid_catalog = deepcopy(CODING_CATALOG)
         invalid_catalog[0]['hidden_test_ids'].append('unknown-hidden-case')
@@ -387,6 +487,14 @@ class CodingWorkflowBrowserTests(TestCase):
         errors = validate_catalog(invalid_catalog)
 
         self.assertTrue(any('unknown runner test IDs' in error for error in errors))
+
+    def test_catalog_validation_rejects_incomplete_mastery_recommendations(self):
+        invalid_catalog = deepcopy(CODING_CATALOG)
+        invalid_catalog[0]['rubric']['mastery_recommendations'] = {}
+
+        errors = validate_catalog(invalid_catalog)
+
+        self.assertTrue(any('mastery_recommendations is missing codes' in error for error in errors))
 
     def test_catalog_sync_dry_run_does_not_write_database(self):
         before_exercises = CodingExercise.objects.count()
@@ -526,7 +634,8 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertEqual(attempt.evaluation['status'], 'NOT_EXECUTED')
         page = self.client.get(self.url)
         self.assertContains(page, '3. Diagnosis')
-        self.assertContains(page, 'NOT_EXECUTED')
+        self.assertContains(page, 'Not executed (NOT_EXECUTED)')
+        self.assertContains(page, 'Your work is saved and can be retried.')
         self.assertNotContains(page, 'ExecutionStatus.NOT_EXECUTED')
         interaction = CoachInteraction.objects.get()
         self.assertEqual(interaction.source, CoachInteraction.Source.CURATED_FALLBACK)
@@ -1592,6 +1701,10 @@ class CodingWorkflowServiceTests(TestCase):
         self.assertEqual(self.session.current_state, WorkflowState.NEEDS_REVIEW)
         self.assertEqual(mastery.status, ConceptMastery.Status.NEEDS_REVIEW)
         self.assertIn(repeated.code, mastery.reason)
+        self.assertEqual(
+            mastery.recommendation,
+            self.exercise.activity.rubric['mastery_recommendations'][repeated.code],
+        )
         self.assertIn(repeated.pk, mastery.evidence['misconception_record_ids'])
 
     def test_terminal_transition_requires_a_stored_mastery_decision(self):

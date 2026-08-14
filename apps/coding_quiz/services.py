@@ -135,6 +135,41 @@ CURATED_TEACH_BACK_ANSWER = (
     'list. A useful prevention check is to trace one small input item through a single iteration.'
 )
 
+EXECUTION_STATUS_FEEDBACK = {
+    ExecutionStatus.PASSED.value: (
+        'Passed',
+        'The isolated runner verified every required test. Continue to the next learning step.',
+    ),
+    ExecutionStatus.OUTPUT_MISMATCH.value: (
+        'Output mismatch',
+        'A visible test returned a different result. Trace one small input and revise the operation.',
+    ),
+    ExecutionStatus.LOGIC_ERROR.value: (
+        'Logic or boundary error',
+        'A required behavior did not pass. Review the concept and boundary cases before revising.',
+    ),
+    ExecutionStatus.FAILED.value: (
+        'Tests did not pass',
+        'Review the result evidence, then revise the code and reasoning.',
+    ),
+    ExecutionStatus.SYNTAX_ERROR.value: (
+        'Syntax error',
+        'Python could not read the code. Check punctuation, indentation, and delimiters before retrying.',
+    ),
+    ExecutionStatus.RUNTIME_ERROR.value: (
+        'Runtime error',
+        'The code stopped while running. Trace a small input and check unsafe operations or missing cases.',
+    ),
+    ExecutionStatus.TIMEOUT.value: (
+        'Timed out',
+        'The code did not finish within the limit. Check loops and repeated work before retrying.',
+    ),
+    ExecutionStatus.NOT_EXECUTED.value: (
+        'Not executed',
+        'The isolated runner did not evaluate this submission. Your work is saved and can be retried.',
+    ),
+}
+
 
 def _require_valid_exercise_configuration(exercise):
     if validate_database_exercise(exercise):
@@ -187,6 +222,20 @@ def _execution_evidence(result):
     }
 
 
+def execution_status_feedback(status):
+    """Return learner-facing status copy without changing stored runner evidence."""
+    status_value = status.value if isinstance(status, ExecutionStatus) else str(status)
+    label, guidance = EXECUTION_STATUS_FEEDBACK.get(
+        status_value,
+        ('Not evaluated', 'The runner returned an unrecognized result. Your work remains saved.'),
+    )
+    return {
+        'status': status_value,
+        'label': label,
+        'guidance': guidance,
+    }
+
+
 def _first_attempt_response_evaluation(*, result, reasoning, confidence, activity):
     reasoning_clear = not diagnosis_confirms_misconception(
         reasoning,
@@ -231,6 +280,27 @@ def _allowed_misconception_codes(activity):
         'allowed_misconception_codes',
         (LOOP_VALUE_MISCONCEPTION,),
     ))
+
+
+def _mastery_recommendations(exercise):
+    """Build concept-specific recovery guidance from the curated exercise."""
+    curated = exercise.activity.rubric.get('mastery_recommendations', {})
+    if isinstance(curated, dict):
+        recommendations = {
+            code: recommendation.strip()
+            for code, recommendation in curated.items()
+            if isinstance(code, str) and isinstance(recommendation, str) and recommendation.strip()
+        }
+        if recommendations:
+            return recommendations
+    concept_name = exercise.activity.concept.name
+    recommendation = (
+        f'Review {concept_name}, then complete a corrective exercise before retrying.'
+    )
+    return {
+        code: recommendation
+        for code in _allowed_misconception_codes(exercise.activity)
+    }
 
 
 def _diagnosis_config(activity):
@@ -951,6 +1021,7 @@ def submit_transfer_check(*, learning_session, exercise, source_code, reasoning,
         transfer_passed=transfer.passed,
         transfer_unassisted=not transfer.used_assistance,
         repeated_misconception_codes=[record.code for record in repeated_records],
+        repeated_misconception_recommendations=_mastery_recommendations(exercise),
         evidence={
             'original_attempt_id': original_attempt.pk,
             'teach_back_attempt_id': teach_back.pk,

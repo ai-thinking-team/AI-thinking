@@ -21,12 +21,16 @@ def _teach_back_rubric(*, operation_terms, operation_description):
 def _specialized_rubric(*, concept, operation, action_terms, diagnosis,
                         diagnosis_hints, diagnosis_answer, criteria,
                         misconception_code, misconception_indicators,
-                        teach_back_followups, teach_back_answer):
+                        mastery_recommendation, teach_back_followups,
+                        teach_back_answer):
     return {
         'concept': concept,
         'operation': operation,
         'requires_transfer': True,
         'allowed_misconception_codes': [misconception_code],
+        'mastery_recommendations': {
+            misconception_code: mastery_recommendation,
+        },
         'diagnosis_action_terms': action_terms,
         'diagnosis': {
             'question': diagnosis,
@@ -94,6 +98,10 @@ DICTIONARY_RUBRIC = _specialized_rubric(
     ],
     misconception_code='dictionary-key-misuse',
     misconception_indicators=['use the name as a list index', 'dictionary uses positions', 'key is an index'],
+    mastery_recommendation=(
+        'Review dictionary key lookups and missing-key fallbacks, then retry the '
+        'dictionary price Transfer Check.'
+    ),
     teach_back_followups={
         '2': 'What input is the dictionary key in this exercise?',
         '3': 'What value should a safe lookup return when that key is missing?',
@@ -132,6 +140,10 @@ FUNCTION_RUBRIC = _specialized_rubric(
     ],
     misconception_code='function-parameter-misuse',
     misconception_indicators=['divide by zero without checking', 'ignore the denominator', 'return the parameter itself'],
+    mastery_recommendation=(
+        'Review denominator checks and conditional return values, then retry the '
+        'safe percentage Transfer Check.'
+    ),
     teach_back_followups={
         '2': 'Which parameter can be zero?',
         '3': 'What should the function return for a zero denominator?',
@@ -170,6 +182,10 @@ LIST_INDEX_RUBRIC = _specialized_rubric(
     ],
     misconception_code='list-index-misuse',
     misconception_indicators=['first item is items[1]', 'index 1 is the first item', 'lists start at 1'],
+    mastery_recommendation=(
+        'Review zero-based indexing and empty-list boundary checks, then retry the '
+        'last-item Transfer Check.'
+    ),
     teach_back_followups={
         '2': 'Which index identifies the first list item?',
         '3': 'What should happen when the list has no items?',
@@ -200,6 +216,12 @@ def _entry(*, slug, order, title, prompt, starter_code, public_description,
             'operation': operation,
             'requires_transfer': True,
             'allowed_misconception_codes': ['loop-value-misuse'],
+            'mastery_recommendations': {
+                'loop-value-misuse': (
+                    'Review how a loop transforms one current item at a time, then retry '
+                    'the parallel Transfer Check.'
+                ),
+            },
             'diagnosis_action_terms': operation_terms,
             'diagnosis': {
                 'question': diagnosis_question,

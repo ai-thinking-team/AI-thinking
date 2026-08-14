@@ -139,6 +139,22 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 The Coding workflow requires a separate Docker-backed HTTP runner before a revision can be verified as `PASSED`. See [`runner_service/README.md`](runner_service/README.md). Without that service, submissions safely remain `NOT_EXECUTED` and cannot unlock Teach-Back or Mastery.
 
+For the reproducible local demo, start the runner in one PowerShell and Django in another:
+
+```powershell
+cd D:\study\gpbl\AI-thinking-review
+powershell -ExecutionPolicy Bypass -File .\runner_service\start.ps1
+```
+
+Then verify readiness from the second terminal:
+
+```powershell
+.\venv\Scripts\python.exe manage.py check_local_demo
+```
+
+Open Django at `http://127.0.0.1:8004/`. The runner listens only on local loopback at
+`http://127.0.0.1:8765/`.
+
 ### Coding exercise catalog and history
 
 `python manage.py migrate` creates and seeds the initial database-backed Coding catalog. The

@@ -140,3 +140,35 @@ def get_code_execution_gateway():
             timeout=getattr(settings, 'CODE_RUNNER_TIMEOUT_SECONDS', 20),
         )
     return UnavailableCodeExecutionGateway()
+
+
+def code_runner_status():
+    """Return a safe learner-facing readiness summary without exposing secrets."""
+    gateway_path = getattr(settings, 'CODE_RUNNER_GATEWAY_CLASS', '')
+    if gateway_path:
+        return {
+            'mode': 'CUSTOM_GATEWAY',
+            'label': 'Configured',
+            'detail': 'A configured isolated execution gateway is available for submissions.',
+        }
+
+    base_url = getattr(settings, 'CODE_RUNNER_URL', '').strip()
+    if not base_url:
+        return {
+            'mode': 'UNCONFIGURED',
+            'label': 'Not configured',
+            'detail': 'Code is stored but cannot be executed until an isolated runner URL is configured.',
+        }
+
+    is_local, port = _local_runner_url(base_url)
+    if is_local and not _runner_port_open('127.0.0.1', port):
+        return {
+            'mode': 'UNAVAILABLE',
+            'label': 'Configured, unavailable',
+            'detail': 'The isolated runner URL is configured, but the local runner is not reachable yet.',
+        }
+    return {
+        'mode': 'CONFIGURED',
+        'label': 'Configured',
+        'detail': 'Submissions are sent to the isolated runner for verification.',
+    }

@@ -13,7 +13,7 @@
     </div>
   {% else %}
     <p>After a hint, save a new revision before requesting the next level. If level 4 still does not help, one more failed revision unlocks the final solution.</p>
-    <form method="post">
+    <form method="post" data-disable-on-submit>
       {% csrf_token %}
       <input type="hidden" name="action" value="hint">
       <button type="submit">Unlock next hint</button>

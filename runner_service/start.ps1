@@ -1,3 +1,8 @@
+param(
+    [switch]$SkipBuild,
+    [int]$Port = 8765
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -25,7 +30,13 @@ try {
         throw 'Docker Desktop is not running. Start Docker Desktop once and retry the Coding page.'
     }
 }
-docker build -t ai-thinking-code-runner:local runner_service
+$env:RUNNER_PORT = $Port
+$env:RUNNER_IMAGE = 'ai-thinking-code-runner:local'
+if ($SkipBuild) {
+    Write-Host 'Skipping runner image build.'
+} else {
+    docker build -t ai-thinking-code-runner:local runner_service
+}
 $pythonPath = Join-Path $repoRoot 'venv\Scripts\python.exe'
 if (-not (Test-Path $pythonPath)) {
     $pythonPath = 'python'

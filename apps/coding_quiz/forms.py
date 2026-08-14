@@ -1,7 +1,23 @@
 from django import forms
 
 
-class CodingPlanForm(forms.Form):
+class AccessibleForm(forms.Form):
+    """Associate server-side validation feedback with each rendered control."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            return
+        for name in self.fields:
+            bound_field = self[name]
+            if bound_field.errors:
+                bound_field.field.widget.attrs.update({
+                    'aria-invalid': 'true',
+                    'aria-describedby': f'{bound_field.auto_id}_error',
+                })
+
+
+class CodingPlanForm(AccessibleForm):
     solution_plan = forms.CharField(
         label='Describe your solution plan before writing code',
         widget=forms.Textarea(attrs={'rows': 4}),
@@ -12,7 +28,7 @@ class CodingPlanForm(forms.Form):
     )
 
 
-class CodingAttemptForm(forms.Form):
+class CodingAttemptForm(AccessibleForm):
     source_code = forms.CharField(
         label='Python source code',
         widget=forms.Textarea(attrs={'rows': 12, 'spellcheck': 'false'}),
@@ -33,7 +49,7 @@ class CodingAttemptForm(forms.Form):
     )
 
 
-class DiagnosisForm(forms.Form):
+class DiagnosisForm(AccessibleForm):
     diagnosis_answer = forms.CharField(
         label='Your answer',
         widget=forms.Textarea(attrs={'rows': 4}),
@@ -44,7 +60,7 @@ class RevisionForm(CodingAttemptForm):
     pass
 
 
-class TeachBackForm(forms.Form):
+class TeachBackForm(AccessibleForm):
     original_issue = forms.CharField(
         label='What was wrong or uncertain in your first attempt?',
         widget=forms.Textarea(attrs={'rows': 3}),

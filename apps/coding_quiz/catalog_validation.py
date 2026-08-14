@@ -231,6 +231,30 @@ def _validate_entry(item, *, index, test_catalog):
                     errors.append(
                         f'{prefix}.rubric.allowed_misconception_codes contains an invalid code: {code}.'
                     )
+        recommendations = rubric.get('mastery_recommendations')
+        if recommendations is not None:
+            if not isinstance(recommendations, dict):
+                errors.append(f'{prefix}.rubric.mastery_recommendations must be an object.')
+            elif isinstance(allowed_codes, list) and all(
+                isinstance(code, str) for code in allowed_codes
+            ):
+                unexpected_codes = sorted(set(recommendations) - set(allowed_codes))
+                missing_codes = sorted(set(allowed_codes) - set(recommendations))
+                if unexpected_codes:
+                    errors.append(
+                        f'{prefix}.rubric.mastery_recommendations has unknown codes: '
+                        f'{", ".join(unexpected_codes)}.'
+                    )
+                if missing_codes:
+                    errors.append(
+                        f'{prefix}.rubric.mastery_recommendations is missing codes: '
+                        f'{", ".join(missing_codes)}.'
+                    )
+                for code in allowed_codes:
+                    errors.extend(_non_empty_string_errors(
+                        recommendations.get(code),
+                        field=f'{prefix}.rubric.mastery_recommendations.{code}',
+                    ))
         errors.extend(_string_list_errors(
             rubric.get('diagnosis_action_terms'),
             field=f'{prefix}.rubric.diagnosis_action_terms',

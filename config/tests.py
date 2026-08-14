@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
+from django.conf import settings
 from django.test import SimpleTestCase
 
 from .environment import env_bool, env_csv, require_env
@@ -26,3 +27,11 @@ class EnvironmentParsingTests(SimpleTestCase):
         with patch.dict('os.environ', {'REQUIRED_SECRET': '  '}):
             with self.assertRaises(ImproperlyConfigured):
                 require_env('REQUIRED_SECRET')
+
+
+class TestSettingsIsolationTests(SimpleTestCase):
+    def test_external_integrations_are_disabled(self):
+        self.assertEqual(settings.AI_PROVIDER_CLASS, '')
+        self.assertEqual(settings.CODE_RUNNER_URL, '')
+        self.assertEqual(settings.CODE_RUNNER_GATEWAY_CLASS, '')
+        self.assertFalse(settings.CODE_RUNNER_AUTOSTART)

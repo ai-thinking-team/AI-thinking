@@ -41,7 +41,8 @@ class MasteryDecision:
 
 
 def evaluate_mastery(*, original_passed, teach_back_clear, transfer_passed,
-                     transfer_unassisted, repeated_misconception_codes=()):
+                     transfer_unassisted, repeated_misconception_codes=(),
+                     repeated_misconception_recommendations=None):
     repeated_codes = tuple(repeated_misconception_codes)
     if not original_passed:
         return MasteryDecision(
@@ -69,10 +70,19 @@ def evaluate_mastery(*, original_passed, teach_back_clear, transfer_passed,
         )
     if repeated_codes:
         readable_codes = ', '.join(repeated_codes)
+        recommendations = dict(repeated_misconception_recommendations or {})
+        recommendation = next(
+            (
+                recommendations.get(code, '').strip()
+                for code in repeated_codes
+                if recommendations.get(code, '').strip()
+            ),
+            'Review the confirmed misconception and complete a corrective exercise before retrying.',
+        )
         return MasteryDecision(
             ConceptMastery.Status.NEEDS_REVIEW,
             f'A confirmed misconception was repeated in the Transfer Check: {readable_codes}.',
-            'Review how a loop transforms one current item at a time, then try a corrective exercise.',
+            recommendation,
         )
     return MasteryDecision(
         ConceptMastery.Status.MASTERED,
@@ -84,13 +94,14 @@ def evaluate_mastery(*, original_passed, teach_back_clear, transfer_passed,
 @transaction.atomic
 def record_mastery_decision(*, learning_session, concept, original_passed, teach_back_clear,
                             transfer_passed, transfer_unassisted, repeated_misconception_codes,
-                            evidence):
+                            evidence, repeated_misconception_recommendations=None):
     decision = evaluate_mastery(
         original_passed=original_passed,
         teach_back_clear=teach_back_clear,
         transfer_passed=transfer_passed,
         transfer_unassisted=transfer_unassisted,
         repeated_misconception_codes=repeated_misconception_codes,
+        repeated_misconception_recommendations=repeated_misconception_recommendations,
     )
     record = ConceptMastery.objects.create(
         learning_session=learning_session,

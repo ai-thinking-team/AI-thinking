@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from apps.ai_engine.client import ai_provider_configured, ai_provider_status
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowed
+from apps.code_runner.runner import code_runner_status
 
 from .forms import (
     CodingAttemptForm,
@@ -21,6 +22,7 @@ from .models import CodingExercise
 from .services import (
     acknowledge_diagnosis_solution,
     acknowledge_teach_back_solution,
+    execution_status_feedback,
     get_demo_session,
     recover_interrupted_first_attempt,
     request_curated_hint,
@@ -114,7 +116,8 @@ def _handle_action(request, learning_session, exercise, forms):
             exercise=exercise,
             **form.cleaned_data,
         )
-        messages.info(request, f'{result.status.value}: {result.message}')
+        feedback = execution_status_feedback(result.status)
+        messages.info(request, f'{feedback["label"]}: {feedback["guidance"]}')
     elif action == 'diagnosis':
         submit_diagnosis(
             learning_session=learning_session,
@@ -147,13 +150,15 @@ def _handle_action(request, learning_session, exercise, forms):
             **form.cleaned_data,
         )
         if action == 'finish_revision' and result.status.value != 'PASSED':
+            feedback = execution_status_feedback(result.status)
             messages.warning(request, (
                 f'Revision saved, but Teach-Back remains locked. Execution status: '
-                f'{result.status.value}. An isolated runner must verify PASSED first.'
+                f'{feedback["label"]} ({feedback["status"]}). {feedback["guidance"]}'
             ))
         else:
             verb = 'saved' if action == 'save_revision' else 'verified and completed'
-            messages.info(request, f'Revision {verb}. {result.status.value}: {result.message}')
+            feedback = execution_status_feedback(result.status)
+            messages.info(request, f'Revision {verb}. {feedback["label"]}: {feedback["guidance"]}')
     elif action == 'teach_back':
         teach_back = submit_teach_back(
             learning_session=learning_session,
@@ -185,12 +190,14 @@ def _handle_action(request, learning_session, exercise, forms):
             **form.cleaned_data,
         )
         if result.status.value == 'NOT_EXECUTED':
+            feedback = execution_status_feedback(result.status)
             messages.warning(request, (
-                f'Transfer Check saved but not evaluated: {result.message} '
+                f'Transfer Check saved but not evaluated: {feedback["guidance"]} '
                 'This step remains open so you can retry when the isolated runner is available.'
             ))
         else:
-            messages.info(request, f'Transfer Check saved. {result.status.value}: {result.message}')
+            feedback = execution_status_feedback(result.status)
+            messages.info(request, f'Transfer Check saved. {feedback["label"]}: {feedback["guidance"]}')
     elif action == 'reset':
         reset_demo_session(
             browser_session_key=request.session.session_key,
@@ -305,6 +312,10 @@ def exercise(request, slug='double-numbers'):
         for index, (key, label) in enumerate(DISPLAY_STAGES)
     ]
     latest_evaluation = latest_attempt.evaluation if latest_attempt else None
+    latest_execution_feedback = (
+        execution_status_feedback(latest_evaluation.get('status'))
+        if latest_evaluation else None
+    )
     diagnosis_records = list(learning_session.misconceptions.order_by('created_at'))
     coach_interactions = list(
         learning_session.coach_interactions.order_by('created_at', 'pk')
@@ -364,6 +375,7 @@ def exercise(request, slug='double-numbers'):
         'attempts': attempts,
         'hint_usage': hint_usage,
         'latest_evaluation': latest_evaluation,
+        'latest_execution_feedback': latest_execution_feedback,
         'diagnosis_records': diagnosis_records,
         'coach_interactions': coach_interactions,
         'teach_back_attempts': teach_back_attempts,
@@ -377,4 +389,5 @@ def exercise(request, slug='double-numbers'):
         'ai_status': ai_provider_status(
             assistance_enabled=ai_assistance_allowed(learning_session.current_state),
         ),
+        'code_runner_status': code_runner_status(),
     })

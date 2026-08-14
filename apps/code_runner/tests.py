@@ -10,11 +10,32 @@ from .runner import (
     ExecutionRequest,
     ExecutionStatus,
     UnavailableCodeExecutionGateway,
+    code_runner_status,
     get_code_execution_gateway,
 )
 
 
 class CodeRunnerBoundaryTests(SimpleTestCase):
+    @override_settings(CODE_RUNNER_URL='', CODE_RUNNER_GATEWAY_CLASS='')
+    def test_status_distinguishes_unconfigured_runner(self):
+        status = code_runner_status()
+        self.assertEqual(status['mode'], 'UNCONFIGURED')
+        self.assertEqual(status['label'], 'Not configured')
+
+    @override_settings(CODE_RUNNER_URL='http://127.0.0.1:8765', CODE_RUNNER_GATEWAY_CLASS='')
+    @patch('apps.code_runner.runner._runner_port_open', return_value=False)
+    def test_status_distinguishes_configured_but_unavailable_local_runner(self, mocked_port):
+        status = code_runner_status()
+        self.assertEqual(status['mode'], 'UNAVAILABLE')
+        self.assertEqual(status['label'], 'Configured, unavailable')
+        mocked_port.assert_called_once_with('127.0.0.1', 8765)
+
+    @override_settings(CODE_RUNNER_URL='https://runner.example.test/execute', CODE_RUNNER_GATEWAY_CLASS='')
+    def test_status_does_not_probe_remote_runner_or_expose_credentials(self):
+        status = code_runner_status()
+        self.assertEqual(status['mode'], 'CONFIGURED')
+        self.assertNotIn('token', status['detail'].lower())
+
     def test_local_placeholder_never_claims_code_was_run(self):
         result = UnavailableCodeExecutionGateway().run(
             ExecutionRequest(language='python', source_code='print(1)')

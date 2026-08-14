@@ -1,28 +1,64 @@
 {% extends "base.html" %}
 
-{% block title %}Learning progress{% endblock %}
+{% block title %}Coding progress{% endblock %}
 
 {% block content %}
-<h1>Learning progress</h1>
-<p>This dashboard reports durable evidence from this browser session, not only quiz scores.</p>
-{% if learning_sessions %}
-  <ul class="session-list">
-  {% for session in learning_sessions %}
-    <li class="panel">
-      <strong>{{ session.activity.title|default:session.topic.name }}</strong>
-      <span>— {{ session.get_current_state_display }}</span>
-      {% if session.ended_at %}<span class="status-muted">(ended)</span>{% else %}<span>(active)</span>{% endif %}
-      <div class="evidence-summary">
-        Started {{ session.started_at|date:"Y-m-d H:i" }} ·
-        {{ session.attempts.count }} code attempt{{ session.attempts.count|pluralize }} ·
-        {{ session.teach_back_attempts.count }} Teach-Back attempt{{ session.teach_back_attempts.count|pluralize }} ·
-        {{ session.transfer_attempts.count }} Transfer attempt{{ session.transfer_attempts.count|pluralize }}
-      </div>
-      <a href="{% url 'progress:session_detail' session.pk %}">Review evidence</a>
-    </li>
-  {% endfor %}
-  </ul>
+<header class="page-header progress-header">
+  <div>
+    <p class="eyebrow">Coding evidence</p>
+    <h1>Coding progress</h1>
+    <p>This dashboard shows the learning evidence saved in this browser session, not only a score.</p>
+  </div>
+  <a class="button-link button-secondary" href="{% url 'coding_quiz:home' %}">Choose an exercise</a>
+</header>
+
+{% if dashboard.sessions %}
+  <section class="metric-grid" aria-label="Coding progress summary">
+    <article class="metric-card"><span>Sessions</span><strong>{{ dashboard.total_sessions }}</strong></article>
+    <article class="metric-card"><span>Active</span><strong>{{ dashboard.active_sessions }}</strong></article>
+    <article class="metric-card metric-success"><span>Mastered</span><strong>{{ dashboard.mastered_sessions }}</strong></article>
+    <article class="metric-card metric-review"><span>Needs review</span><strong>{{ dashboard.needs_review_sessions }}</strong></article>
+  </section>
+
+  <section aria-labelledby="session-evidence-heading">
+    <h2 id="session-evidence-heading">Session evidence</h2>
+    <ul class="session-list">
+    {% for summary in dashboard.sessions %}
+      <li class="panel session-card">
+        <div class="session-card-header">
+          <div>
+            <h3>{{ summary.title }}</h3>
+            {% if summary.concept %}<p class="evidence-summary">Concept: {{ summary.concept }}</p>{% endif %}
+          </div>
+          <span class="badge {% if summary.active %}badge-warning{% else %}badge-success{% endif %}">{% if summary.active %}Active{% else %}Ended{% endif %}</span>
+        </div>
+        <p><strong>Current step:</strong> {{ summary.state_label }}</p>
+        <dl class="evidence-facts">
+          <div><dt>Code attempts</dt><dd>{{ summary.attempt_count }}</dd></div>
+          <div><dt>Confidence</dt><dd>{{ summary.confidence_change }}</dd></div>
+          <div><dt>Highest hint</dt><dd>{% if summary.highest_hint_level %}Level {{ summary.highest_hint_level }}{% else %}None{% endif %}</dd></div>
+          <div><dt>Teach-Back</dt><dd>{% if summary.teach_back %}<span class="badge badge-{{ summary.teach_back_badge }}">{{ summary.teach_back.evaluation }}</span>{% else %}Not started{% endif %}</dd></div>
+          <div><dt>Transfer Check</dt><dd>{% if summary.transfer %}<span class="badge badge-{{ summary.transfer_badge }}">{% if summary.transfer.passed %}Passed{% else %}Not passed{% endif %}</span>{% if summary.transfer.used_assistance %} assisted{% endif %}{% else %}Not started{% endif %}</dd></div>
+        </dl>
+        {% if summary.unresolved_misconceptions %}
+          <p class="evidence-callout evidence-callout-review"><strong>Needs attention:</strong> {% for record in summary.unresolved_misconceptions %}{{ record.code }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        {% endif %}
+        {% if summary.mastery %}
+          <div class="evidence-callout evidence-callout-{{ summary.mastery_badge }}">
+            <p><span class="badge badge-{{ summary.mastery_badge }}">{{ summary.mastery.get_status_display }}</span> <strong>{{ summary.mastery.reason }}</strong></p>
+            {% if summary.mastery.recommendation %}<p>Next step: {{ summary.mastery.recommendation }}</p>{% endif %}
+          </div>
+        {% endif %}
+        <a href="{% url 'progress:session_detail' summary.session.pk %}">Review full evidence</a>
+      </li>
+    {% endfor %}
+    </ul>
+  </section>
 {% else %}
-  <p>No learning evidence has been recorded in this browser yet.</p>
+  <section class="panel empty-state">
+    <h2>No Coding evidence yet</h2>
+    <p>Choose a Python exercise, save a plan, and make a Think-First attempt to begin this evidence trail.</p>
+    <a class="button-link" href="{% url 'coding_quiz:home' %}">Start Coding</a>
+  </section>
 {% endif %}
 {% endblock %}

@@ -1,6 +1,10 @@
 <fieldset>
   <legend>Confidence</legend>
   <p>1 = guessing, 3 = partial understanding, 5 = able to explain.</p>
-  {{ form.confidence.errors }}
+  {% if form.confidence.errors %}
+    <ul class="errorlist" id="{{ form.confidence.auto_id }}_error">
+      {% for error in form.confidence.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
   {{ form.confidence }}
 </fieldset>
