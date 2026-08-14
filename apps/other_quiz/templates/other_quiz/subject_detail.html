@@ -27,7 +27,7 @@
   <!-- 2. Danh sách Bài học & Cấu trúc câu hỏi -->
   <h2 class="text-xl font-bold mb-4">Danh sách bài học</h2>
 
-  <div class="space-y-4">
+  <div class="space-y-4 mb-8">
     {% for lesson in subject.lessons.all %}
       <div class="panel">
         <div class="flex items-center justify-between border-b pb-3 mb-4 border-gray-100">
@@ -45,10 +45,10 @@
           {% for q in lesson.questions.all %}
             <div class="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg text-sm">
               <div class="flex items-center space-x-2">
-                {% if q.type == 'MULTIPLE_CHOICE' %}
+                {% if q.q_type == 'MULTIPLE_CHOICE' %}
                   <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Trắc nghiệm</span>
                 {% else %}
-                  <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-semibold">Tự luận / Bằng chứng</span>
+                  <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-semibold">Trả lời ngắn / Rubric</span>
                 {% endif %}
                 <span class="text-gray-700 font-medium">{{ q.title }}</span>
               </div>
@@ -61,8 +61,8 @@
         <!-- Nút Bắt đầu học bài này -->
         <div class="flex justify-end">
           <a href="{% url 'other_quiz:lesson_detail' subject.id lesson.id %}" class="btn btn-primary text-sm">
-        📝 Bắt đầu ôn tập bài này
-        </a>
+            📝 Bắt đầu ôn tập bài này
+          </a>
         </div>
       </div>
     {% empty %}
@@ -70,6 +70,36 @@
         <p class="text-gray-500">Môn học này chưa có bài học nào.</p>
       </div>
     {% endfor %}
+  </div>
+
+  <!-- 3. Nút & Form Upload Tài Liệu Ở Dưới Cùng -->
+  <div class="border-t pt-6">
+    <div class="flex justify-center mb-4">
+      <button onclick="const form = document.getElementById('uploadDocForm'); form.style.display = (form.style.display === 'none') ? 'block' : 'none';" class="btn btn-primary">
+        ✨ Upload tài liệu tạo bài học mới (AI)
+      </button>
+    </div>
+
+    <!-- Form Upload (Mặc định ẩn) -->
+    <div id="uploadDocForm" style="display: none;" class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200">
+      <h3 class="text-lg font-bold text-gray-800 mb-2">Tải lên tài liệu bài học</h3>
+      <p class="text-sm text-gray-600 mb-4">Chọn file (.pdf, .txt, .docx) để AI phân tích và tự động tạo bài học + câu hỏi.</p>
+
+      <form method="POST" action="#" enctype="multipart/form-data" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <input type="file" name="document" accept=".pdf,.txt,.docx" required
+                 class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer border border-gray-300 rounded-lg bg-white p-2">
+        </div>
+
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="document.getElementById('uploadDocForm').style.display = 'none';" class="px-4 py-2 text-sm text-gray-600 hover:underline">Hủy</button>
+          <button type="submit" class="btn btn-primary text-sm">
+            🚀 Bắt đầu tạo bài học
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

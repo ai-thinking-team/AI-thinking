@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from .models import Subject, Lesson
 from .services import evaluate_multiple_choice, evaluate_rubric
 
@@ -11,7 +11,21 @@ def subject_detail(request, subject_id):
     return render(request, 'other_quiz/subject_detail.html', {'subject': subject})
 
 def create_subject(request):
-    return render(request, 'other_quiz/create_subject.html')
+    if request.method == "POST":
+        sub_id = request.POST.get("id")
+        title = request.POST.get("title")
+        icon = request.POST.get("icon") or "📖"
+        description = request.POST.get("description")
+
+        if sub_id and title:
+            Subject.objects.create(
+                id=sub_id,
+                title=title,
+                icon=icon,
+                description=description
+            )
+            
+    return redirect('other_quiz:home')
 
 def lesson_detail(request, subject_id, lesson_id):
     subject = get_object_or_404(Subject, id=subject_id)
