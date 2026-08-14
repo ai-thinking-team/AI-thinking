@@ -13,3 +13,4 @@ db.sqlite3
 .coverage
 staticfiles/
 design_prototype/
+docs/decisions.md
