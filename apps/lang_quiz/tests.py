@@ -15,11 +15,21 @@ from apps.lang_quiz.models import (
     LanguageQuestion,
     LanguageQuizRun,
     MissingLanguageQuestion,
+    MyselfStagePack,
 )
 from apps.lang_quiz.quiz_engine import (
+    GRAMMAR_WORLD_STAGES,
+    READING_WORLD_STAGES,
+    WORLD_ONE_STAGES,
     _decode_upload,
     _parse_exact_pdf_quiz,
+    get_stage_questions,
+    get_myself_stage_questions,
     remember_missing,
+    myself_stage_catalog,
+    myself_stage_slug,
+    stage_catalog,
+    update_course_progress,
 )
 from apps.lang_quiz.services import (
     LANGUAGE_GAP_TYPES,
@@ -88,6 +98,26 @@ E. 手表
         self.assertEqual(response.status_code, 302)
         run_id = response.url.rstrip('/').split('/')[-1]
         return LanguageQuizRun.objects.get(id=run_id)
+
+    def _myself_choice_specs(self):
+        return [
+            {
+                'prompt': f'Question {index} based on the uploaded material',
+                'answer': f'correct-{index}',
+                'skill_focus': 'Material Understanding',
+                'explanation': 'The uploaded material supports this answer.',
+                'next_step': 'Review the related part of the material.',
+                'hints': [f'Hint {level}' for level in range(1, 6)],
+                'choices': [
+                    f'correct-{index}',
+                    f'plausible-a-{index}',
+                    f'plausible-b-{index}',
+                    f'plausible-c-{index}',
+                    f'plausible-d-{index}',
+                ],
+            }
+            for index in range(10)
+        ]
 
     def test_damaged_pdf_is_not_reported_as_scanned(self):
         upload = SimpleUploadedFile(
@@ -163,6 +193,221 @@ E. 手表
         )
         self.assertContains(response, 'AIで新しい問題を作る')
         self.assertContains(response, 'PDFの問題をそのまま出題する')
+        self.assertContains(response, 'World 1 · Vocabulary Journey')
+        self.assertContains(response, '1-10')
+
+    def test_world_one_starts_with_only_stage_one_unlocked(self):
+        session = self.client.session
+        session.save()
+
+        stages = stage_catalog(session.session_key)
+
+        self.assertEqual(len(stages), 10)
+        self.assertEqual([stage['number'] for stage in stages], [
+            f'1-{number}' for number in range(1, 11)
+        ])
+        self.assertTrue(stages[0]['unlocked'])
+        self.assertTrue(all(not stage['unlocked'] for stage in stages[1:]))
+        self.assertEqual(stages[0]['level'], 'A1')
+        self.assertEqual(stages[-1]['level'], 'C1+')
+
+    def test_reading_and_grammar_each_show_ten_independent_stages(self):
+        session = self.client.session
+        session.save()
+
+        for section in ('reading', 'grammar'):
+            stages = stage_catalog(session.session_key, section)
+            self.assertEqual(len(stages), 10)
+            self.assertEqual(stages[0]['number'], '1-1')
+            self.assertEqual(stages[-1]['number'], '1-10')
+            self.assertTrue(stages[0]['unlocked'])
+            self.assertTrue(all(not stage['unlocked'] for stage in stages[1:]))
+            self.assertEqual(stages[0]['level'], 'A1')
+            self.assertEqual(stages[-1]['level'], 'C1+')
+
+        self.assertEqual(len(READING_WORLD_STAGES), 10)
+        self.assertEqual(len(GRAMMAR_WORLD_STAGES), 10)
+
+    def test_reading_and_grammar_setup_replace_quick_start_with_stage_maps(self):
+        reading = self.client.get(reverse('lang_quiz:material_setup', args=['reading']))
+        grammar = self.client.get(reverse('lang_quiz:material_setup', args=['grammar']))
+
+        self.assertContains(reading, 'World 1 · Reading Adventure')
+        self.assertContains(reading, '1-10')
+        self.assertNotContains(reading, 'No file? Try random questions')
+        self.assertContains(grammar, 'World 1 · Grammar Quest')
+        self.assertContains(grammar, '1-10')
+        self.assertNotContains(grammar, 'No file? Try random questions')
+
+    def test_clearing_reading_stage_does_not_unlock_grammar_stage(self):
+        session = self.client.session
+        session.save()
+        questions = [{'key': f'reading-stage-question-{index}'} for index in range(10)]
+        run = LanguageQuizRun.objects.create(
+            browser_session_key=session.session_key,
+            section='reading',
+            mode='stage',
+            course_slug='reading-world-1-stage-1',
+            questions=questions,
+            correct_count=7,
+        )
+        for question in questions[:7]:
+            update_course_progress(
+                session.session_key,
+                'reading-world-1-stage-1',
+                question,
+                quiz_run=run,
+            )
+
+        self.assertTrue(stage_catalog(session.session_key, 'reading')[1]['unlocked'])
+        self.assertFalse(stage_catalog(session.session_key, 'grammar')[1]['unlocked'])
+
+    def test_stage_clears_at_seventy_percent_and_unlocks_next(self):
+        session = self.client.session
+        session.save()
+        questions = [{'key': f'stage-question-{index}'} for index in range(10)]
+        run = LanguageQuizRun.objects.create(
+            browser_session_key=session.session_key,
+            section='vocabulary',
+            mode='stage',
+            course_slug='world-1-stage-1',
+            questions=questions,
+            correct_count=7,
+        )
+        for question in questions[:7]:
+            progress = update_course_progress(
+                session.session_key,
+                'world-1-stage-1',
+                question,
+                quiz_run=run,
+            )
+
+        self.assertEqual(progress.score_percent, 70)
+        self.assertTrue(progress.completed)
+        stages = stage_catalog(session.session_key)
+        self.assertTrue(stages[1]['unlocked'])
+        self.assertFalse(stages[2]['unlocked'])
+
+    def test_locked_stage_redirects_without_creating_quiz(self):
+        response = self.client.get(
+            reverse('lang_quiz:start_stage', args=['world-1-stage-2'])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(LanguageQuizRun.objects.count(), 0)
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_stage_ai_prompt_and_metadata_increase_from_a1_to_c1(self, mock_ai):
+        mock_ai.return_value = [
+            {
+                'prompt': f'Stage vocabulary question {index}',
+                'answer': f'answer-{index}',
+                'skill_focus': 'Vocabulary in Context',
+                'explanation': 'The answer fits the context.',
+                'next_step': 'Use the word in a new sentence.',
+                'hints': [f'Hint {level}' for level in range(1, 6)],
+                'choices': [f'answer-{index}', 'one', 'two', 'three', 'four'],
+            }
+            for index in range(10)
+        ]
+
+        first_stage = get_stage_questions('world-1-stage-1')
+        first_prompt = mock_ai.call_args.kwargs['user_prompt']
+        final_stage = get_stage_questions('world-1-stage-10')
+        final_prompt = mock_ai.call_args.kwargs['user_prompt']
+
+        self.assertIn('Difficulty: beginner', first_prompt)
+        self.assertIn('CEFR A1', first_prompt)
+        self.assertIn('difficulty step 1 of 10', first_prompt)
+        self.assertIn('Difficulty: advanced', final_prompt)
+        self.assertIn('CEFR C1+', final_prompt)
+        self.assertIn('difficulty step 10 of 10', final_prompt)
+        self.assertTrue(all(question['stage_number'] == '1-1' for question in first_stage))
+        self.assertTrue(all(question['stage_number'] == '1-10' for question in final_stage))
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_reading_stage_uses_five_plausible_ai_choices(self, mock_ai):
+        expected_choices = ['the park', 'the library', 'the school', 'the hospital', 'the station']
+        mock_ai.return_value = [
+            {
+                'prompt': f'Where is the person in passage {index}?',
+                'answer': 'the park',
+                'skill_focus': 'Finding Place',
+                'explanation': 'The passage directly says the person is in the park.',
+                'next_step': 'Underline the sentence that names the place.',
+                'hints': [f'Hint {level}' for level in range(1, 6)],
+                'choices': expected_choices,
+            }
+            for index in range(10)
+        ]
+
+        questions = get_stage_questions('reading-world-1-stage-1')
+        prompt = mock_ai.call_args.kwargs['user_prompt']
+
+        self.assertIn('Section: reading', prompt)
+        self.assertIn('Answer mode: multiple_choice', prompt)
+        self.assertTrue(all(set(question['choices']) == set(expected_choices) for question in questions))
+        self.assertTrue(all(len(question['choices']) == 5 for question in questions))
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_grammar_stage_uses_five_plausible_ai_choices(self, mock_ai):
+        expected_choices = ['goes', 'go', 'went', 'going', 'is go']
+        mock_ai.return_value = [
+            {
+                'prompt': f'She ___ to school every day. Item {index}',
+                'answer': 'goes',
+                'skill_focus': 'Simple Present Tense',
+                'explanation': 'A third-person singular subject takes goes.',
+                'next_step': 'Write another sentence using the simple present.',
+                'hints': [f'Hint {level}' for level in range(1, 6)],
+                'choices': expected_choices,
+            }
+            for index in range(10)
+        ]
+
+        questions = get_stage_questions('grammar-world-1-stage-1')
+        prompt = mock_ai.call_args.kwargs['user_prompt']
+
+        self.assertIn('Section: grammar', prompt)
+        self.assertIn('Answer mode: multiple_choice', prompt)
+        self.assertTrue(all(set(question['choices']) == set(expected_choices) for question in questions))
+        self.assertTrue(all(len(question['choices']) == 5 for question in questions))
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response', side_effect=AIServiceUnavailable('offline'))
+    def test_first_stage_starts_as_ten_question_stage_run(self, _mock_ai):
+        response = self.client.get(
+            reverse('lang_quiz:start_stage', args=['world-1-stage-1'])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        run = LanguageQuizRun.objects.latest('created_at')
+        self.assertEqual(run.mode, 'stage')
+        self.assertEqual(run.course_slug, 'world-1-stage-1')
+        self.assertEqual(len(run.questions), 10)
+        self.assertTrue(all(question['stage_number'] == '1-1' for question in run.questions))
+        self.assertEqual(len(WORLD_ONE_STAGES), 10)
+        quiz_page = self.client.get(response.url)
+        self.assertContains(quiz_page, 'STAGE 1-1')
+        self.assertContains(quiz_page, 'CEFR A1')
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response', side_effect=AIServiceUnavailable('offline'))
+    def test_first_reading_and_grammar_stages_start_ten_question_runs(self, _mock_ai):
+        for section, slug in (
+            ('reading', 'reading-world-1-stage-1'),
+            ('grammar', 'grammar-world-1-stage-1'),
+        ):
+            response = self.client.get(reverse('lang_quiz:start_stage', args=[slug]))
+            self.assertEqual(response.status_code, 302)
+            run = LanguageQuizRun.objects.latest('created_at')
+            self.assertEqual(run.section, section)
+            self.assertEqual(run.mode, 'stage')
+            self.assertEqual(run.course_slug, slug)
+            self.assertEqual(len(run.questions), 10)
+            self.assertTrue(all(question['stage_number'] == '1-1' for question in run.questions))
+            if section in {'reading', 'grammar'}:
+                self.assertTrue(all(len(question['choices']) == 5 for question in run.questions))
+                self.assertTrue(all(question['answer'] in question['choices'] for question in run.questions))
+                self.assertTrue(all(question['answer_mode'] == 'multiple_choice' for question in run.questions))
 
     def test_each_standard_section_starts_with_ten_fresh_questions(self):
         first = self._start('vocabulary')
@@ -184,10 +429,14 @@ E. 手表
     def test_wrong_answers_raise_hint_to_five_then_save_missing(self):
         run = self._start('grammar')
         url = reverse('lang_quiz:quiz_run', args=[run.id])
+        wrong_answer = next(
+            choice for choice in run.questions[0]['choices']
+            if choice != run.questions[0]['answer']
+        )
         self.assertEqual(run.questions[0]['hint_level'], 0)
         self.assertNotContains(self.client.get(url), 'SMART HINT')
         for expected_level in (1, 2, 3, 4, 5):
-            self.client.post(url, {'action': 'answer', 'answer': 'definitely wrong'})
+            self.client.post(url, {'action': 'answer', 'answer': wrong_answer})
             run.refresh_from_db()
             self.assertEqual(run.questions[0]['hint_level'], expected_level)
             self.assertFalse(run.questions[0]['resolved'])
@@ -284,7 +533,11 @@ E. 手表
     def test_answer_after_hint_counts_as_incorrect(self):
         run = self._start('grammar')
         url = reverse('lang_quiz:quiz_run', args=[run.id])
-        self.client.post(url, {'action': 'answer', 'answer': 'wrong'})
+        wrong_answer = next(
+            choice for choice in run.questions[0]['choices']
+            if choice != run.questions[0]['answer']
+        )
+        self.client.post(url, {'action': 'answer', 'answer': wrong_answer})
         run.refresh_from_db()
         self.client.post(url, {'action': 'answer', 'answer': run.questions[0]['answer']})
         run.refresh_from_db()
@@ -427,11 +680,16 @@ E. 手表
 
     def test_typing_question_is_saved_to_missing_with_empty_choices(self):
         run = self._start('grammar')
-        remember_missing(self.client.session.session_key, run.questions[0])
+        typing_question = dict(run.questions[0])
+        typing_question['choices'] = []
+        typing_question['answer_mode'] = 'typing'
+        remember_missing(self.client.session.session_key, typing_question)
         stored = MissingLanguageQuestion.objects.get()
         self.assertEqual(stored.choices, [])
 
-    def test_uploaded_material_creates_ten_questions_with_instruction(self):
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_uploaded_myself_material_creates_five_stage_pack(self, mock_ai):
+        mock_ai.return_value = self._myself_choice_specs()
         upload = SimpleUploadedFile(
             'words.csv',
             'xin chao,こんにちは\ncam on,ありがとう'.encode('utf-8'),
@@ -442,10 +700,233 @@ E. 手表
             {'files': upload, 'instruction': 'ベトナム語を日本語で答える問題'},
         )
         self.assertEqual(response.status_code, 302)
-        run = LanguageQuizRun.objects.latest('created_at')
+        pack = MyselfStagePack.objects.get()
+        self.assertIn('ベトナム語', pack.instruction)
+        self.assertEqual(pack.answer_mode, 'multiple_choice')
+        self.assertEqual(len(pack.questions_by_stage['1']), 10)
+        self.assertTrue(all(
+            len(question['choices']) == 5 and question['answer'] in question['choices']
+            for question in pack.questions_by_stage['1']
+        ))
+        ai_call = mock_ai.call_args.kwargs
+        self.assertIn('ベトナム語を日本語で答える問題', ai_call['user_prompt'])
+        self.assertIn('xin chao', ai_call['user_prompt'])
+        self.assertIn('analyze the material and learner instruction', ai_call['system_prompt'])
+        self.assertEqual(LanguageQuizRun.objects.count(), 0)
+        stage_map = self.client.get(response.url)
+        self.assertContains(stage_map, 'World 1 · My Material Quest')
+        self.assertContains(stage_map, '1-5')
+        self.assertContains(stage_map, '0 / 5 STAGES CLEARED')
+        materials_page = self.client.get(reverse('lang_quiz:material_setup', args=['myself']))
+        self.assertContains(materials_page, 'Delete course')
+        self.assertContains(materials_page, '5択から1つ選ぶ')
+        self.assertContains(materials_page, '空欄の答えをタイピングする')
+        self.assertContains(
+            materials_page,
+            reverse('lang_quiz:delete_myself_stage_pack', args=[pack.id]),
+        )
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response', side_effect=AIServiceUnavailable('offline'))
+    def test_uploaded_myself_material_can_create_typing_course(self, _mock_ai):
+        upload = SimpleUploadedFile(
+            'typing-lesson.txt',
+            b'This material contains enough words to create a typing exercise for learners.',
+            content_type='text/plain',
+        )
+        response = self.client.post(
+            reverse('lang_quiz:start_material_quiz', args=['myself']),
+            {
+                'files': upload,
+                'instruction': 'Create fill-in-the-blank questions.',
+                'answer_mode': 'typing',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        pack = MyselfStagePack.objects.get()
+        self.assertEqual(pack.answer_mode, 'typing')
+        self.assertTrue(all(
+            question['choices'] == [] and question['answer_mode'] == 'typing'
+            for question in pack.questions_by_stage['1']
+        ))
+
+        run_response = self.client.get(
+            reverse('lang_quiz:start_myself_stage', args=[pack.id, 1])
+        )
+        quiz_page = self.client.get(run_response.url)
+        self.assertContains(quiz_page, 'placeholder="Type your answer"')
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_myself_multiple_choice_mode_is_kept_for_later_stages(self, mock_ai):
+        mock_ai.return_value = self._myself_choice_specs()
+        session = self.client.session
+        session.save()
+        pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='choice-course.txt',
+            instruction='Create a five-choice course.',
+            material_text='The material discusses regular practice and careful review for effective learning.',
+            answer_mode='multiple_choice',
+        )
+
+        questions = get_myself_stage_questions(pack, 4)
+
+        self.assertEqual(len(questions), 10)
+        self.assertTrue(all(question['answer_mode'] == 'multiple_choice' for question in questions))
+        self.assertTrue(all(len(question['choices']) == 5 for question in questions))
+        self.assertTrue(all(question['answer'] in question['choices'] for question in questions))
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response')
+    def test_myself_multiple_choice_rejects_unusable_ai_choices(self, mock_ai):
+        specs = self._myself_choice_specs()
+        for spec in specs:
+            spec['choices'] = []
+        mock_ai.return_value = specs
+        upload = SimpleUploadedFile(
+            'invalid-choice-lesson.txt',
+            b'The material explains a topic that should produce grounded choices.',
+            content_type='text/plain',
+        )
+
+        response = self.client.post(
+            reverse('lang_quiz:start_material_quiz', args=['myself']),
+            {
+                'files': upload,
+                'instruction': 'Create questions using the file content.',
+                'answer_mode': 'multiple_choice',
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, '有効な5択', status_code=400)
+        self.assertEqual(MyselfStagePack.objects.count(), 0)
+
+    @patch('apps.lang_quiz.quiz_engine.generate_ai_response', side_effect=AIServiceUnavailable('offline'))
+    def test_myself_pack_starts_first_stage_and_locks_second(self, _mock_ai):
+        session = self.client.session
+        session.save()
+        pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='lesson.txt',
+            instruction='Create questions about the lesson.',
+            material_text='This lesson contains enough material for several useful language questions.',
+        )
+        first_questions = get_myself_stage_questions(pack, 1)
+        pack.questions_by_stage = {'1': first_questions}
+        pack.save(update_fields=('questions_by_stage', 'updated_at'))
+
+        locked = self.client.get(reverse('lang_quiz:start_myself_stage', args=[pack.id, 2]))
+        self.assertEqual(locked.status_code, 302)
+        self.assertEqual(LanguageQuizRun.objects.count(), 0)
+
+        response = self.client.get(reverse('lang_quiz:start_myself_stage', args=[pack.id, 1]))
+        self.assertEqual(response.status_code, 302)
+        run = LanguageQuizRun.objects.get()
+        self.assertEqual(run.mode, 'myself_stage')
         self.assertEqual(run.section, 'myself')
         self.assertEqual(len(run.questions), 10)
-        self.assertIn('ベトナム語', run.instruction)
+        self.assertTrue(all(question['stage_number'] == '1-1' for question in run.questions))
+
+    def test_myself_stage_clears_at_seventy_percent_and_unlocks_next(self):
+        session = self.client.session
+        session.save()
+        pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='lesson.txt',
+            instruction='Practice the material.',
+            material_text='Reusable material text.',
+        )
+        questions = [{'key': f'myself-question-{index}'} for index in range(10)]
+        run = LanguageQuizRun.objects.create(
+            browser_session_key=session.session_key,
+            section='myself',
+            mode='myself_stage',
+            course_slug=myself_stage_slug(pack.id, 1),
+            questions=questions,
+            correct_count=7,
+        )
+        for question in questions[:7]:
+            progress = update_course_progress(
+                session.session_key,
+                run.course_slug,
+                question,
+                quiz_run=run,
+            )
+
+        self.assertTrue(progress.completed)
+        self.assertEqual(progress.score_percent, 70)
+        self.assertTrue(myself_stage_catalog(pack, session.session_key)[1]['unlocked'])
+
+    def test_delete_myself_course_removes_only_its_pack_progress_and_runs(self):
+        session = self.client.session
+        session.save()
+        pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='delete-me.txt',
+            instruction='Delete this course.',
+            material_text='Temporary material.',
+        )
+        other_pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='keep-me.txt',
+            instruction='Keep this course.',
+            material_text='Permanent material.',
+        )
+        slug = myself_stage_slug(pack.id, 1)
+        other_slug = myself_stage_slug(other_pack.id, 1)
+        LanguageCourseProgress.objects.create(
+            browser_session_key=session.session_key,
+            course_slug=slug,
+        )
+        LanguageCourseProgress.objects.create(
+            browser_session_key=session.session_key,
+            course_slug=other_slug,
+        )
+        LanguageQuizRun.objects.create(
+            browser_session_key=session.session_key,
+            section='myself',
+            mode='myself_stage',
+            course_slug=slug,
+            questions=[],
+        )
+
+        response = self.client.post(
+            reverse('lang_quiz:delete_myself_stage_pack', args=[pack.id])
+        )
+
+        self.assertRedirects(response, reverse('lang_quiz:material_setup', args=['myself']))
+        self.assertFalse(MyselfStagePack.objects.filter(id=pack.id).exists())
+        self.assertTrue(MyselfStagePack.objects.filter(id=other_pack.id).exists())
+        self.assertFalse(LanguageCourseProgress.objects.filter(course_slug=slug).exists())
+        self.assertTrue(LanguageCourseProgress.objects.filter(course_slug=other_slug).exists())
+        self.assertFalse(LanguageQuizRun.objects.filter(course_slug=slug).exists())
+
+    def test_delete_myself_course_is_post_only_and_session_scoped(self):
+        session = self.client.session
+        session.save()
+        own_pack = MyselfStagePack.objects.create(
+            browser_session_key=session.session_key,
+            source_name='own.txt',
+            instruction='Own course.',
+            material_text='Own material.',
+        )
+        other_pack = MyselfStagePack.objects.create(
+            browser_session_key='different-browser-session',
+            source_name='other.txt',
+            instruction='Other course.',
+            material_text='Other material.',
+        )
+
+        self.assertEqual(
+            self.client.get(reverse('lang_quiz:delete_myself_stage_pack', args=[own_pack.id])).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.post(reverse('lang_quiz:delete_myself_stage_pack', args=[other_pack.id])).status_code,
+            404,
+        )
+        self.assertTrue(MyselfStagePack.objects.filter(id=own_pack.id).exists())
+        self.assertTrue(MyselfStagePack.objects.filter(id=other_pack.id).exists())
 
     def test_course_reaches_complete_at_one_hundred_percent(self):
         response = self.client.get(reverse('lang_quiz:start_course', args=['daily-english']))

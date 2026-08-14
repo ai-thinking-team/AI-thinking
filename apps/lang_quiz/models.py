@@ -61,6 +61,23 @@ class LanguageQuizRun(models.Model):
         ordering = ('-created_at',)
 
 
+class MyselfStagePack(models.Model):
+    """A reusable five-stage course generated from one uploaded material set."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    browser_session_key = models.CharField(max_length=40, db_index=True)
+    source_name = models.CharField(max_length=255)
+    instruction = models.TextField()
+    material_text = models.TextField()
+    answer_mode = models.CharField(max_length=20, default='typing')
+    questions_by_stage = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+
 class MissingLanguageQuestion(models.Model):
     """Questions a browser got wrong; a later correct answer removes them."""
 

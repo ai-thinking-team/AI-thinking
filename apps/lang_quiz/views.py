@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowed, hints_allowed
@@ -14,21 +16,35 @@ from .forms import (
     TeachBackForm,
     TransferAttemptForm,
 )
-from .models import LanguageQuizRun, MissingLanguageQuestion
+from .models import (
+    LanguageCourseProgress,
+    LanguageQuizRun,
+    MissingLanguageQuestion,
+    MyselfStagePack,
+)
 from .quiz_engine import (
     COURSES,
     SECTION_LABELS,
+    ALL_STAGES,
     answer_matches,
     course_catalog,
     difficulty_from_diagnostic,
     diagnostic_recommendations,
+    extract_material,
     generate_section_questions,
     generate_uploaded_questions,
     import_pdf_questions_exact,
     get_course_questions,
+    get_myself_stage_questions,
+    get_stage_questions,
     missing_questions,
+    myself_pack_id_from_stage_slug,
+    myself_stage_catalog,
+    myself_stage_slug,
     remember_missing,
     resolve_missing,
+    stage_catalog,
+    stage_is_unlocked,
     update_course_progress,
 )
 from .services import (
@@ -120,6 +136,25 @@ def start_course(request, course_slug):
     )
 
 
+def start_stage(request, stage_slug):
+    stage = ALL_STAGES.get(stage_slug)
+    if stage is None:
+        raise Http404('Unknown stage')
+    section = stage['section']
+    session_key = _session_key(request)
+    if not stage_is_unlocked(session_key, stage_slug):
+        messages.warning(request, '前のステージを70%以上でクリアすると解放されます。')
+        return redirect('lang_quiz:material_setup', section=section)
+    return _create_run(
+        request,
+        section=section,
+        questions=get_stage_questions(stage_slug),
+        mode='stage',
+        course_slug=stage_slug,
+        instruction=f'World 1 {stage_slug}',
+    )
+
+
 def start_material_quiz(request, section):
     """Handle file upload for reading/grammar/vocabulary/myself sections.
 
@@ -141,6 +176,19 @@ def start_material_quiz(request, section):
             )
             run_mode = 'upload_exact'
             instruction = 'PDFの問題をそのまま出題'
+        elif section == 'myself':
+            material, source_name, _chunks = extract_material(form.cleaned_data['files'])
+            pack = MyselfStagePack(
+                browser_session_key=_session_key(request),
+                source_name=source_name,
+                instruction=form.cleaned_data['instruction'],
+                material_text=material,
+                answer_mode=form.cleaned_data.get('answer_mode') or 'multiple_choice',
+            )
+            first_stage = get_myself_stage_questions(pack, 1)
+            pack.questions_by_stage = {'1': first_stage}
+            pack.save()
+            return redirect('lang_quiz:myself_stage_pack', pack_id=pack.id)
         else:
             answer_mode = form.cleaned_data.get('answer_mode') or 'multiple_choice'
             difficulty = difficulty_from_diagnostic(_session_key(request), section)
@@ -170,11 +218,108 @@ def start_material_quiz(request, section):
 def material_setup(request, section):
     if section not in {'myself', 'vocabulary', 'reading', 'grammar'}:
         raise Http404('Unknown upload section')
+    stages = stage_catalog(_session_key(request), section)
+    cleared_count = sum(stage['completed'] for stage in stages)
+    world_titles = {
+        'vocabulary': 'Vocabulary Journey',
+        'reading': 'Reading Adventure',
+        'grammar': 'Grammar Quest',
+    }
     return render(request, 'lang_quiz/material_setup.html', {
         'form': MaterialQuizForm(),
         'section': section,
-        'courses': course_catalog(_session_key(request)) if section == 'vocabulary' else [],
+        'stages': stages,
+        'cleared_count': cleared_count,
+        'world_progress_percent': cleared_count * 10,
+        'world_title': world_titles.get(section, ''),
+        'myself_packs': (
+            MyselfStagePack.objects.filter(browser_session_key=_session_key(request))[:8]
+            if section == 'myself' else []
+        ),
     })
+
+
+def myself_stage_pack(request, pack_id):
+    session_key = _session_key(request)
+    pack = get_object_or_404(
+        MyselfStagePack,
+        id=pack_id,
+        browser_session_key=session_key,
+    )
+    stages = myself_stage_catalog(pack, session_key)
+    cleared_count = sum(stage['completed'] for stage in stages)
+    return render(request, 'lang_quiz/myself_stage_pack.html', {
+        'pack': pack,
+        'stages': stages,
+        'cleared_count': cleared_count,
+        'world_progress_percent': cleared_count * 20,
+    })
+
+
+@require_POST
+@transaction.atomic
+def delete_myself_stage_pack(request, pack_id):
+    session_key = _session_key(request)
+    pack = get_object_or_404(
+        MyselfStagePack,
+        id=pack_id,
+        browser_session_key=session_key,
+    )
+    course_prefix = f'myself-{pack.id.hex}-stage-'
+    LanguageCourseProgress.objects.filter(
+        browser_session_key=session_key,
+        course_slug__startswith=course_prefix,
+    ).delete()
+    LanguageQuizRun.objects.filter(
+        browser_session_key=session_key,
+        course_slug__startswith=course_prefix,
+    ).delete()
+    course_name = pack.source_name
+    pack.delete()
+    messages.success(request, f'「{course_name}」のコースを削除しました。')
+    return redirect('lang_quiz:material_setup', section='myself')
+
+
+def start_myself_stage(request, pack_id, stage_number):
+    session_key = _session_key(request)
+    pack = get_object_or_404(
+        MyselfStagePack,
+        id=pack_id,
+        browser_session_key=session_key,
+    )
+    stages = myself_stage_catalog(pack, session_key)
+    selected = next(
+        (stage for stage in stages if stage['rank'] == stage_number),
+        None,
+    )
+    if selected is None:
+        raise Http404('Unknown material stage')
+    if not selected['unlocked']:
+        messages.warning(request, '前のステージを70%以上でクリアすると解放されます。')
+        return redirect('lang_quiz:myself_stage_pack', pack_id=pack.id)
+
+    stage_key = str(stage_number)
+    questions_by_stage = dict(pack.questions_by_stage)
+    questions = questions_by_stage.get(stage_key)
+    if not questions:
+        try:
+            questions = get_myself_stage_questions(pack, stage_number)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('lang_quiz:myself_stage_pack', pack_id=pack.id)
+        questions_by_stage[stage_key] = questions
+        pack.questions_by_stage = questions_by_stage
+        pack.save(update_fields=('questions_by_stage', 'updated_at'))
+
+    return _create_run(
+        request,
+        section='myself',
+        questions=questions,
+        mode='myself_stage',
+        course_slug=myself_stage_slug(pack.id, stage_number),
+        source_name=pack.source_name,
+        instruction=pack.instruction,
+    )
 
 
 def quiz_run(request, run_id):
@@ -225,7 +370,9 @@ def quiz_run(request, run_id):
                         question['last_feedback'] = 'Correct!'
                         run.correct_count += 1
                         resolve_missing(session_key, question)
-                        update_course_progress(session_key, run.course_slug, question)
+                        update_course_progress(
+                            session_key, run.course_slug, question, quiz_run=run,
+                        )
                 elif run.section == 'diagnostic':
                     question['attempt_count'] = question.get('attempt_count', 0) + 1
                     question['resolved'] = True
@@ -277,6 +424,8 @@ def quiz_run(request, run_id):
         'total_questions': len(questions),
         'score_percent': score_percent,
         'recommendations': recommendations,
+        'stage_label': questions[0].get('stage_number', '') if questions else '',
+        'myself_pack_id': myself_pack_id_from_stage_slug(run.course_slug),
     })
 
 

@@ -65,10 +65,10 @@ class MaterialQuizForm(forms.Form):
         widget=forms.RadioSelect,
     )
     answer_mode = forms.ChoiceField(
-        label='Vocabulary answer format',
+        label='回答形式',
         choices=(
-            ('multiple_choice', '5-choice'),
-            ('typing', 'Typing'),
+            ('multiple_choice', '5択から1つ選ぶ'),
+            ('typing', '空欄の答えをタイピングする'),
         ),
         initial='multiple_choice',
         required=False,

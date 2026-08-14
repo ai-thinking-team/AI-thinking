@@ -8,7 +8,7 @@
 <div class="quiz-shell">
   <header class="quiz-topbar">
     <a href="{% url 'lang_quiz:home' %}" class="back-link">← Exit &amp; Return</a>
-    <div class="quiz-title"><span>{{ section_label }}</span>{% if run.course_slug %}<strong>{{ run.course_slug }}</strong>{% endif %}</div>
+    <div class="quiz-title"><span>{{ section_label }}</span>{% if stage_label %}<strong>STAGE {{ stage_label }}</strong>{% elif run.course_slug %}<strong>{{ run.course_slug }}</strong>{% endif %}</div>
     {% if not run.finished %}<div class="quiz-counter">{{ question_number }} <span>/ {{ total_questions }}</span></div>{% endif %}
   </header>
 
@@ -17,7 +17,13 @@
       <span class="result-eyebrow">SESSION COMPLETE</span>
       <div class="score-ring" style="--score: {{ score_percent }}"><strong>{{ score_percent }}%</strong><span>{{ run.correct_count }} / {{ total_questions }}</span></div>
       <h1>Great work — {{ total_questions }} questions done!</h1>
-      {% if score_percent == 100 %}<div class="complete-banner">Complete!</div>{% endif %}
+      {% if run.mode == 'stage' or run.mode == 'myself_stage' %}
+        {% if score_percent >= 70 %}
+        <div class="complete-banner">Stage Clear! Next stage unlocked</div>
+        {% else %}
+        <div class="stage-retry-banner">Score 70% or higher to unlock the next stage.</div>
+        {% endif %}
+      {% elif score_percent == 100 %}<div class="complete-banner">Complete!</div>{% endif %}
       <p>Questions you got wrong have been saved to Missing. Questions you answered correctly are automatically removed from Missing.</p>
       {% if run.section == 'diagnostic' %}
         <section class="diagnostic-review">
@@ -42,7 +48,11 @@
         </div>
       {% endif %}
       <div class="result-actions">
-        {% if run.mode == 'course' %}
+        {% if run.mode == 'myself_stage' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:myself_stage_pack' myself_pack_id %}">My Material Stage Map</a>
+        {% elif run.mode == 'stage' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">World 1 Stage Map</a>
+        {% elif run.mode == 'course' %}
           <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_course' run.course_slug %}">Retry this course</a>
         {% elif run.mode == 'upload' or run.mode == 'upload_exact' %}
           <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">Upload another file</a>
@@ -60,7 +70,7 @@
     <div class="quiz-progress"><span style="width: {% widthratio question_number total_questions 100 %}%"></span></div>
     <main class="question-stage">
       <section class="question-main">
-        <div class="question-meta"><span>QUESTION {{ question_number|stringformat:'02d' }}</span><span>{{ section_label }} · {{ question.difficulty|default:'intermediate' }}</span></div>
+        <div class="question-meta"><span>QUESTION {{ question_number|stringformat:'02d' }}</span><span>{{ section_label }} · {% if question.stage_level_label %}{{ question.stage_level_label }}{% elif question.stage_level %}CEFR {{ question.stage_level }}{% else %}{{ question.difficulty|default:'intermediate' }}{% endif %}</span></div>
         {% if question.skill_focus %}<div class="skill-focus-badge">🎯 {{ question.skill_focus }}</div>{% endif %}
         <h1>{{ question.prompt }}</h1>
 

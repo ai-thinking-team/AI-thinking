@@ -10,6 +10,7 @@ import random
 import re
 
 from django.db import transaction
+from django.core.files.base import ContentFile
 
 from apps.ai_engine.client import generate_ai_response
 from apps.ai_engine.exceptions import AIEngineError
@@ -70,6 +71,83 @@ def _vocabulary_choices(answer, provided=None):
     return choices
 
 
+def _reading_choices(answer, provided=None):
+    """Return exactly five distinct reading answers, including the correct one."""
+    answer = str(answer).strip()
+    fallback_distractors = {
+        'walked': ['took the bus', 'rode a bicycle', 'went by car', 'ran'],
+        'it was closed': ['it was full', 'he forgot his card', 'he went to the wrong building', 'it opened at seven'],
+        'rain': ['snow', 'sunshine', 'strong wind', 'fog'],
+        'blue whale': ['elephant', 'giraffe', 'great white shark', 'hippopotamus'],
+        'studying': ['luck', 'exercise', 'sleeping', 'asking a friend'],
+        'sunlight': ['moonlight', 'wind', 'soil', 'rainwater'],
+        'yes': ['no', 'only outside', 'only with a reservation', 'not after closing'],
+        'the baby was sleeping': ['she was angry', 'she had a secret', 'the room was empty', 'she had lost her voice'],
+        'flooding': ['roadwork', 'a traffic accident', 'heavy traffic', 'a broken bridge'],
+        'two': ['one', 'three', 'four', 'eight'],
+        'no': ['yes', 'the task was cancelled', 'someone else finished it', 'Rui did not begin'],
+        'free': ['$5', '$10', 'half price', 'the regular weekday price'],
+    }
+    supplied = [str(item).strip() for item in (provided or []) if str(item).strip()]
+    candidates = [
+        *supplied,
+        *fallback_distractors.get(answer.casefold(), []),
+        *(str(item[2]).strip() for item in READING_DATA),
+    ]
+    distractors = []
+    seen = {answer.casefold()}
+    for candidate in candidates:
+        normalized = candidate.casefold()
+        if normalized not in seen:
+            distractors.append(candidate)
+            seen.add(normalized)
+        if len(distractors) == 4:
+            break
+    if len(distractors) != 4:
+        return []
+    choices = [answer, *distractors]
+    random.shuffle(choices)
+    return choices
+
+
+def _grammar_choices(answer, provided=None):
+    """Return exactly five distinct grammar options, including the correct one."""
+    answer = str(answer).strip()
+    fallback_distractors = {
+        'is': ['are', 'am', 'be', 'was'],
+        'goes': ['go', 'went', 'going', 'is go'],
+        'had': ['have', 'has', 'would have', 'have had'],
+        'is read': ['reads', 'read', 'was reading', 'is reading'],
+        'than': ['then', 'as', 'from', 'to'],
+        'are': ['is', 'am', 'be', 'was'],
+        'listening to': ['listen', 'listened to', 'to listen', 'listening'],
+        'whether': ['what', 'that', 'which', 'why'],
+        'will have completed': ['completed', 'will complete', 'have completed', 'are completing'],
+        'who': ['which', 'whose', 'whom', 'where'],
+        'could': ['can', 'will', 'should', 'may'],
+    }
+    supplied = [str(item).strip() for item in (provided or []) if str(item).strip()]
+    candidates = [
+        *supplied,
+        *fallback_distractors.get(answer.casefold(), []),
+        *(str(item[2]).strip() for item in GRAMMAR_DATA),
+    ]
+    distractors = []
+    seen = {answer.casefold()}
+    for candidate in candidates:
+        normalized = candidate.casefold()
+        if normalized not in seen:
+            distractors.append(candidate)
+            seen.add(normalized)
+        if len(distractors) == 4:
+            break
+    if len(distractors) != 4:
+        return []
+    choices = [answer, *distractors]
+    random.shuffle(choices)
+    return choices
+
+
 def _question(
     key, prompt, answer, explanation, next_step, *, section, hints=None,
     answer_mode='typing', choices=None, difficulty='intermediate',
@@ -82,10 +160,28 @@ def _question(
         f'The answer is "{answer}". If you cannot type it, select "Give up".',
     ]
     hints = hints if isinstance(hints, list) and len(hints) >= 5 else default_hints
-    if isinstance(choices, list) and choices:
-        choices = [str(choice).strip() for choice in choices if str(choice).strip()]
+    supplied_choices = (
+        [str(choice).strip() for choice in choices if str(choice).strip()]
+        if isinstance(choices, list) else []
+    )
+    supplied_normalized = {choice.casefold() for choice in supplied_choices}
+    has_valid_five_choices = (
+        answer_mode == 'multiple_choice'
+        and len(supplied_choices) == 5
+        and len(supplied_normalized) == 5
+        and str(answer).strip().casefold() in supplied_normalized
+    )
+    if has_valid_five_choices:
+        # Preserve authored/PDF choice wording and order exactly as supplied.
+        choices = supplied_choices
     elif section == 'vocabulary' and answer_mode == 'multiple_choice':
         choices = _vocabulary_choices(answer, choices)
+    elif section == 'reading' and answer_mode == 'multiple_choice':
+        choices = _reading_choices(answer, choices)
+    elif section == 'grammar' and answer_mode == 'multiple_choice':
+        choices = _grammar_choices(answer, choices)
+    elif supplied_choices:
+        choices = supplied_choices
     else:
         choices = []
     return {
@@ -168,16 +264,24 @@ def _vocabulary_questions(prefix='vocab', *, answer_mode='multiple_choice', diff
     ]
 
 
-def _grammar_questions(*, difficulty='intermediate'):
+def _grammar_questions(*, answer_mode='typing', difficulty='intermediate'):
     return [
-        _question(key, prompt, answer, explanation, 'Write one original sentence using the same grammar rule.', section='grammar', difficulty=difficulty)
+        _question(
+            key, prompt, answer, explanation,
+            'Write one original sentence using the same grammar rule.',
+            section='grammar', answer_mode=answer_mode, difficulty=difficulty,
+        )
         for key, prompt, answer, explanation in GRAMMAR_DATA
     ]
 
 
-def _reading_questions(*, difficulty='intermediate'):
+def _reading_questions(*, answer_mode='typing', difficulty='intermediate'):
     return [
-        _question(key, prompt, answer, explanation, 'Identify the exact words in the passage that support your answer.', section='reading', difficulty=difficulty)
+        _question(
+            key, prompt, answer, explanation,
+            'Identify the exact words in the passage that support your answer.',
+            section='reading', answer_mode=answer_mode, difficulty=difficulty,
+        )
         for key, prompt, answer, explanation in READING_DATA
     ]
 
@@ -199,6 +303,265 @@ COURSES = {
         'questions': _vocabulary_questions('business')[5:15],
     },
 }
+
+
+WORLD_ONE_STAGES = {
+    f'world-1-stage-{number}': stage
+    for number, stage in enumerate((
+        {
+            'title': 'First Steps', 'level': 'A1', 'difficulty': 'beginner',
+            'focus': 'Greetings, numbers, colors, and very common everyday nouns.',
+        },
+        {
+            'title': 'Everyday Town', 'level': 'A1+', 'difficulty': 'beginner',
+            'focus': 'Home, school, food, family, and simple present-tense context.',
+        },
+        {
+            'title': 'Context Hills', 'level': 'A2', 'difficulty': 'beginner',
+            'focus': 'Short contextual sentences, common verbs, adjectives, and prepositions.',
+        },
+        {
+            'title': 'Collocation Bridge', 'level': 'A2+', 'difficulty': 'intermediate',
+            'focus': 'Common collocations, word families, and two-clause everyday sentences.',
+        },
+        {
+            'title': 'Meaning Forest', 'level': 'B1', 'difficulty': 'intermediate',
+            'focus': 'Vocabulary in context, phrasal verbs, and choosing between close meanings.',
+        },
+        {
+            'title': 'Grammar Cavern', 'level': 'B1+', 'difficulty': 'intermediate',
+            'focus': 'Word form, tense agreement, connectors, and multi-clause context.',
+        },
+        {
+            'title': 'Inference Heights', 'level': 'B2', 'difficulty': 'intermediate',
+            'focus': 'Academic vocabulary, inference, tone, and less explicit context clues.',
+        },
+        {
+            'title': 'Nuance Skyway', 'level': 'B2+', 'difficulty': 'advanced',
+            'focus': 'Nuanced synonyms, register, complex grammar, and abstract topics.',
+        },
+        {
+            'title': 'Expert Fortress', 'level': 'C1', 'difficulty': 'advanced',
+            'focus': 'Dense academic context, idiomatic usage, and subtle distractors.',
+        },
+        {
+            'title': 'World 1 Final', 'level': 'C1+', 'difficulty': 'advanced',
+            'focus': 'A cumulative mastery challenge with nuanced vocabulary and deep context.',
+        },
+    ), start=1)
+}
+
+READING_WORLD_STAGES = {
+    f'reading-world-1-stage-{number}': stage
+    for number, stage in enumerate((
+        {
+            'title': 'Story Start', 'level': 'A1', 'difficulty': 'beginner',
+            'focus': 'Find people, places, times, and other directly stated details in very short passages.',
+        },
+        {
+            'title': 'Sequence Road', 'level': 'A1+', 'difficulty': 'beginner',
+            'focus': 'Follow the order of simple events and identify basic who, what, and where information.',
+        },
+        {
+            'title': 'Main-Idea Meadow', 'level': 'A2', 'difficulty': 'beginner',
+            'focus': 'Choose the main idea and supporting details in short everyday texts.',
+        },
+        {
+            'title': 'Cause Bridge', 'level': 'A2+', 'difficulty': 'intermediate',
+            'focus': 'Recognize cause and effect, reference words, and simple paraphrases.',
+        },
+        {
+            'title': 'Context Forest', 'level': 'B1', 'difficulty': 'intermediate',
+            'focus': 'Infer word meaning from context and connect evidence across a paragraph.',
+        },
+        {
+            'title': 'Inference Cave', 'level': 'B1+', 'difficulty': 'intermediate',
+            'focus': 'Make supported inferences and distinguish facts from implied information.',
+        },
+        {
+            'title': 'Contrast Cliffs', 'level': 'B2', 'difficulty': 'intermediate',
+            'focus': 'Compare viewpoints, track arguments, and identify relationships across longer texts.',
+        },
+        {
+            'title': 'Purpose Skyway', 'level': 'B2+', 'difficulty': 'advanced',
+            'focus': 'Analyze tone, register, author purpose, and subtle supporting evidence.',
+        },
+        {
+            'title': 'Evidence Fortress', 'level': 'C1', 'difficulty': 'advanced',
+            'focus': 'Evaluate implicit claims, assumptions, evidence quality, and nuanced arguments.',
+        },
+        {
+            'title': 'Reading Final', 'level': 'C1+', 'difficulty': 'advanced',
+            'focus': 'Synthesize complex information and evaluate tone, purpose, inference, and evidence together.',
+        },
+    ), start=1)
+}
+
+GRAMMAR_WORLD_STAGES = {
+    f'grammar-world-1-stage-{number}': stage
+    for number, stage in enumerate((
+        {
+            'title': 'Sentence Start', 'level': 'A1', 'difficulty': 'beginner',
+            'focus': 'Be verbs, simple present tense, basic word order, and subject-verb agreement.',
+        },
+        {
+            'title': 'Building Blocks', 'level': 'A1+', 'difficulty': 'beginner',
+            'focus': 'Articles, plurals, pronouns, possessives, and basic questions and negatives.',
+        },
+        {
+            'title': 'Tense Trail', 'level': 'A2', 'difficulty': 'beginner',
+            'focus': 'Present and past forms, prepositions, adverbs, and common sentence patterns.',
+        },
+        {
+            'title': 'Modal Bridge', 'level': 'A2+', 'difficulty': 'intermediate',
+            'focus': 'Future forms, comparatives, superlatives, modal verbs, and conjunctions.',
+        },
+        {
+            'title': 'Perfect Forest', 'level': 'B1', 'difficulty': 'intermediate',
+            'focus': 'Perfect tenses, gerunds, infinitives, and choosing tense from context.',
+        },
+        {
+            'title': 'Clause Cavern', 'level': 'B1+', 'difficulty': 'intermediate',
+            'focus': 'Conditionals, passive voice, relative clauses, and multi-clause agreement.',
+        },
+        {
+            'title': 'Reported Heights', 'level': 'B2', 'difficulty': 'intermediate',
+            'focus': 'Reported speech, complex connectors, participle clauses, and tense consistency.',
+        },
+        {
+            'title': 'Inversion Skyway', 'level': 'B2+', 'difficulty': 'advanced',
+            'focus': 'Inversion, subjunctive forms, advanced conditionals, and reduced clauses.',
+        },
+        {
+            'title': 'Nuance Fortress', 'level': 'C1', 'difficulty': 'advanced',
+            'focus': 'Nuanced tense and aspect, ellipsis, emphasis, agreement, and stylistic choices.',
+        },
+        {
+            'title': 'Grammar Final', 'level': 'C1+', 'difficulty': 'advanced',
+            'focus': 'A cumulative editing and sentence-transformation challenge using complex grammar.',
+        },
+    ), start=1)
+}
+
+SECTION_STAGE_WORLDS = {
+    'vocabulary': WORLD_ONE_STAGES,
+    'reading': READING_WORLD_STAGES,
+    'grammar': GRAMMAR_WORLD_STAGES,
+}
+ALL_STAGES = {
+    slug: {**stage, 'section': section}
+    for section, stages in SECTION_STAGE_WORLDS.items()
+    for slug, stage in stages.items()
+}
+
+MYSELF_STAGE_DEFINITIONS = (
+    {
+        'title': 'Material Start', 'level': 'FOUNDATION', 'difficulty': 'beginner',
+        'focus': 'Direct facts, essential terms, and the simplest concepts in the uploaded material.',
+    },
+    {
+        'title': 'Key Ideas', 'level': 'BASIC', 'difficulty': 'beginner',
+        'focus': 'Important details, definitions, and relationships between the main ideas.',
+    },
+    {
+        'title': 'Context Challenge', 'level': 'INTERMEDIATE', 'difficulty': 'intermediate',
+        'focus': 'Use context, compare ideas, and explain information from different parts of the material.',
+    },
+    {
+        'title': 'Applied Practice', 'level': 'APPLIED', 'difficulty': 'intermediate',
+        'focus': 'Apply the uploaded material to new examples, situations, and multi-step questions.',
+    },
+    {
+        'title': 'Material Final', 'level': 'CHALLENGE', 'difficulty': 'advanced',
+        'focus': 'A cumulative mastery challenge requiring inference, application, and careful distinctions.',
+    },
+)
+
+STAGE_CLEAR_PERCENT = 70
+
+
+def stage_catalog(session_key, section='vocabulary'):
+    """Return World 1 stages with sequential unlocking and saved best scores."""
+    stages = SECTION_STAGE_WORLDS.get(section, {})
+    progress = {
+        item.course_slug: item
+        for item in LanguageCourseProgress.objects.filter(
+            browser_session_key=session_key,
+            course_slug__in=stages,
+        )
+    }
+    catalog = []
+    previous_completed = True
+    for index, (slug, stage) in enumerate(stages.items(), start=1):
+        item = progress.get(slug)
+        completed = bool(item and item.completed)
+        catalog.append({
+            'slug': slug,
+            'number': f'1-{index}',
+            'rank': index,
+            'title': stage['title'],
+            'level': stage['level'],
+            'difficulty': stage['difficulty'],
+            'focus': stage['focus'],
+            'score_percent': item.score_percent if item else 0,
+            'completed': completed,
+            'unlocked': previous_completed or completed,
+            'boss': index == len(stages),
+        })
+        previous_completed = completed
+    return catalog
+
+
+def stage_is_unlocked(session_key, stage_slug):
+    stage = ALL_STAGES.get(stage_slug)
+    if stage is None:
+        return False
+    return any(
+        item['slug'] == stage_slug and item['unlocked']
+        for item in stage_catalog(session_key, stage['section'])
+    )
+
+
+def myself_stage_slug(pack_id, stage_number):
+    pack_hex = getattr(pack_id, 'hex', str(pack_id).replace('-', ''))
+    return f'myself-{pack_hex}-stage-{stage_number}'
+
+
+def myself_pack_id_from_stage_slug(course_slug):
+    match = re.fullmatch(r'myself-([0-9a-f]{32})-stage-[1-5]', course_slug or '')
+    if not match:
+        return ''
+    value = match.group(1)
+    return f'{value[:8]}-{value[8:12]}-{value[12:16]}-{value[16:20]}-{value[20:]}'
+
+
+def myself_stage_catalog(pack, session_key):
+    slugs = [myself_stage_slug(pack.id, index) for index in range(1, 6)]
+    progress = {
+        item.course_slug: item
+        for item in LanguageCourseProgress.objects.filter(
+            browser_session_key=session_key,
+            course_slug__in=slugs,
+        )
+    }
+    catalog = []
+    previous_completed = True
+    for index, definition in enumerate(MYSELF_STAGE_DEFINITIONS, start=1):
+        slug = slugs[index - 1]
+        item = progress.get(slug)
+        completed = bool(item and item.completed)
+        catalog.append({
+            'slug': slug,
+            'number': f'1-{index}',
+            'rank': index,
+            **definition,
+            'score_percent': item.score_percent if item else 0,
+            'completed': completed,
+            'unlocked': previous_completed or completed,
+            'boss': index == len(MYSELF_STAGE_DEFINITIONS),
+        })
+        previous_completed = completed
+    return catalog
 
 
 def course_catalog(session_key):
@@ -265,7 +628,12 @@ def _questions_from_ai(specs, section, count, *, answer_mode='multiple_choice', 
             str(spec.get('next_step') or 'Write one original sentence using the same concept.'),
             section=item_section,
             hints=hints,
-            answer_mode=answer_mode if item_section == 'vocabulary' else 'typing',
+            answer_mode=(
+                answer_mode
+                if section != 'diagnostic' and item_section in {'vocabulary', 'reading', 'grammar', 'myself'}
+                else answer_mode if item_section == 'vocabulary'
+                else 'typing'
+            ),
             choices=spec.get('choices') if isinstance(spec.get('choices'), list) else None,
             difficulty=difficulty,
         )
@@ -296,14 +664,15 @@ def generate_section_questions(
                     'next_step (one actionable study task in English for the learner to practise further), '
                     'hints (exactly 5 English hints, each narrowing the possible answer more than the previous one, '
                     'with the full answer only at level 5), and choices. '
-                    'For vocabulary multiple_choice questions, choices must contain exactly 5 distinct words including the answer. '
-                    'For typing questions and non-vocabulary questions, choices must be an empty array.'
+                    'For vocabulary, reading, or grammar multiple_choice questions, choices must contain exactly 5 distinct '
+                    'options including the answer. Distractors must be plausible but clearly less suitable than the answer. '
+                    'For typing questions, choices must be an empty array.'
                 ),
                 user_prompt=(
                     f'Section: {section}. Difficulty: {difficulty}. Create {count} fresh questions. '
                     f'Difficulty requirements: {DIFFICULTY_GUIDANCE[difficulty]} '
                     f'Course theme: {course_context or "General English practice"}. '
-                    f'Vocabulary answer mode: {answer_mode}. '
+                    f'Answer mode: {answer_mode}. '
                     'For diagnostic, mix vocabulary, grammar, and short reading questions. '
                     'Avoid duplicates and keep prompts self-contained.'
                 ),
@@ -328,9 +697,9 @@ def generate_section_questions(
     elif section == 'vocabulary':
         pool = _vocabulary_questions(answer_mode=answer_mode, difficulty=difficulty)
     elif section == 'grammar':
-        pool = _grammar_questions(difficulty=difficulty)
+        pool = _grammar_questions(answer_mode=answer_mode, difficulty=difficulty)
     elif section == 'reading':
-        pool = _reading_questions(difficulty=difficulty)
+        pool = _reading_questions(answer_mode=answer_mode, difficulty=difficulty)
     elif section == 'diagnostic':
         pool = (
             _vocabulary_questions(difficulty=difficulty)
@@ -355,6 +724,37 @@ def get_course_questions(course_slug, *, difficulty='intermediate'):
         fallback_questions=course['questions'],
     )
     return generated
+
+
+def get_stage_questions(stage_slug):
+    stage = ALL_STAGES.get(stage_slug)
+    if stage is None:
+        raise ValueError('The selected stage was not found.')
+    section = stage['section']
+    stages = SECTION_STAGE_WORLDS[section]
+    stage_number = list(stages).index(stage_slug) + 1
+    context = (
+        f'{section.title()} World 1 Stage 1-{stage_number}: {stage["title"]}. '
+        f'Target level: CEFR {stage["level"]}. Focus: {stage["focus"]} '
+        f'This is difficulty step {stage_number} of 10, so make it clearly harder than '
+        f'step {max(1, stage_number - 1)} while staying within the target level.'
+    )
+    questions = generate_section_questions(
+        section,
+        count=10,
+        answer_mode='multiple_choice',
+        difficulty=stage['difficulty'],
+        course_context=context,
+    )
+    for question in questions:
+        original_key = question['key']
+        question['key'] = hashlib.sha256(
+            f'{stage_slug}|{original_key}'.encode('utf-8')
+        ).hexdigest()[:24]
+        question['stage_number'] = f'1-{stage_number}'
+        question['stage_level'] = stage['level']
+        question['stage_section'] = section
+    return questions
 
 
 def _extract_pdf_text(data: bytes) -> str:
@@ -577,18 +977,21 @@ _UPLOAD_SYSTEM_PROMPTS = {
     ),
     'myself': (
         'You create language-learning questions only from the supplied learning material. '
+        'Treat both the supplied material and the learner instruction as mandatory context. '
         'Follow the learner instruction. Return exactly the requested count. Each item must '
         'have one concise answer, a clear English explanation, next study step, skill_focus label, '
-        'and exactly five English hints that progress from subtle to revealing the answer at level 5.'
+        'and exactly five English hints that progress from subtle to revealing the answer at level 5. '
+        'When answer mode is multiple_choice, analyze the material and learner instruction to create '
+        'exactly five choices: one uniquely correct answer and four plausible distractors. Every distractor '
+        'must match the question type and semantic category, and must represent a believable misunderstanding '
+        'of the uploaded content. Do not use unrelated words, arbitrary answers, "all of the above", '
+        '"none of the above", or "not stated" unless the learner explicitly requests them.'
     ),
 }
 
 
-def generate_uploaded_questions(
-    files, instruction, *, section='myself', count=10,
-    answer_mode='multiple_choice', difficulty='intermediate',
-):
-    """Create questions from user-uploaded material using section-aware AI prompts."""
+def extract_material(files):
+    """Extract and normalize uploaded material once for AI generation and reuse."""
     chunks = []
     names = []
     for upload in files:
@@ -607,7 +1010,16 @@ def generate_uploaded_questions(
     if not chunks:
         raise ValueError('No readable text could be extracted from the uploaded file(s).')
 
-    material = '\n'.join(chunks)[:16000]
+    return '\n'.join(chunks)[:16000], ', '.join(names), chunks
+
+
+def generate_uploaded_questions(
+    files, instruction, *, section='myself', count=10,
+    answer_mode='multiple_choice', difficulty='intermediate',
+):
+    """Create questions from user-uploaded material using section-aware AI prompts."""
+    material, source_name, chunks = extract_material(files)
+
     system_prompt = _UPLOAD_SYSTEM_PROMPTS.get(section, _UPLOAD_SYSTEM_PROMPTS['myself'])
     try:
         specs = generate_ai_response(
@@ -616,7 +1028,7 @@ def generate_uploaded_questions(
                 f'Learner instruction: {instruction}\n'
                 f'Question count: {count}\n'
                 f'Difficulty: {difficulty}\n'
-                f'Vocabulary answer mode: {answer_mode}. '
+                f'Answer mode: {answer_mode}. '
                 'For multiple_choice use exactly 5 distinct choices including the answer; '
                 'otherwise return an empty choices array.\n'
                 f'Material:\n{material}'
@@ -626,10 +1038,32 @@ def generate_uploaded_questions(
         generated = _questions_from_ai(
             specs, section, count, answer_mode=answer_mode, difficulty=difficulty,
         )
+        if generated and section == 'myself' and answer_mode == 'multiple_choice':
+            valid_choices = all(
+                len(question.get('choices', [])) == 5
+                and len({str(choice).strip().casefold() for choice in question['choices']}) == 5
+                and str(question['answer']).strip().casefold() in {
+                    str(choice).strip().casefold() for choice in question['choices']
+                }
+                for question in generated
+            )
+            if not valid_choices:
+                raise ValueError(
+                    'AIが教材と指示に沿った有効な5択を作成できませんでした。'
+                    '指示を具体的にして、もう一度作成してください。'
+                )
         if generated:
-            return generated, ', '.join(names)
-    except AIEngineError:
-        pass
+            return generated, source_name
+        if section == 'myself' and answer_mode == 'multiple_choice':
+            raise ValueError(
+                'AIが10問の有効な5択問題を返しませんでした。もう一度作成してください。'
+            )
+    except AIEngineError as exc:
+        if section == 'myself' and answer_mode == 'multiple_choice':
+            raise ValueError(
+                'AIへ接続できないため、教材に沿った5択を作成できませんでした。'
+                'Groqの設定と接続を確認して、もう一度お試しください。'
+            ) from exc
 
     # --- Smart rule-based fallback (when AI is unavailable) ---
     # Pick the longest, most content-rich sentences as source material
@@ -793,12 +1227,54 @@ def generate_uploaded_questions(
             next_step_text,
             section=section,
             hints=hints[:5],
-            answer_mode=answer_mode if section == 'vocabulary' else 'typing',
+            answer_mode=(
+                answer_mode
+                if section in {'vocabulary', 'reading', 'grammar', 'myself'}
+                else 'typing'
+            ),
             difficulty=difficulty,
         ))
         questions[-1]['skill_focus'] = skill_label
 
-    return questions, ', '.join(names)
+    return questions, source_name
+
+
+def get_myself_stage_questions(pack, stage_number):
+    """Generate and namespace ten stable questions for one uploaded-material stage."""
+    if stage_number not in range(1, 6):
+        raise ValueError('The selected material stage was not found.')
+    definition = MYSELF_STAGE_DEFINITIONS[stage_number - 1]
+    stage_instruction = (
+        f'{pack.instruction}\n'
+        f'Create World 1 Stage 1-{stage_number} of 5. '
+        f'Stage focus: {definition["focus"]} '
+        f'Make this difficulty step {stage_number} of 5 and avoid questions that belong to an easier step.'
+    )
+    upload = ContentFile(pack.material_text.encode('utf-8'), name='material.txt')
+    questions, _source_name = generate_uploaded_questions(
+        [upload],
+        stage_instruction,
+        section='myself',
+        count=10,
+        answer_mode=pack.answer_mode,
+        difficulty=definition['difficulty'],
+    )
+    if pack.answer_mode == 'multiple_choice':
+        for question in questions:
+            random.shuffle(question['choices'])
+            question['answer_mode'] = 'multiple_choice'
+    else:
+        for question in questions:
+            question['choices'] = []
+            question['answer_mode'] = 'typing'
+    for question in questions:
+        question['key'] = hashlib.sha256(
+            f'{pack.id}|{stage_number}|{question["key"]}'.encode('utf-8')
+        ).hexdigest()[:24]
+        question['stage_number'] = f'1-{stage_number}'
+        question['stage_level_label'] = definition['level']
+        question['myself_pack_id'] = str(pack.id)
+    return questions
 
 
 def missing_questions(session_key, *, count=10):
@@ -854,7 +1330,7 @@ def resolve_missing(session_key, question):
 
 
 @transaction.atomic
-def update_course_progress(session_key, course_slug, question):
+def update_course_progress(session_key, course_slug, question, *, quiz_run=None):
     if not course_slug:
         return None
     progress, _ = LanguageCourseProgress.objects.get_or_create(
@@ -863,10 +1339,17 @@ def update_course_progress(session_key, course_slug, question):
     )
     keys = set(progress.correct_question_keys)
     keys.add(question['key'])
-    total = len(COURSES[course_slug]['questions'])
     progress.correct_question_keys = sorted(keys)
-    progress.score_percent = min(100, round(len(keys) / total * 100))
-    progress.completed = progress.score_percent == 100
+    if course_slug in ALL_STAGES or myself_pack_id_from_stage_slug(course_slug):
+        total = len(quiz_run.questions) if quiz_run else 10
+        correct_count = quiz_run.correct_count if quiz_run else len(keys)
+        run_score = min(100, round(correct_count / total * 100))
+        progress.score_percent = max(progress.score_percent, run_score)
+        progress.completed = progress.completed or progress.score_percent >= STAGE_CLEAR_PERCENT
+    else:
+        total = len(COURSES[course_slug]['questions'])
+        progress.score_percent = min(100, round(len(keys) / total * 100))
+        progress.completed = progress.score_percent == 100
     progress.save()
     return progress
 
