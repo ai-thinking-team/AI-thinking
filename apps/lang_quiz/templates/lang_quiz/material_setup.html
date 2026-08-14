@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{% if section == 'reading' %}Reading{% elif section == 'grammar' %}Grammar{% elif section == 'vocabulary' %}Vocabulary{% else %}My Materials{% endif %} - Upload & Generate{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <a href="{% url 'lang_quiz:home' %}" class="back-link">← Language Learning Hub</a>
+  <span class="hero-badge">
+    {% if section == 'vocabulary' %}VOCABULARY LAB
+    {% elif section == 'reading' %}READING COMPREHENSION
+    {% elif section == 'grammar' %}GRAMMAR PRACTICE
+    {% else %}MY MATERIALS
+    {% endif %}
+  </span>
+  <h1>
+    {% if section == 'vocabulary' %}Choose how to study Vocabulary
+    {% elif section == 'reading' %}Generate 10 Reading Comprehension Questions
+    {% elif section == 'grammar' %}Generate 10 Grammar Questions
+    {% else %}Create a 5-Stage Course from Your Material
+    {% endif %}
+  </h1>
+  <p>
+    {% if section == 'vocabulary' %}Advance through 10 progressive stages, try random questions, or upload your own material.
+    {% elif section == 'reading' %}Advance through 10 reading stages from basic details to inference and author intent, or upload your own passage.
+    {% elif section == 'grammar' %}Advance through 10 grammar stages from basic sentence patterns to complex structures, or upload your own material.
+    {% else %}Upload a file and describe the questions you want. AI will turn it into five progressive 10-question stages.
+    {% endif %}
+  </p>
+</div>
+
+{% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+{% if section == 'myself' and myself_packs %}
+<section class="setup-section">
+  <div class="section-heading-row">
+    <div><span class="section-kicker">YOUR STAGE COURSES</span><h2>Continue a material adventure</h2></div>
+  </div>
+  <div class="course-grid">
+    {% for pack in myself_packs %}
+      <article class="course-card">
+        <div class="course-topline"><span>5 STAGES · 50 QUESTIONS · {% if pack.answer_mode == 'multiple_choice' %}5-CHOICE{% else %}TYPING{% endif %}</span></div>
+        <h3>{{ pack.source_name }}</h3>
+        <p>{{ pack.instruction|truncatechars:110 }}</p>
+        <div class="course-footer material-course-actions">
+          <small>{{ pack.updated_at|date:'Y-m-d H:i' }}</small>
+          <div>
+            <a href="{% url 'lang_quiz:myself_stage_pack' pack.id %}">Stage Map →</a>
+            <form method="post" action="{% url 'lang_quiz:delete_myself_stage_pack' pack.id %}" onsubmit="return confirm('このコースと進捗を削除します。元に戻せません。削除しますか？');">
+              {% csrf_token %}
+              <button type="submit" class="text-button delete-course-button">Delete course</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if stages %}
+<section class="setup-section world-map world-map-{{ section }}">
+  <div class="world-map-header">
+    <div>
+      <span class="section-kicker">ADVENTURE MODE</span>
+      <h2>World 1 · {{ world_title }}</h2>
+      <p>各ステージは10問。70%以上でクリアすると、次のステージが解放されます。</p>
+    </div>
+    <div class="result-actions">
+      {% if section == 'vocabulary' %}
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_vocabulary' 'multiple_choice' %}">5-choice: 10 questions</a>
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_vocabulary' 'typing' %}">Typing: 10 questions</a>
+      {% elif section == 'reading' %}
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'reading' %}">Random 10 Reading Questions</a>
+      {% elif section == 'grammar' %}
+      <a class="btn btn-secondary" href="{% url 'lang_quiz:start_quiz' 'grammar' %}">Random 10 Grammar Questions</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="world-progress" aria-label="World 1 progress">
+    <div><strong>{{ cleared_count }} / 10 STAGES CLEARED</strong><span>{{ world_progress_percent }}%</span></div>
+    <div class="world-progress-track"><i style="width: {{ world_progress_percent }}%"></i></div>
+  </div>
+  <ol class="stage-path" aria-label="World 1 stages">
+    {% for stage in stages %}
+      <li class="stage-stop {% if stage.completed %}stage-complete{% elif stage.unlocked %}stage-open{% else %}stage-locked{% endif %} {% if stage.boss %}stage-final{% endif %}">
+        {% if stage.unlocked %}<a href="{% url 'lang_quiz:start_stage' stage.slug %}" aria-label="Stage {{ stage.number }} {{ stage.title }}">
+        {% else %}<div class="stage-locked-card" aria-label="Stage {{ stage.number }} locked">
+        {% endif %}
+          <span class="stage-status">{% if stage.completed %}✓{% elif stage.unlocked %}▶{% else %}🔒{% endif %}</span>
+          <strong class="stage-number">{{ stage.number }}</strong>
+          <span class="stage-title">{{ stage.title }}</span>
+          <small>CEFR {{ stage.level }} · 10 QUESTIONS</small>
+          <span class="stage-score">{% if stage.completed %}CLEAR · {% endif %}{{ stage.score_percent }}%</span>
+        {% if stage.unlocked %}</a>{% else %}</div>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  <div class="world-legend"><span>▶ PLAYABLE</span><span>✓ CLEARED</span><span>🔒 CLEAR THE PREVIOUS STAGE</span><strong>Goal: 1-10</strong></div>
+</section>
+{% endif %}
+
+<section class="setup-section upload-studio">
+  <div>
+    <span class="section-kicker">UPLOAD &amp; CREATE</span>
+    <h2>
+      {% if section == 'vocabulary' %}Generate from your vocabulary material
+      {% elif section == 'reading' %}Upload your reading passage
+      {% elif section == 'grammar' %}Upload your grammar material
+      {% else %}Upload your material
+      {% endif %}
+    </h2>
+    <p>AI作問では複数形式・複数ファイルを利用できます。原文出題では、問題と解答一覧を含むテキストPDFを1つ選択してください。</p>
+    <p class="micro-note">If using a folder, select all target files inside the folder together.</p>
+  </div>
+  <form method="post" enctype="multipart/form-data" action="{% url 'lang_quiz:start_material_quiz' section %}" class="material-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-group mode-options">
+      {{ form.import_mode.label_tag }}
+      {{ form.import_mode }}
+      {{ form.import_mode.errors }}
+      <p id="import-mode-help" class="micro-note">教材を参考に、AIが新しい10問を作成します。</p>
+    </div>
+    <div class="form-group">{{ form.files.label_tag }}{{ form.files }}{{ form.files.errors }}</div>
+    <div class="form-group" id="folder-file-group">
+      <label for="folder-files">Or select a material folder</label>
+      <input id="folder-files" type="file" name="files" multiple webkitdirectory directory accept=".txt,.md,.csv,.json,.pdf">
+    </div>
+    <div class="form-group" id="instruction-group">{{ form.instruction.label_tag }}{{ form.instruction }}{{ form.instruction.errors }}</div>
+    {% if section == 'vocabulary' or section == 'myself' %}
+      <div class="form-group" id="answer-mode-group">{{ form.answer_mode.label_tag }}{{ form.answer_mode }}{{ form.answer_mode.errors }}</div>
+    {% endif %}
+    <button id="material-submit" type="submit" class="btn btn-primary btn-lg">{% if section == 'myself' %}AIで5ステージ作成 →{% else %}AIで10問作成 →{% endif %}</button>
+  </form>
+</section>
+<script>
+  (() => {
+    const modeInputs = document.querySelectorAll('input[name="import_mode"]');
+    const fileInput = document.querySelector('.material-form input[name="files"]');
+    const folderGroup = document.getElementById('folder-file-group');
+    const instructionGroup = document.getElementById('instruction-group');
+    const answerModeGroup = document.getElementById('answer-mode-group');
+    const help = document.getElementById('import-mode-help');
+    const submit = document.getElementById('material-submit');
+    const myselfMode = {% if section == 'myself' %}true{% else %}false{% endif %};
+
+    function updateImportMode() {
+      const selected = document.querySelector('input[name="import_mode"]:checked');
+      const exact = selected && selected.value === 'exact_pdf';
+      folderGroup.hidden = exact;
+      instructionGroup.hidden = exact;
+      if (answerModeGroup) answerModeGroup.hidden = exact;
+      if (fileInput) {
+        fileInput.accept = exact ? '.pdf,application/pdf' : '.txt,.md,.csv,.json,.pdf';
+        fileInput.multiple = !exact;
+      }
+      help.textContent = exact
+        ? 'PDF内の問題文・選択肢・解答を変更せず、検出した全問題を番号順に出題します。'
+        : myselfMode
+          ? '教材から1-1〜1-5の5ステージを作成します。各ステージは10問です。'
+          : '教材を参考に、AIが新しい10問を作成します。';
+      submit.textContent = exact
+        ? 'PDFの問題をそのまま開始 →'
+        : myselfMode ? 'AIで5ステージ作成 →' : 'AIで10問作成 →';
+    }
+
+    modeInputs.forEach((input) => input.addEventListener('change', updateImportMode));
+    updateImportMode();
+  })();
+</script>
+{% endblock %}

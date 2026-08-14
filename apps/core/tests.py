@@ -7,5 +7,6 @@ class CoreRouteTests(TestCase):
         response = self.client.get(reverse('core:home'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '<nav class="navbar"')
         for label in ('Mathematics', 'Coding', 'Languages', 'Other Subjects'):
             self.assertContains(response, label)
