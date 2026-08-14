@@ -22,6 +22,7 @@ from apps.learning_core.models import (
     LearningSession,
     MisconceptionRecord,
     TeachBackAttempt,
+    Topic,
     TransferAttempt,
 )
 from apps.learning_core.services import transition_session
@@ -268,7 +269,7 @@ class CodingWorkflowBrowserTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 6)
+        self.assertEqual(CodingExercise.objects.filter(active=True).count(), 210)
         exercise = CodingExercise.objects.select_related('activity').get(slug='double-numbers')
         self.assertEqual(response.context['exercise'], exercise)
         self.assertContains(response, 'Double every number')
@@ -314,20 +315,48 @@ class CodingWorkflowBrowserTests(TestCase):
         self.assertContains(response, 'name="action" value="save_revision"')
         self.assertContains(response, 'name="action" value="finish_revision"')
 
-    def test_catalog_lists_database_exercises_and_routes_by_slug(self):
+    def test_catalog_lists_topics_then_filters_exercises_by_topic(self):
         response = self.client.get(reverse('coding_quiz:home'))
 
         self.assertContains(response, 'Curated fallback ready')
-        self.assertContains(response, 'Double every number')
-        self.assertContains(response, 'Square every number')
-        self.assertContains(response, 'Increment every number')
-        self.assertContains(response, 'Look up a dictionary value')
-        self.assertContains(response, 'Handle a zero denominator')
-        self.assertContains(response, 'Read the first list item safely')
+        self.assertContains(response, 'Choose a Coding topic')
+        self.assertContains(response, 'Python loops')
+        self.assertContains(response, 'DSA: Graphs')
+        self.assertNotContains(response, 'Double every number')
+        loops_url = reverse('coding_quiz:topic_exercises', args=('python-loops',))
+        self.assertContains(response, loops_url)
+
+        topic_page = self.client.get(loops_url)
+        self.assertEqual(topic_page.status_code, 200)
+        self.assertContains(topic_page, 'Double every number')
+        self.assertContains(topic_page, 'Square every number')
+        self.assertContains(topic_page, 'Increment every number')
+        self.assertContains(topic_page, 'Triple every number')
+        self.assertNotContains(topic_page, 'Look up a dictionary value')
         square_url = reverse('coding_quiz:exercise_detail', args=('square-numbers',))
-        self.assertContains(response, square_url)
+        self.assertContains(topic_page, square_url)
         square_page = self.client.get(square_url)
         self.assertContains(square_page, 'square_numbers([2, -3])')
+
+    def test_unknown_coding_topic_returns_not_found(self):
+        response = self.client.get(
+            reverse('coding_quiz:topic_exercises', args=('unknown-topic',))
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_every_coding_topic_has_at_least_ten_active_exercises(self):
+        topics = Topic.objects.filter(subject__slug='coding')
+
+        self.assertEqual(topics.count(), 21)
+        for topic in topics:
+            with self.subTest(topic=topic.slug):
+                self.assertGreaterEqual(
+                    CodingExercise.objects.filter(
+                        active=True,
+                        activity__concept__topic=topic,
+                    ).count(),
+                    10,
+                )
 
     def test_local_demo_check_can_skip_runner_for_offline_django_setup(self):
         output = StringIO()
@@ -353,8 +382,8 @@ class CodingWorkflowBrowserTests(TestCase):
                 )
                 self.assertEqual(exercise.activity.concept.slug, concept_slug)
 
-    def test_all_six_exercises_have_complete_revision_and_transfer_evidence_contract(self):
-        self.assertEqual(len(CODING_CATALOG), 6)
+    def test_all_catalog_exercises_have_complete_revision_and_transfer_evidence_contract(self):
+        self.assertEqual(len(CODING_CATALOG), 210)
         for entry in CODING_CATALOG:
             with self.subTest(slug=entry['slug']):
                 self.assertTrue(entry['starter_code'])
@@ -466,10 +495,10 @@ class CodingWorkflowBrowserTests(TestCase):
     def test_catalog_validation_command_accepts_the_versioned_catalog(self):
         output = StringIO()
         call_command('validate_coding_catalog', stdout=output)
-        self.assertIn('Catalog valid: 6 exercise(s).', output.getvalue())
+        self.assertIn('Catalog valid: 210 exercise(s).', output.getvalue())
 
     def test_every_catalog_exercise_has_recovery_guidance_for_its_allowed_misconception(self):
-        self.assertEqual(len(CODING_CATALOG), 6)
+        self.assertEqual(len(CODING_CATALOG), 210)
         for item in CODING_CATALOG:
             with self.subTest(slug=item['slug']):
                 rubric = item['rubric']

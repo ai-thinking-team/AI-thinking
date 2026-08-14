@@ -118,6 +118,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
+.coding-catalog-header { margin-bottom: 1.25rem; }
+.coding-catalog-header p { max-width: 72ch; }
+.topic-grid, .exercise-grid { margin-top: 1rem; }
+.topic-card, .exercise-card { min-height: 15rem; display: flex; flex-direction: column; }
+.topic-card h3, .exercise-card h3 { font-size: 1.15rem; }
+.topic-card-action { margin-top: auto; padding-top: 1rem; color: var(--color-primary); font-weight: 700; }
+.topic-card:hover .topic-card-action, .topic-card:focus-visible .topic-card-action,
+.exercise-card:hover .topic-card-action, .exercise-card:focus-visible .topic-card-action { text-decoration: underline; }
+.back-link { font-weight: 700; }
 
 .card, .panel {
   display: block;

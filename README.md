@@ -158,10 +158,24 @@ Open Django at `http://127.0.0.1:8004/`. The runner listens only on local loopba
 ### Coding exercise catalog and history
 
 `python manage.py migrate` creates and seeds the initial database-backed Coding catalog. The
-catalog currently contains `double-numbers`, `square-numbers`, `increment-numbers`, and
-`lookup-dictionary-grade`, `safe-divide-function`, and `first-list-item`; prompts,
+catalog currently contains 210 curated exercises across conditionals, functions, one-dimensional
+lists, two-dimensional lists, strings, loops, recursion, dictionaries, list indexing, and advanced
+Python DSA topics: binary search, stacks, queues, sorting, hash maps, graphs, and dynamic
+programming. It also includes Python sets, comprehensions, exception handling, and numeric
+algorithms, plus DSA two pointers, sliding windows, greedy algorithms, and backtracking. The
+Every topic has at least ten exercises, including warm-up, boundary-case, mixed-input, applied,
+review, and mastery drills.
+Example exercise slugs include `double-numbers`, `square-numbers`, `increment-numbers`,
+`lookup-dictionary-grade`, `safe-divide-function`, `first-list-item`, `classify-number`,
+`rectangle-area`, `sum-one-dimensional-list`, `matrix-total`, `reverse-string`,
+`triple-numbers`, `factorial-recursion`, `binary-search-index`, `valid-brackets-stack`,
+`rotate-queue`, `selection-sort`, `two-sum-hash-map`, `graph-has-path`, and
+`climb-stairs-dp`, `is-leap-year`, `is-palindrome`, `power-of-two-recursion`,
+`first-binary-search-index`, `insertion-sort`, `character-frequencies`,
+`shortest-graph-path`, and `min-cost-climbing-stairs`; prompts,
 rubrics, public/hidden runner IDs, and Transfer Check configuration are selected per exercise.
-Opening `/coding/` lists active exercises. Each browser can keep one active session per exercise,
+Opening `/coding/` first lists topic categories, then shows the active exercises for the selected
+topic. Each browser can keep one active session per exercise,
 while Reset closes the current session instead of deleting it. Previous code attempts, Teach-Back
 evidence, misconceptions, Transfer Checks, and mastery decisions remain available under
 `/progress/`.

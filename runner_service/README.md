@@ -22,7 +22,7 @@ This service is separate from Django. Django sends only Python source code and c
    .\venv\Scripts\python.exe manage.py check_local_demo
    ```
 
-   The command checks Django, all six Coding catalog entries and `http://127.0.0.1:8765/health`
+   The command checks Django, all 210 Coding catalog entries and `http://127.0.0.1:8765/health`
    without sending learner code to the runner.
 
 If `start.ps1` says that Docker CLI was not found, install Docker Desktop with the WSL 2

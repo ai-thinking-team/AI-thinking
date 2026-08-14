@@ -6,9 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN addgroup -g 10001 runner && adduser -D -u 10001 -G runner runner
 WORKDIR /runner
 COPY harness.py /runner/harness.py
+COPY bulk_practice.py /runner/bulk_practice.py
 COPY worker.py /runner/worker.py
-RUN chown root:runner /runner/harness.py /runner/worker.py \
-    && chmod 0550 /runner/harness.py \
+RUN chown root:runner /runner/harness.py /runner/bulk_practice.py /runner/worker.py \
+    && chmod 0550 /runner/harness.py /runner/bulk_practice.py \
     && chmod 0555 /runner/worker.py
 
 USER runner

@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Count, Q
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -9,6 +10,7 @@ from apps.ai_engine.client import ai_provider_configured, ai_provider_status
 from apps.learning_core.services import transition_session
 from apps.learning_core.state_machine import WorkflowState, ai_assistance_allowed
 from apps.code_runner.runner import code_runner_status
+from apps.learning_core.models import Topic
 
 from .forms import (
     CodingAttemptForm,
@@ -63,10 +65,33 @@ CODING_SESSION_TRACKING_KEY = 'coding_demo_learning_session_id'
 
 
 def home(request):
-    exercises = CodingExercise.objects.filter(active=True).select_related(
-        'activity__concept__topic'
-    )
+    topics = Topic.objects.filter(
+        subject__slug='coding',
+        concepts__activities__coding_exercise__active=True,
+    ).annotate(
+        exercise_count=Count(
+            'concepts__activities__coding_exercise',
+            filter=Q(concepts__activities__coding_exercise__active=True),
+            distinct=True,
+        ),
+    ).order_by('name')
     return render(request, 'coding_quiz/home.html', {
+        'topics': topics,
+        'ai_status': ai_provider_status(),
+    })
+
+
+def topic_exercises(request, topic_slug):
+    topic = get_object_or_404(
+        Topic.objects.filter(subject__slug='coding'),
+        slug=topic_slug,
+    )
+    exercises = CodingExercise.objects.filter(
+        active=True,
+        activity__concept__topic=topic,
+    ).select_related('activity__concept__topic')
+    return render(request, 'coding_quiz/topic_exercises.html', {
+        'topic': topic,
         'exercises': exercises,
         'ai_status': ai_provider_status(),
     })

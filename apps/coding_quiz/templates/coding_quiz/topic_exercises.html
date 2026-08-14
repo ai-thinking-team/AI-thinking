@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ topic.name }} exercises{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Coding" subject_icon="coding" %}{% endblock %}
+
+{% block content %}
+<p><a class="back-link" href="{% url 'coding_quiz:home' %}">&larr; All Coding topics</a></p>
+
+<header class="page-header coding-catalog-header">
+  <div>
+    <p class="eyebrow">Coding topic</p>
+    <h1>{{ topic.name }}</h1>
+    <p>{{ topic.description }}</p>
+  </div>
+</header>
+
+<section class="panel ai-status">
+  <p><strong>AI Coach:</strong> {{ ai_status.label }}</p>
+  <p class="locked-note">{{ ai_status.detail }}</p>
+</section>
+
+<section aria-labelledby="exercise-list-heading">
+  <h2 id="exercise-list-heading">Choose an exercise</h2>
+  <div class="subject-grid exercise-grid">
+  {% for exercise in exercises %}
+    <a class="card exercise-card" href="{% url 'coding_quiz:exercise_detail' exercise.slug %}">
+      <p class="eyebrow">{{ exercise.difficulty }} &middot; {{ exercise.activity.concept.name }}</p>
+      <h3>{{ exercise.activity.title }}</h3>
+      <p>{{ exercise.activity.prompt }}</p>
+      <span class="topic-card-action">Start this exercise <span aria-hidden="true">&rarr;</span></span>
+    </a>
+  {% empty %}
+    <p>No active exercises are available in this topic.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -5,6 +5,8 @@ import subprocess
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .harness import TEST_CATALOG
+
 
 HOST = os.environ.get('RUNNER_HOST', '127.0.0.1')
 PORT = int(os.environ.get('RUNNER_PORT', '8765'))
@@ -12,33 +14,7 @@ IMAGE = os.environ.get('RUNNER_IMAGE', 'ai-thinking-code-runner:local')
 AUTH_TOKEN = os.environ.get('RUNNER_AUTH_TOKEN', '')
 MAX_REQUEST_BYTES = 25_000
 CONTAINER_TIMEOUT_SECONDS = int(os.environ.get('RUNNER_CONTAINER_TIMEOUT_SECONDS', '15'))
-ALLOWED_TEST_IDS = {
-    'divide-public', 'divide-by-zero', 'divide-negative',
-    'percentage-public', 'percentage-zero', 'percentage-other',
-    'first-item-public', 'first-item-empty', 'first-item-single',
-    'last-item-public', 'last-item-empty', 'last-item-other',
-    'lookup-public',
-    'lookup-missing-key',
-    'lookup-other-key',
-    'price-public',
-    'price-missing',
-    'price-other',
-    'double-public',
-    'empty-list',
-    'negative-values',
-    'empty-words',
-    'mixed-word-lengths',
-    'square-public',
-    'empty-square',
-    'zero-square',
-    'empty-negate',
-    'mixed-negate',
-    'increment-public',
-    'empty-increment',
-    'negative-increment',
-    'empty-absolute',
-    'mixed-absolute',
-}
+ALLOWED_TEST_IDS = frozenset(TEST_CATALOG)
 
 
 def _not_executed(message):

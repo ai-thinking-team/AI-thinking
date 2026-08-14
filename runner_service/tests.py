@@ -73,6 +73,88 @@ class HarnessTests(TestCase):
                 })
                 self.assertEqual(result['status'], 'PASSED')
 
+    def test_added_topic_family_cases_pass(self):
+        cases = (
+            ('def classify_number(n):\n    return "positive" if n > 0 else "zero" if n == 0 else "negative"', ['classify-number-public', 'classify-number-zero', 'classify-number-negative']),
+            ('def rectangle_area(width, height):\n    return width * height', ['rectangle-area-public', 'rectangle-area-zero', 'rectangle-area-other']),
+            ('def sum_numbers(numbers):\n    return sum(numbers)', ['sum-list-public', 'sum-list-empty', 'sum-list-negative']),
+            ('def matrix_total(matrix):\n    return sum(sum(row) for row in matrix)', ['matrix-total-public', 'matrix-total-empty', 'matrix-total-uneven']),
+            ('def reverse_text(text):\n    return text[::-1]', ['reverse-string-public', 'reverse-string-empty', 'reverse-string-unicode']),
+            ('def triple_numbers(numbers):\n    return [number * 3 for number in numbers]', ['triple-numbers-public', 'triple-numbers-empty', 'triple-numbers-negative']),
+            ('def factorial(n):\n    return 1 if n == 0 else n * factorial(n - 1)', ['factorial-public', 'factorial-zero', 'factorial-one']),
+        )
+        for source_code, test_case_ids in cases:
+            with self.subTest(test_case_ids=test_case_ids):
+                result = execute({
+                    'language': 'python',
+                    'source_code': source_code,
+                    'test_case_ids': test_case_ids,
+                })
+                self.assertEqual(result['status'], 'PASSED')
+
+    def test_dsa_topic_family_cases_pass(self):
+        cases = (
+            (
+                'def binary_search(numbers, target):\n    left, right = 0, len(numbers) - 1\n    while left <= right:\n        middle = (left + right) // 2\n        if numbers[middle] == target:\n            return middle\n        if numbers[middle] < target:\n            left = middle + 1\n        else:\n            right = middle - 1\n    return -1',
+                ['binary-search-public', 'binary-search-missing', 'binary-search-single'],
+            ),
+            (
+                'def valid_brackets(text):\n    pairs = {\")\": \"(\", \"]\": \"[\", \"}\": \"{\"}\n    stack = []\n    for char in text:\n        if char in \"([{\":\n            stack.append(char)\n        elif char in pairs:\n            if not stack or stack.pop() != pairs[char]:\n                return False\n    return not stack',
+                ['valid-brackets-public', 'valid-brackets-unclosed', 'valid-brackets-wrong-order'],
+            ),
+            ('def rotate_queue(items):\n    return items[1:] + items[:1] if items else []', ['rotate-queue-public', 'rotate-queue-empty', 'rotate-queue-single']),
+            ('def selection_sort(numbers):\n    result = []\n    remaining = numbers[:]\n    while remaining:\n        smallest = min(remaining)\n        remaining.remove(smallest)\n        result.append(smallest)\n    return result', ['selection-sort-public', 'selection-sort-empty', 'selection-sort-duplicates']),
+            ('def two_sum_indexes(numbers, target):\n    seen = {}\n    for index, number in enumerate(numbers):\n        complement = target - number\n        if complement in seen:\n            return [seen[complement], index]\n        seen[number] = index\n    return [-1, -1]', ['two-sum-public', 'two-sum-duplicate', 'two-sum-missing']),
+            ('def has_path(graph, start, target):\n    stack = [start]\n    visited = set()\n    while stack:\n        node = stack.pop()\n        if node == target:\n            return True\n        if node in visited:\n            continue\n        visited.add(node)\n        stack.extend(graph.get(node, []))\n    return False', ['graph-path-public', 'graph-path-missing', 'graph-path-cycle']),
+            ('def climb_stairs(n):\n    previous, current = 1, 1\n    for _ in range(n):\n        previous, current = current, previous + current\n    return previous', ['climb-stairs-public', 'climb-stairs-zero', 'climb-stairs-other']),
+        )
+        for source_code, test_case_ids in cases:
+            with self.subTest(test_case_ids=test_case_ids):
+                result = execute({
+                    'language': 'python',
+                    'source_code': source_code,
+                    'test_case_ids': test_case_ids,
+                })
+                self.assertEqual(result['status'], 'PASSED')
+
+    def test_second_exercise_for_each_single_exercise_topic_passes(self):
+        cases = (
+            (
+                'def is_leap_year(year):\n    return year % 400 == 0 or (year % 4 == 0 and year % 100 != 0)',
+                ['leap-year-public', 'leap-year-century', 'leap-year-four-hundred'],
+            ),
+            ('def is_palindrome(text):\n    return text == text[::-1]', ['palindrome-public', 'palindrome-false', 'palindrome-empty']),
+            ('def power_of_two(n):\n    return 1 if n == 0 else 2 * power_of_two(n - 1)', ['power-two-public', 'power-two-zero', 'power-two-one']),
+            (
+                'def first_binary_search(numbers, target):\n    left, right, answer = 0, len(numbers) - 1, -1\n    while left <= right:\n        middle = (left + right) // 2\n        if numbers[middle] >= target:\n            if numbers[middle] == target:\n                answer = middle\n            right = middle - 1\n        else:\n            left = middle + 1\n    return answer',
+                ['first-binary-public', 'first-binary-missing', 'first-binary-later'],
+            ),
+            (
+                'def insertion_sort(numbers):\n    result = []\n    for number in numbers:\n        index = 0\n        while index < len(result) and result[index] <= number:\n            index += 1\n        result.insert(index, number)\n    return result',
+                ['insertion-sort-public', 'insertion-sort-empty', 'insertion-sort-duplicates'],
+            ),
+            (
+                'def character_frequencies(text):\n    counts = {}\n    for char in text:\n        counts[char] = counts.get(char, 0) + 1\n    return counts',
+                ['char-frequency-public', 'char-frequency-empty', 'char-frequency-other'],
+            ),
+            (
+                'def shortest_path_length(graph, start, target):\n    queue = [(start, 0)]\n    visited = {start}\n    while queue:\n        node, distance = queue.pop(0)\n        if node == target:\n            return distance\n        for neighbor in graph.get(node, []):\n            if neighbor not in visited:\n                visited.add(neighbor)\n                queue.append((neighbor, distance + 1))\n    return -1',
+                ['shortest-path-public', 'shortest-path-missing', 'shortest-path-cycle'],
+            ),
+            (
+                'def min_cost_climbing_stairs(cost):\n    previous, current = 0, 0\n    for stair_cost in cost:\n        previous, current = current, min(previous, current) + stair_cost\n    return min(previous, current)',
+                ['min-cost-public', 'min-cost-empty', 'min-cost-other'],
+            ),
+        )
+        for source_code, test_case_ids in cases:
+            with self.subTest(test_case_ids=test_case_ids):
+                result = execute({
+                    'language': 'python',
+                    'source_code': source_code,
+                    'test_case_ids': test_case_ids,
+                })
+                self.assertEqual(result['status'], 'PASSED')
+
     def test_failed_hidden_test_does_not_reveal_expected_value(self):
         result = execute({
             'language': 'python',
