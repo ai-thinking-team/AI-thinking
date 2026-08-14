@@ -161,49 +161,6 @@ def unit_progress(*, unit, browser_session_key):
     return mastered, total, percent, bool(total) and mastered == total
 
 
-def list_mistakes(*, browser_session_key):
-    """Every section this browser finished without reaching mastery, with
-    the problem it last got wrong — the material for the "間違えた問題"
-    review page. Re-selecting one of these sections naturally starts a
-    fresh round, since NEEDS_REVIEW already triggers a restart."""
-    if not browser_session_key:
-        return []
-    sessions = (
-        SectionSession.objects.filter(
-            browser_session_key=browser_session_key,
-            current_state=WorkflowState.NEEDS_REVIEW,
-        )
-        .select_related('section__unit')
-        .order_by('section__unit__name', 'section__order')
-    )
-    mistakes = []
-    for session in sessions:
-        transfer_attempt = session.transfer_attempts.order_by('-created_at').first()
-        if transfer_attempt is not None and not transfer_attempt.is_correct:
-            problem = transfer_attempt.problem
-            explanation = transfer_attempt.explanation
-        else:
-            latest_wrong = session.attempts.filter(is_correct=False).order_by(
-                '-revision_number', '-created_at'
-            ).first()
-            if latest_wrong is None:
-                continue
-            problem = latest_wrong.problem
-            explanation = latest_wrong.explanation
-        concept_record = ConceptMastery.objects.filter(
-            section=session.section, browser_session_key=browser_session_key,
-        ).first()
-        mistakes.append({
-            'unit': session.section.unit,
-            'section': session.section,
-            'problem': problem,
-            'explanation': explanation,
-            'misconception_type': concept_record.misconception_type if concept_record else '',
-            'reasons': mastery.build_evidence_list(session=session, concept_mastery=concept_record),
-        })
-    return mistakes
-
-
 def _next_state_after_evaluation(*, is_correct, confidence):
     if is_correct and confidence >= CONFIDENT_THRESHOLD:
         return WorkflowState.TRANSFER_TASK

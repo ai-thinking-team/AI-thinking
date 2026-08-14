@@ -102,9 +102,6 @@ msgstr "追加"
 msgid "資料はまだありません。"
 msgstr "資料はまだありません。"
 
-msgid "各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。"
-msgstr "各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。"
-
 msgid "回答して次へ"
 msgstr "回答して次へ"
 
@@ -113,9 +110,6 @@ msgstr "回答する"
 
 msgid "学習の記録"
 msgstr "学習の記録"
-
-msgid "復習して、もう一度解きなおそう。"
-msgstr "復習して、もう一度解きなおそう。"
 
 msgid "提出"
 msgstr "提出"
@@ -174,9 +168,6 @@ msgstr "考え方の説明"
 msgid "自信度"
 msgstr "自信度"
 
-msgid "解きなおす"
-msgstr "解きなおす"
-
 msgid "解答"
 msgstr "解答"
 
@@ -195,12 +186,6 @@ msgstr "達成率"
 msgid "選択中"
 msgstr "選択中"
 
-msgid "間違えた問題"
-msgstr "間違えた問題"
-
-msgid "間違えた問題はまだありません。学習を進めると、要復習になった問題がここに表示されます。"
-msgstr "間違えた問題はまだありません。学習を進めると、要復習になった問題がここに表示されます。"
-
 msgid "（またはクリックして選択、複数選択可）"
 msgstr "（またはクリックして選択、複数選択可）"
 
@@ -212,9 +197,6 @@ msgstr "達成率 %(percent)s%%（%(mastered)s/%(total)s）"
 
 msgid "セクション %(n)s"
 msgstr "セクション %(n)s"
-
-msgid "推定される誤解: %(misconception)s"
-msgstr "推定される誤解: %(misconception)s"
 
 msgid "コース達成率 %(course_percent)s%%"
 msgstr "コース達成率 %(course_percent)s%%"

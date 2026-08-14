@@ -102,9 +102,6 @@ msgstr "Add"
 msgid "資料はまだありません。"
 msgstr "No materials yet."
 
-msgid "各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。"
-msgstr "Sections marked \"Needs Review\" from each unit are collected here. Retrying a section starts it over with a new question."
-
 msgid "回答して次へ"
 msgstr "Answer and continue"
 
@@ -113,9 +110,6 @@ msgstr "Answer"
 
 msgid "学習の記録"
 msgstr "Learning record"
-
-msgid "復習して、もう一度解きなおそう。"
-msgstr "Review and try again."
 
 msgid "提出"
 msgstr "Submit"
@@ -174,9 +168,6 @@ msgstr "Explanation of your reasoning"
 msgid "自信度"
 msgstr "Confidence"
 
-msgid "解きなおす"
-msgstr "Try again"
-
 msgid "解答"
 msgstr "Answer"
 
@@ -195,12 +186,6 @@ msgstr "Completion rate"
 msgid "選択中"
 msgstr "Selected"
 
-msgid "間違えた問題"
-msgstr "Mistakes"
-
-msgid "間違えた問題はまだありません。学習を進めると、要復習になった問題がここに表示されます。"
-msgstr "No mistakes yet. As you learn, problems marked Needs Review will appear here."
-
 msgid "（またはクリックして選択、複数選択可）"
 msgstr "(or click to select, multiple files allowed)"
 
@@ -212,9 +197,6 @@ msgstr "Completion rate %(percent)s%% (%(mastered)s/%(total)s)"
 
 msgid "セクション %(n)s"
 msgstr "Section %(n)s"
-
-msgid "推定される誤解: %(misconception)s"
-msgstr "Estimated misconception: %(misconception)s"
 
 msgid "コース達成率 %(course_percent)s%%"
 msgstr "Course completion %(course_percent)s%%"

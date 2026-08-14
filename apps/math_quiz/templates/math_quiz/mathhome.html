@@ -42,36 +42,6 @@
     font-size: 1.4rem; line-height: 1;
   }
 
-  .mistakes-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: .6rem;
-    min-height: 190px;
-    border: 2px solid var(--warning-soft);
-    border-radius: var(--radius-lg);
-    background: var(--warning-soft);
-    color: #8a5a08;
-    text-decoration: none;
-    font-weight: 700;
-    transition: border-color .15s ease, transform .15s ease;
-  }
-  .mistakes-card:hover { border-color: var(--warning); transform: translateY(-2px); }
-  .mistakes-card .icon {
-    width: 42px; height: 42px; border-radius: 50%;
-    background: white; color: var(--warning);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.3rem; line-height: 1;
-  }
-  .mistakes-card .count-badge {
-    position: absolute; top: .8rem; right: .8rem;
-    min-width: 22px; height: 22px; padding: 0 .35rem; border-radius: 999px;
-    background: var(--danger); color: white; font-size: .74rem; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
-  }
-
   .course-card {
     position: relative;
     display: flex;
@@ -122,12 +92,6 @@
     <a class="new-card" href="{% url 'math_quiz:new' %}">
       <span class="plus">+</span>
       {% trans "新しい科目を追加" %}
-    </a>
-
-    <a class="mistakes-card" href="{% url 'math_quiz:mistakes' %}">
-      {% if mistake_count %}<span class="count-badge">{{ mistake_count }}</span>{% endif %}
-      <span class="icon">✕</span>
-      {% trans "間違えた問題" %}
     </a>
 
     {% for course in courses %}

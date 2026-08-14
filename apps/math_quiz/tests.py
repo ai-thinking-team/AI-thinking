@@ -296,6 +296,26 @@ class MathViewFlowTests(TestCase):
         new_session = Section.objects.get(id=self.section.id).sessions.get()
         self.assertNotEqual(old_pk, new_session.pk)
 
+    def test_explicit_reset_action_starts_a_fresh_round_immediately(self):
+        # action=reset (posted directly, e.g. from the section menu's "最初
+        # からやり直す" button) is a one-click reset — unlike a plain
+        # revisit, it doesn't need an intermediate outcome-page view first.
+        self.client.get(self.url)
+        session = Section.objects.get(id=self.section.id).sessions.get()
+        wrong_answer = str(int(_correct_answer(self.section, kind='first')) + 1000)
+        self._post(action='first_attempt', answer=wrong_answer, reasoning='勘です', confidence=1)
+        self._post(action='diagnosis', answer='わかりません')
+        for _ in range(5):
+            self._post(action='revision', answer=wrong_answer, reasoning='まだ違います', confidence=2)
+        session.refresh_from_db()
+        self.assertEqual(session.current_state, WorkflowState.NEEDS_REVIEW)
+
+        response = self._post(action='reset')
+        self.assertRedirects(response, self.url)
+        new_session = Section.objects.get(id=self.section.id).sessions.get()
+        self.assertEqual(new_session.current_state, WorkflowState.FIRST_ATTEMPT)
+        self.assertNotEqual(session.pk, new_session.pk)
+
     def test_revision_page_html_never_contains_the_answer_before_submission(self):
         correct_value = _correct_answer(self.section, kind='first')
         wrong_answer = str(int(correct_value) + 1000)
@@ -563,71 +583,6 @@ class MathWordProblemTests(TestCase):
             session=session, answer=f'x = {value}', reasoning='式を立てて解きました', confidence=5,
         )
         self.assertTrue(attempt.is_correct)
-
-
-class MathMistakesTests(TestCase):
-    """Drives everything through the test client (rather than calling
-    services with a hardcoded browser key directly) so the session key
-    used to look up mistakes matches the one the views actually see."""
-
-    def setUp(self):
-        self.section = _create_section(name='復習テスト単元')
-        self.url = reverse('math_quiz:section_quiz', args=[self.section.id])
-
-    def _post(self, **data):
-        return self.client.post(self.url, data, follow=False)
-
-    def _fail_to_needs_review(self):
-        self.client.get(self.url)  # establishes the test client's session
-        wrong_answer = str(int(_correct_answer(self.section, kind='first')) + 1000)
-        self._post(action='first_attempt', answer=wrong_answer, reasoning='勘です', confidence=1)
-        self._post(action='diagnosis', answer='わかりません')
-        for _ in range(5):
-            self._post(action='revision', answer=wrong_answer, reasoning='まだ違います', confidence=2)
-
-    def test_no_mistakes_before_anything_fails(self):
-        self.client.get(self.url)
-        key = self.client.session.session_key
-        self.assertEqual(services.list_mistakes(browser_session_key=key), [])
-
-    def test_a_needs_review_section_appears_with_its_last_wrong_problem(self):
-        self._fail_to_needs_review()
-        key = self.client.session.session_key
-        mistakes = services.list_mistakes(browser_session_key=key)
-        self.assertEqual(len(mistakes), 1)
-        self.assertEqual(mistakes[0]['section'], self.section)
-        self.assertEqual(mistakes[0]['unit'], self.section.unit)
-        self.assertTrue(mistakes[0]['problem'])
-
-    def test_mistakes_page_lists_it_and_home_shows_the_count_badge(self):
-        self._fail_to_needs_review()
-
-        response = self.client.get(reverse('math_quiz:mistakes'))
-        self.assertContains(response, self.section.title)
-
-        home_response = self.client.get(reverse('math_quiz:home'))
-        self.assertContains(home_response, '間違えた問題')
-
-    def test_mistakes_page_shows_misconception_and_reasons_from_the_learner_model(self):
-        self._fail_to_needs_review()
-        key = self.client.session.session_key
-        mistakes = services.list_mistakes(browser_session_key=key)
-        self.assertEqual(len(mistakes), 1)
-        self.assertTrue(mistakes[0]['misconception_type'])
-        self.assertTrue(mistakes[0]['reasons'])
-
-        response = self.client.get(reverse('math_quiz:mistakes'))
-        self.assertContains(response, '推定される誤解')
-        self.assertContains(response, mistakes[0]['reasons'][0])
-
-    def test_resolving_via_mistakes_page_button_starts_a_fresh_round_immediately(self):
-        self._fail_to_needs_review()
-        # The mistakes page's "解きなおす" button posts action=reset directly,
-        # so — unlike a plain revisit — one click is enough to get a fresh problem.
-        response = self.client.post(self.url, {'action': 'reset'}, follow=True)
-        self.assertContains(response, '最初の解答')
-        key = self.client.session.session_key
-        self.assertEqual(services.list_mistakes(browser_session_key=key), [])
 
 
 class MathAddUnitViewTests(TestCase):
@@ -1001,6 +956,33 @@ class MathAIFallbackCatalogTests(TestCase):
         for level in range(1, 6):
             hint = demo_content.build_hint(section=section, level=level, kind='first')
             self.assertNotIn(str(entry['answer']), hint)
+
+    def test_generic_fallback_hints_are_grounded_in_the_problems_own_method_hint(self):
+        """Levels 3-5 should say something concrete about *this* problem
+        (reusing the same safe wrong_note already used for wrong-answer
+        feedback), not just generic, subject-agnostic phrasing."""
+        unit = Unit.objects.create(name='群論', is_demo=False)
+        section = Section.objects.create(unit=unit, title='セクションA', content='内容')
+        entry = demo_content._ai_fallback_entry(section, kind='first')
+        for level in (3, 4, 5):
+            hint = demo_content.build_hint(section=section, level=level, kind='first')
+            self.assertIn(entry['wrong_note'], hint)
+
+    def test_differential_equation_wrong_note_does_not_coincidentally_reveal_the_answer(self):
+        """Regression check for a narrow edge case found while grounding
+        hints in wrong_note: for a couple of catalog entries, wrong_note
+        used to restate a given problem value (e.g. an initial condition
+        y(0)=5) that happens to numerically equal that problem's derived
+        answer — safe as a one-off wrong-answer explanation, but would
+        have leaked through every hint level once reused there. Checked
+        against wrong_note itself (not the full hint, whose own fixed
+        wrapping text can coincidentally contain a stray digit — e.g.
+        "1つずつ" for an answer of 1 — unrelated to any real leak)."""
+        unit = Unit.objects.create(name='微分方程式', is_demo=True)
+        section = Section.objects.create(unit=unit, title='一階微分方程式', content='内容')
+        for salt in range(5):
+            entry = demo_content._ai_fallback_entry(section, kind='first', salt=salt)
+            self.assertNotIn(str(entry['answer']), entry['wrong_note'])
 
     def test_diagnosis_verification_hint_avoid_equation_specific_wording_when_fallback_active(self):
         unit = Unit.objects.create(name='群論', is_demo=False)

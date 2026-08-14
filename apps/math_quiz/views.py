@@ -91,18 +91,11 @@ def home(request):
             'percent': percent,
             'complete': complete,
         })
-    mistake_count = len(services.list_mistakes(browser_session_key=key))
-    return render(request, 'math_quiz/mathhome.html', {'courses': courses, 'mistake_count': mistake_count})
+    return render(request, 'math_quiz/mathhome.html', {'courses': courses})
 
 
 def new(request):
     return render(request, 'math_quiz/newmath.html')
-
-
-def mistakes(request):
-    key = request.session.session_key
-    items = services.list_mistakes(browser_session_key=key)
-    return render(request, 'math_quiz/mistakes.html', {'items': items})
 
 
 def unit_detail(request, unit_id):

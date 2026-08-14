@@ -1634,7 +1634,7 @@ AI_FALLBACK_PROBLEMS = {
                 'problem': 'dy/dx = 2x の一般解 y=x²+C において、y(0)=5のときのCの値を求めなさい。',
                 'answer': 5,
                 'correct_note': 'x=0を代入すると y=0+C=5 なので C=5ですね。',
-                'wrong_note': '初期条件y(0)=5を一般解に代入して、Cを求めてみましょう。',
+                'wrong_note': '一般解に、問題で与えられた初期条件を代入して、Cを求めてみましょう。',
             },
             {
                 'problem': '特性方程式 r²−5r+6=0 を持つ二階線形微分方程式の特性根のうち、大きい方の値を求めなさい。',
@@ -1646,7 +1646,7 @@ AI_FALLBACK_PROBLEMS = {
                 'problem': 'dy/dx = 3x² の一般解 y=x³+C において、y(0)=2のときのCの値を求めなさい。',
                 'answer': 2,
                 'correct_note': 'x=0を代入すると y=0+C=2 なので C=2ですね。',
-                'wrong_note': '初期条件y(0)=2を一般解に代入して、Cを求めてみましょう。',
+                'wrong_note': '一般解に、問題で与えられた初期条件を代入して、Cを求めてみましょう。',
             },
             {
                 'problem': '特性方程式 r²−4r+3=0 を持つ二階線形微分方程式の特性根のうち、大きい方の値を求めなさい。',
@@ -2206,14 +2206,21 @@ def _generic_fallback_hint(entry, *, level):
     below ("移項"/符号 handling) wouldn't apply to an arbitrary subject.
     Level 5 is the last-resort hint but, like every other level, must never
     state the final answer itself — only the submitted revision reveals
-    whether the learner got there (see services._judge)."""
+    whether the learner got there (see services._judge).
+
+    Levels 3-5 ground themselves in the entry's own `wrong_note` — the
+    same safe, problem-specific method guidance already used for a wrong
+    answer's explanation (see judge_answer) — instead of purely generic
+    phrasing, so they say something concrete about *this* problem without
+    ever stating its answer."""
+    wrong_note = entry['wrong_note']
     hints = (
         '問題文をもう一度読んで、何を求められているか整理しましょう。',
         'この分野で使う基本的な公式や定理を思い出してみましょう。',
-        '似たような例題を思い浮かべ、同じ手順で進めてみましょう。',
-        '途中の計算を1つずつ書き出して、どこで止まっているか確認しましょう。',
-        '最後のヒントです。使うべき公式や考え方はここまでのヒントで示した通りです。'
-        '問題の数値をその公式にそのまま代入し、計算を最後まで一つずつ実行してみましょう。',
+        f'次の考え方を使ってみましょう。{wrong_note}',
+        f'具体的には、{wrong_note} この手順を1つずつノートに書き出してみましょう。',
+        f'最後のヒントです。{wrong_note} この手順に問題の数値をそのまま当てはめて、'
+        '計算を最後まで実行してみましょう。',
     )
     return hints[level - 1]
 

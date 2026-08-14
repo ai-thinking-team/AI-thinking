@@ -44,13 +44,9 @@ TRANSLATIONS = {
     '資料を追加': 'Add material',
     '追加': 'Add',
     '資料はまだありません。': 'No materials yet.',
-    '各単元で「要復習」になったセクションを集めました。解きなおすと、そのセクションは新しい問題から再スタートします。':
-        'Sections marked "Needs Review" from each unit are collected here. '
-        'Retrying a section starts it over with a new question.',
     '回答して次へ': 'Answer and continue',
     '回答する': 'Answer',
     '学習の記録': 'Learning record',
-    '復習して、もう一度解きなおそう。': 'Review and try again.',
     '提出': 'Submit',
     '数学': 'Math',
     '新しい科目を追加': 'Add a new subject',
@@ -78,16 +74,12 @@ TRANSLATIONS = {
     '考え方': 'Reasoning',
     '考え方の説明': 'Explanation of your reasoning',
     '自信度': 'Confidence',
-    '解きなおす': 'Try again',
     '解答': 'Answer',
     '解答（修正版）': 'Answer (revised)',
     '診断クイズ': 'Diagnostic quiz',
     '診断結果': 'Diagnostic result',
     '達成率': 'Completion rate',
     '選択中': 'Selected',
-    '間違えた問題': 'Mistakes',
-    '間違えた問題はまだありません。学習を進めると、要復習になった問題がここに表示されます。':
-        'No mistakes yet. As you learn, problems marked Needs Review will appear here.',
     '（またはクリックして選択、複数選択可）': '(or click to select, multiple files allowed)',
     '（最終手段）': '(last resort)',
 
@@ -95,7 +87,6 @@ TRANSLATIONS = {
     # BlockTranslateNode.render_token_list's own escaping) ---
     '達成率 %(percent)s%%（%(mastered)s/%(total)s）': 'Completion rate %(percent)s%% (%(mastered)s/%(total)s)',
     'セクション %(n)s': 'Section %(n)s',
-    '推定される誤解: %(misconception)s': 'Estimated misconception: %(misconception)s',
     'コース達成率 %(course_percent)s%%': 'Course completion %(course_percent)s%%',
     'ヒント レベル%(level)s': 'Hint level %(level)s',
     'これまでのヒントを見る（%(count_hints)s件）': 'View previous hints (%(count_hints)s)',
