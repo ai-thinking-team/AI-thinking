@@ -1,7 +1,23 @@
 :root {
   color-scheme: light;
-  --color-primary: #3730a3;
-  --color-primary-hover: #2e2680;
+  --color-primary: #15803d;
+  --color-primary-hover: #166534;
+  /* Brand tints derived from --color-primary so they follow it automatically.
+     Each is preceded by a plain rgba() fallback: browsers without color-mix()
+     drop the second line as invalid and keep the first, rather than losing the
+     custom property entirely and taking every consumer down with it. */
+  --color-primary-tint: rgba(21, 128, 61, .12);
+  --color-primary-tint: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color-primary-ring: rgba(21, 128, 61, .22);
+  --color-primary-ring: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  /* Elevation reads as occluded light, so it stays neutral. A brand-tinted
+     shadow is invisible against the brand-coloured hero block. */
+  --color-shadow: rgba(28, 25, 23, .16);
+  /* Brighter than --color-primary on purpose: mastery feedback sits next to
+     brand-green buttons and nav elsewhere on these pages, and needs to read
+     as a distinct signal rather than more brand chrome. See docs/decisions.md
+     (2026-08-14) — pair with an icon/shape where this marks state, not text. */
+  --color-success: #22c55e;
   --color-accent: #b45309;
   --color-bg: #faf9f5;
   --color-surface: #ffffff;
@@ -9,8 +25,6 @@
   --color-muted: #f1f0ea;
   --color-muted-fg: #57534e;
   --color-border: #e7e4dd;
-  --color-destructive: #b91c1c;
-  --color-success: #15803d;
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--color-bg);
   color: var(--color-fg);
@@ -31,13 +45,31 @@ a { color: var(--color-primary); }
 .container { width: min(1080px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; }
 
 .navbar {
-  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 1rem max(1rem, calc((100% - 1080px) / 2));
   background: var(--color-primary);
 }
-.navbar-left { display: flex; align-items: center; }
+.navbar-back { justify-self: start; }
+.navbar-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border-radius: .6rem;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+.navbar-back-btn svg { width: 1.4rem; height: 1.4rem; }
+.navbar-back-btn:hover, .navbar-back-btn:focus-visible { color: rgba(255, 255, 255, .72); }
+.navbar-center { justify-self: center; }
 .navbar-subject {
   display: flex;
   align-items: center;
@@ -57,9 +89,9 @@ a { color: var(--color-primary); }
   justify-content: center;
 }
 .navbar-subject-chip svg { width: 1.15rem; height: 1.15rem; }
-.navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+.navbar-links { justify-self: end; display: flex; align-items: center; gap: 1.5rem; }
 .navbar-links a {
-  color: #e0defa;
+  color: rgba(255, 255, 255, .88);
   text-decoration: none;
   font-weight: 500;
   font-size: .95rem;
@@ -86,7 +118,7 @@ a { color: var(--color-primary); }
 }
 .card:hover, .card:focus-visible {
   border-color: var(--color-primary);
-  box-shadow: 0 4px 14px rgba(55, 48, 163, 0.12);
+  box-shadow: 0 4px 14px var(--color-shadow);
   transform: translateY(-2px);
 }
 .card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
@@ -96,7 +128,7 @@ a { color: var(--color-primary); }
   height: 3.5rem;
   padding: .875rem;
   border-radius: 1rem;
-  background: rgba(55, 48, 163, 0.1);
+  background: var(--color-primary-tint);
   color: var(--color-primary);
   margin-bottom: .45rem;
 }
@@ -124,7 +156,7 @@ input, textarea, select {
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(55, 48, 163, 0.15);
+  box-shadow: 0 0 0 3px var(--color-primary-ring);
 }
 
 button {
@@ -154,7 +186,7 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .hint-panel { margin-top: 1.5rem; padding: 1rem; border-left: .3rem solid var(--color-accent); background: #fff7ea; }
 .status { padding: 1rem; background: var(--color-muted); border-radius: .5rem; }
 
-/* Home page: split hero panel (mirrors design_prototype/home-variants/variant-14-indigo-block.html) */
+/* Home page: split hero panel — brand green wedge on the right, wordmark on the light left. */
 .home-split {
   position: relative;
   overflow: hidden;
@@ -172,11 +204,11 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
   inset: 0;
   z-index: 0;
   background: var(--color-primary);
-  clip-path: polygon(0 0, 68% 0, 46% 100%, 0 100%);
+  clip-path: polygon(100% 0, 32% 0, 54% 100%, 100% 100%);
 }
 .home-orb { position: absolute; border-radius: 999px; }
-.home-orb-1 { width: 240px; height: 240px; background: #818cf8; opacity: .4; top: 6%; left: 28%; filter: blur(4px); }
-.home-orb-2 { width: 130px; height: 130px; background: #fbbf24; opacity: .55; top: 58%; left: 10%; }
+.home-orb-1 { width: 240px; height: 240px; background: #86efac; opacity: .4; top: 6%; right: 28%; filter: blur(4px); }
+.home-orb-2 { width: 130px; height: 130px; background: #fbbf24; opacity: .55; top: 76%; right: 12%; }
 .home-main {
   position: relative;
   z-index: 1;
@@ -188,16 +220,37 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
   gap: 3.5rem;
 }
 .home-hero-text { max-width: 480px; }
-.home-hero-text h1 { color: #fff; font-size: clamp(2.3rem, 4.6vw, 3.4rem); line-height: 1.2; font-weight: 800; margin: 0 0 1.4rem; }
-.home-hero-text p { color: #d9d8f5; font-size: 1.15rem; margin: 0; }
+.home-logo { margin: 0 0 1.4rem; }
+.home-logo img { display: block; width: min(400px, 100%); height: auto; }
+.home-tagline {
+  color: var(--color-fg);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0;
+  text-wrap: balance;
+}
+/* Forced break only where the hero column is narrow enough to need it; below
+   900px the column widens and the sentence wraps on its own. Both this and the
+   layout switch key off `max-width: 900px`, so no fractional width falls
+   between the two rules. */
+.tagline-break { display: inline; }
 .home-cards-panel { flex: 1; }
 .home-cards-panel .subject-grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.home-cards-panel .card { padding: 1.5rem 1.75rem 1.15rem; border: none; border-radius: 1.25rem; box-shadow: 0 10px 30px rgba(30, 27, 75, 0.14); }
+.home-cards-panel .card { padding: 1.5rem 1.75rem 1.15rem; border: none; border-radius: 1.25rem; box-shadow: 0 10px 30px var(--color-shadow); }
+/* These cards sit on the brand-coloured block, where a brand-coloured focus
+   ring would be invisible. White is the only high-contrast option here. */
+.home-cards-panel .card:focus-visible { outline-color: #ffffff; }
 .home-cards-panel .card h2 { font-size: 1.2rem; }
 @media (max-width: 900px) {
   .home-main { flex-direction: column; align-items: stretch; }
   .home-hero-text { max-width: none; }
-  .home-bg-block { clip-path: polygon(0 0, 100% 0, 100% 45%, 0 65%); }
+  .home-bg-block { clip-path: polygon(0 65%, 100% 45%, 100% 100%, 0 100%); }
+  .tagline-break { display: none; }
+  /* The block moves to the bottom here, so the orbs have to follow it down or
+     they get clipped away entirely. */
+  .home-orb-1 { top: 58%; right: 42%; }
+  .home-orb-2 { top: 82%; right: 8%; }
 }
 @media (max-width: 560px) {
   .home-cards-panel .subject-grid { grid-template-columns: 1fr; }
@@ -210,7 +263,7 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .overall-summary.style-plain {
   background: var(--color-surface);
   border-radius: .9rem;
-  box-shadow: 0 4px 14px rgba(30, 27, 75, .08);
+  box-shadow: 0 4px 14px var(--color-shadow);
 }
 .overall-summary.style-plain a { color: var(--color-primary); }
 
@@ -257,7 +310,7 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
   width: 2.4rem;
   height: 2.4rem;
   border-radius: .65rem;
-  background: rgba(55, 48, 163, .1);
+  background: var(--color-primary-tint);
   color: var(--color-primary);
   display: flex;
   align-items: center;
