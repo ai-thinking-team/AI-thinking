@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ lesson.title }} - {{ subject.title }}{% endblock %}
+
+{% block navbar %}
+  {% include "components/navbar.html" with subject_name=lesson.title subject_icon=subject.icon|default:"📖" %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-6">
+  <!-- Header bài học -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <a href="{% url 'other_quiz:subject_detail' subject.id %}" class="text-sm text-indigo-600 hover:underline">
+        &larr; Quay lại {{ subject.title }}
+      </a>
+      <h1 class="text-2xl font-bold mt-1">{{ lesson.chapter }}: {{ lesson.title }}</h1>
+    </div>
+    <span class="text-sm font-semibold text-gray-500">Tổng số: {{ lesson.questions|length }} câu hỏi</span>
+  </div>
+
+  <!-- Danh sách các câu hỏi -->
+  <div class="space-y-6">
+    {% for q in lesson.questions %}
+      <div class="panel" id="question-{{ q.id }}">
+        
+        <!-- Header câu hỏi -->
+        <div class="flex items-center justify-between border-b pb-3 mb-4 border-gray-100">
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-gray-500">Câu {{ forloop.counter }}:</span>
+            <h3 class="text-lg font-semibold text-gray-800">{{ q.title }}</h3>
+          </div>
+          {% if q.type == 'MULTIPLE_CHOICE' %}
+            <span class="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">Trắc nghiệm</span>
+          {% else %}
+            <span class="px-2.5 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full">Trả lời ngắn / Rubric</span>
+          {% endif %}
+        </div>
+
+        <p class="text-gray-800 font-medium mb-4 text-base">{{ q.prompt }}</p>
+
+        <!-- DẠNG 1: TRẮC NGHIỆM -->
+        {% if q.type == 'MULTIPLE_CHOICE' %}
+          <form method="POST" action="#question-{{ q.id }}">
+            {% csrf_token %}
+            <input type="hidden" name="question_id" value="{{ q.id }}">
+            <input type="hidden" name="action" value="submit_mc">
+
+            <div class="space-y-2.5 mb-4">
+              {% for opt in q.options %}
+                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input type="radio" name="question_{{ q.id }}" value="{{ opt }}" 
+                         {% if q.eval and q.eval.selected == opt %}checked{% endif %} class="mr-3">
+                  <span class="text-sm font-medium">{{ opt }}</span>
+                </label>
+              {% endfor %}
+            </div>
+
+            <button type="submit" class="btn btn-primary text-sm">Kiểm tra đáp án</button>
+          </form>
+
+          {% if q.eval %}
+            <div class="mt-4 p-4 rounded-lg border {% if q.eval.is_correct %}bg-green-50 border-green-200{% else %}bg-red-50 border-red-200{% endif %}">
+              {% if q.eval.is_correct %}
+                <div class="text-green-700 font-bold mb-1">🎉 Chính xác! Bạn đã chọn đúng đáp án.</div>
+              {% else %}
+                <div class="text-red-700 font-bold mb-1">❌ Chưa chính xác!</div>
+              {% endif %}
+              <p class="text-sm text-gray-700 mt-2"><strong>Đáp án đúng:</strong> {{ q.correct_answer }}</p>
+              {% if q.explanation %}
+                <p class="text-sm text-gray-600 mt-1"><strong>Giải thích:</strong> {{ q.explanation }}</p>
+              {% endif %}
+            </div>
+          {% endif %}
+
+        <!-- DẠNG 2: TRẢ LỜI NGẮN (RUBRIC) -->
+        {% else %}
+          <form method="POST" action="#question-{{ q.id }}">
+            {% csrf_token %}
+            <input type="hidden" name="question_id" value="{{ q.id }}">
+            <input type="hidden" name="action" value="submit_rubric">
+
+            <div class="mb-4">
+              <textarea name="rubric_text" rows="3" placeholder="Nhập câu trả lời của bạn vào đây..."
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">{{ q.eval.user_text|default:'' }}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary text-sm">Nộp bài & Chấm tự động</button>
+          </form>
+
+          {% if q.eval %}
+            <div class="mt-4 p-4 rounded-lg border space-y-3 {% if q.eval.is_passed %}bg-green-50 border-green-200{% else %}bg-amber-50 border-amber-200{% endif %}">
+              <div class="flex items-center justify-between">
+                {% if q.eval.is_passed %}
+                  <span class="text-green-700 font-bold text-base">🎉 ĐẠT REQUIREMENT (Độ khớp: {{ q.eval.score_percent }}%)</span>
+                {% else %}
+                  <span class="text-amber-800 font-bold text-base">⚠️ CHƯA ĐẠT (Độ khớp: {{ q.eval.score_percent }}% - Cần tối thiểu 75%)</span>
+                {% endif %}
+              </div>
+
+              <div class="pt-2 border-t border-gray-200">
+                <p class="text-sm text-gray-800"><strong>Đáp án chuẩn tham chiếu:</strong> {{ q.correct_answer }}</p>
+                {% if q.explanation %}
+                  <p class="text-sm text-gray-600 mt-1"><strong>Giải thích chi tiết:</strong> {{ q.explanation }}</p>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+        {% endif %}
+
+      </div>
+    {% empty %}
+      <div class="panel text-center py-8">
+        <p class="text-gray-500">Chưa có câu hỏi nào trong bài học này.</p>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

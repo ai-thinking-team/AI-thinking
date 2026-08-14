@@ -1,11 +1,50 @@
 {% extends "base.html" %}
+
 {% block title %}Other Subjects{% endblock %}
-{% block navbar %}{% include "components/navbar.html" with subject_name="Other Subjects" subject_icon="other" %}{% endblock %}
+
+{% block navbar %}
+  {% include "components/navbar.html" with subject_name="Other Subjects" subject_icon="other" %}
+{% endblock %}
+
 {% block content %}
-<h1>Other Subjects</h1>
-<p>This reusable scaffold supports multiple choice, definitions, comparison, classification, and evidence-based responses.</p>
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1>Other Subjects</h1>
+    <p>This reusable scaffold supports multiple choice, definitions, comparison, classification, and evidence-based responses.</p>
+  </div>
+  <a href="{% url 'other_quiz:create_subject' %}" class="btn btn-primary">
+    ✨ Tạo môn học mới bằng AI
+  </a>
+</div>
+
 <div class="subject-grid">
-  <article class="panel"><h2>Reliable evaluation</h2><p>Open responses are not evaluated without a reference answer or explicit rubric.</p></article>
-  <article class="panel"><h2>Transfer</h2><p>Apply the same concept to a different case, source, or scenario without AI help.</p></article>
+  {% for subject in subjects %}
+    <article class="panel">
+      <h2>{{ subject.icon|default:"📖" }} {{ subject.title }}</h2>
+      <p>{{ subject.description }}</p>
+      <div class="mt-4 flex justify-between items-center">
+        <!-- Sửa dòng này để nhận cả Django ORM lẫn JSON List -->
+        <span class="text-sm text-gray-500">
+          {% if subject.lessons.count != None %}
+            {{ subject.lessons.count }}
+          {% else %}
+            {{ subject.lessons|length }}
+          {% endif %} bài học
+        </span>
+        <a href="{% url 'other_quiz:subject_detail' subject.id %}" class="font-semibold text-indigo-600 hover:underline">
+          Vào học &rarr;
+        </a>
+      </div>
+    </article>
+  {% empty %}
+    <article class="panel">
+      <h2>Reliable evaluation</h2>
+      <p>Open responses are not evaluated without a reference answer or explicit rubric.</p>
+    </article>
+    <article class="panel">
+      <h2>Transfer</h2>
+      <p>Apply the same concept to a different case, source, or scenario without AI help.</p>
+    </article>
+  {% endfor %}
 </div>
 {% endblock %}
