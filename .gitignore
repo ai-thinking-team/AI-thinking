@@ -11,3 +11,4 @@ media/
 .pytest_cache/
 .coverage
 design_prototype/
+docs/decisions.md
