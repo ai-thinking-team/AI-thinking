@@ -16,12 +16,12 @@
       </a>
       <h1 class="text-2xl font-bold mt-1">{{ lesson.chapter }}: {{ lesson.title }}</h1>
     </div>
-    <span class="text-sm font-semibold text-gray-500">Tổng số: {{ lesson.questions|length }} câu hỏi</span>
+    <span class="text-sm font-semibold text-gray-500">Tổng số: {{ questions|length }} câu hỏi</span>
   </div>
 
   <!-- Danh sách các câu hỏi -->
   <div class="space-y-6">
-    {% for q in lesson.questions %}
+    {% for q in questions %}
       <div class="panel" id="question-{{ q.id }}">
         
         <!-- Header câu hỏi -->
@@ -30,7 +30,7 @@
             <span class="font-bold text-gray-500">Câu {{ forloop.counter }}:</span>
             <h3 class="text-lg font-semibold text-gray-800">{{ q.title }}</h3>
           </div>
-          {% if q.type == 'MULTIPLE_CHOICE' %}
+          {% if q.q_type == 'MULTIPLE_CHOICE' %}
             <span class="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">Trắc nghiệm</span>
           {% else %}
             <span class="px-2.5 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full">Trả lời ngắn / Rubric</span>
@@ -40,7 +40,7 @@
         <p class="text-gray-800 font-medium mb-4 text-base">{{ q.prompt }}</p>
 
         <!-- DẠNG 1: TRẮC NGHIỆM -->
-        {% if q.type == 'MULTIPLE_CHOICE' %}
+        {% if q.q_type == 'MULTIPLE_CHOICE' %}
           <form method="POST" action="#question-{{ q.id }}">
             {% csrf_token %}
             <input type="hidden" name="question_id" value="{{ q.id }}">

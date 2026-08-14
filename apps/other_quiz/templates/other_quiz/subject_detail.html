@@ -28,7 +28,7 @@
   <h2 class="text-xl font-bold mb-4">Danh sách bài học</h2>
 
   <div class="space-y-4">
-    {% for lesson in subject.lessons %}
+    {% for lesson in subject.lessons.all %}
       <div class="panel">
         <div class="flex items-center justify-between border-b pb-3 mb-4 border-gray-100">
           <div>
@@ -36,13 +36,13 @@
             <h3 class="text-lg font-bold text-gray-800">{{ lesson.title }}</h3>
           </div>
           <span class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
-            {{ lesson.questions|length }} câu hỏi
+            {{ lesson.questions.all|length }} câu hỏi
           </span>
         </div>
 
         <!-- Preview danh sách dạng câu hỏi trong bài -->
         <div class="space-y-2 mb-4">
-          {% for q in lesson.questions %}
+          {% for q in lesson.questions.all %}
             <div class="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg text-sm">
               <div class="flex items-center space-x-2">
                 {% if q.type == 'MULTIPLE_CHOICE' %}
