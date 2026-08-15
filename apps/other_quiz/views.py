@@ -6,6 +6,7 @@ from .services import (
     generate_and_save_lesson
 )
 from django.contrib import messages
+import uuid
 
 def home(request):
     subjects = Subject.objects.all()
@@ -13,12 +14,12 @@ def home(request):
 
 def create_subject(request):
     if request.method == "POST":
-        sub_id = request.POST.get("id")
         title = request.POST.get("title")
         icon = request.POST.get("icon") or "📖"
         description = request.POST.get("description")
 
-        if sub_id and title:
+        if title:
+            sub_id = f"sub_{uuid.uuid4().hex[:8]}"  # Auto-generate unique ID
             Subject.objects.create(
                 id=sub_id,
                 title=title,

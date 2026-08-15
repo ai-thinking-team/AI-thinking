@@ -9,6 +9,16 @@ class Subject(models.Model):
     def __str__(self):
         return self.title
 
+    @property
+    def progress_percent(self) -> int:
+        """Calculates total progress percentage for all lessons in this subject."""
+        lessons = self.lessons.all()
+        total_questions = sum(l.questions.count() for l in lessons)
+        if total_questions == 0:
+            return 0
+        correct_questions = sum(l.questions.filter(is_correct=True).count() for l in lessons)
+        return round((correct_questions / total_questions) * 100)
+
 class Lesson(models.Model):
     id = models.CharField(max_length=50, primary_key=True, unique=True)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='lessons')

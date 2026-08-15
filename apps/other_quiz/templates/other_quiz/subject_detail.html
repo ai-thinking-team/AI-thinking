@@ -8,85 +8,58 @@
 
 {% block content %}
 <div class="max-w-5xl mx-auto py-6">
-  <!-- 1. Header Môn Học -->
-  <div class="panel mb-6">
-    <div class="flex items-start justify-between">
-      <div>
-        <div class="flex items-center space-x-3 mb-2">
-          <span class="text-4xl">{{ subject.icon|default:"📖" }}</span>
-          <h1 class="text-2xl font-bold">{{ subject.title }}</h1>
-        </div>
-        <p class="text-gray-600 mt-2">{{ subject.description }}</p>
-      </div>
-      <a href="{% url 'other_quiz:home' %}" class="text-sm font-semibold text-indigo-600 hover:underline">
-        &larr; Quay lại
-      </a>
-    </div>
-  </div>
+  <h2 class="text-xl font-bold mb-4">Lesson list</h2>
 
-  <!-- 2. Danh sách Bài học & Cấu trúc câu hỏi -->
-  <h2 class="text-xl font-bold mb-4">Danh sách bài học</h2>
-
-  <div class="space-y-4 mb-8">
+  <div class="space-y-6 mb-8">
     {% for lesson in subject.lessons.all %}
-      <div class="panel">
-        <div class="flex items-center justify-between border-b pb-3 mb-3 border-gray-100">
-          <div>
-            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">{{ lesson.chapter }}</span>
-            <h3 class="text-lg font-bold text-gray-800">{{ lesson.title }}</h3>
-          </div>
-          <span class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
-            {{ lesson.questions.all|length }} câu hỏi
-          </span>
-        </div>
+      <div class="panel mb-6">
+        <!-- Dùng Flex căn chỉnh toàn bộ nội dung bên trái và nút ôn tập áp sát lề phải -->
+        <div class="flex items-center justify-between">
+          
+          <!-- Cụm thông tin bên trái -->
+          <div class="space-y-3 flex-grow pr-4">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">{{ lesson.chapter }}</span>
+              <h3 class="text-lg font-bold text-gray-800">{{ lesson.title }}</h3>
+            </div>
 
-        <!-- THANH TIẾN ĐỘ -->
-        <div class="mb-4">
-          <div class="flex justify-between text-xs text-gray-600 mb-1">
-            <span>Tiến độ hoàn thành</span>
-            <span class="font-bold text-indigo-600">{{ lesson.progress_percent }}%</span>
-          </div>
-            <div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="--p: {{ lesson.progress_percent }}%; width: var(--p);"></div>
-          </div>
-        </div>
-
-        <!-- Preview danh sách dạng câu hỏi trong bài -->
-        <div class="space-y-2 mb-4">
-          {% for q in lesson.questions.all %}
-            <div class="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg text-sm">
-              <div class="flex items-center space-x-2">
-                {% if q.q_type == 'MULTIPLE_CHOICE' %}
-                  <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Trắc nghiệm</span>
-                {% else %}
-                  <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-semibold">Trả lời ngắn / Rubric</span>
-                {% endif %}
-                <span class="text-gray-700 font-medium">{{ q.title }}</span>
+            <!-- Thanh tiến độ & Số câu hỏi -->
+            <div>
+              <div class="flex items-center space-x-3 text-xs text-gray-600 mb-1">
+                <span>Progress: <strong class="text-indigo-600">{{ lesson.progress_percent }}%</strong></span>
+                <span class="text-gray-300">|</span>
+                <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">{{ lesson.questions.all|length }} questions</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2 max-w-xl">
+                <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="--p: {{ lesson.progress_percent }}%; width: var(--p);"></div>
               </div>
             </div>
-          {% empty %}
-            <p class="text-sm text-gray-500 italic">Chưa có câu hỏi nào cho bài học này.</p>
-          {% endfor %}
-        </div>
+          </div>
 
-        <!-- Nút Bắt đầu học bài này -->
-        <div class="flex justify-end">
-          <a href="{% url 'other_quiz:lesson_detail' subject.id lesson.id %}" class="btn btn-primary text-sm">
-            📝 Bắt đầu ôn tập bài này
-          </a>
+          <!-- Nút ôn tập được đẩy hẳn sang góc phải ngoài cùng -->
+          <div class="flex-shrink-0 pl-4 border-l border-gray-100 flex items-center">
+            <a href="{% url 'other_quiz:lesson_detail' subject.id lesson.id %}" 
+               class="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-all flex items-center space-x-2 font-medium text-sm" 
+               title="Bắt đầu ôn tập">
+              <span>📝</span>
+              <span class="hidden sm:inline">Let's gooo</span>
+            </a>
+          </div>
+
         </div>
       </div>
     {% empty %}
       <div class="panel text-center py-8">
-        <p class="text-gray-500">Môn học này chưa có bài học nào.</p>
+        <p class="text-gray-500">No lesson available.</p>
       </div>
     {% endfor %}
   </div>
 
-  <!-- 3. Nút & Form Upload Tài Liệu Ở Dưới Cùng -->
+  <!-- Nút & Form Upload Tài Liệu Ở Dưới Cùng -->
   <div class="border-t pt-6">
     <div class="flex justify-center mb-4">
       <button onclick="const form = document.getElementById('uploadDocForm'); form.style.display = (form.style.display === 'none') ? 'block' : 'none';" class="btn btn-primary">
-        ✨ Upload tài liệu tạo bài học mới (AI)
+        ✨ Upload file to create <a href=""></a> new lesson
       </button>
     </div>
 
@@ -100,7 +73,6 @@
       </div>
     {% endif %}
 
-    <!-- Form Upload với UX Loading (Đã fix ID và Style) -->
     <div id="uploadDocForm" style="display: none;" class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200 p-4">
       <form method="POST" enctype="multipart/form-data" 
             onsubmit="let btn = document.getElementById('btnSubmit'); btn.innerHTML = '⏳ AI đang xử lý...'; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');">
@@ -111,11 +83,24 @@
         
         <div class="flex justify-end">
           <button id="btnSubmit" type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
-            🚀 Bắt đầu tạo bài học
+            🚀 Create
           </button>
         </div>
       </form>
     </div>
   </div>
 </div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const backBtn = document.querySelector(".navbar-back-btn");
+    if (backBtn) {
+      backBtn.removeAttribute("onclick");
+      backBtn.addEventListener("click", function(e) {
+        e.preventDefault();
+        window.location.href = "{% url 'other_quiz:home' %}";
+      });
+    }
+  });
+</script>
 {% endblock %}
