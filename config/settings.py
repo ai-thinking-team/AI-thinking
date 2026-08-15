@@ -15,6 +15,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from django.db.backends.signals import connection_created
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -56,6 +58,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -75,6 +78,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.i18n',
             ],
         },
     },
@@ -90,8 +94,38 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # SQLite's default rollback-journal mode takes an exclusive lock on
+        # the whole file for any write, so two requests writing around the
+        # same time easily trip "database is locked" under Django's default
+        # 5s wait — bump that wait here, and switch to WAL mode below
+        # (readers no longer block writers, which is most of what this app
+        # actually does concurrently). 60s because some of this app's writes
+        # sit behind a slow/retried AI API call (see services.py's various
+        # @transaction.atomic functions) — the most AI-call-heavy of those
+        # are being restructured to not hold the lock during the AI call at
+        # all, but this stays as a safety margin for the rest.
+        #
+        # transaction_mode='IMMEDIATE': Django's sqlite backend otherwise
+        # opens atomic() blocks with plain "BEGIN" (DEFERRED), which only
+        # takes a read lock up front. If two concurrent transactions each
+        # then try to upgrade to a write lock, that upgrade race raises
+        # "database is locked" immediately — busy_timeout only governs the
+        # wait for an *initial* lock, not this upgrade conflict. IMMEDIATE
+        # takes the write lock at BEGIN, so a second writer just queues
+        # (and correctly waits out busy_timeout) instead of racing.
+        'OPTIONS': {'timeout': 60, 'transaction_mode': 'IMMEDIATE'},
     }
 }
+
+
+def _enable_sqlite_wal_mode(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA journal_mode=WAL;')
+            cursor.execute('PRAGMA busy_timeout=60000;')
+
+
+connection_created.connect(_enable_sqlite_wal_mode)
 
 
 # Password validation
@@ -116,7 +150,14 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ja'
+
+LANGUAGES = [
+    ('ja', '日本語'),
+    ('en', 'English'),
+]
+
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 TIME_ZONE = 'UTC'
 
@@ -131,8 +172,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

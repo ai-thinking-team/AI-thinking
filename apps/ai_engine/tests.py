@@ -39,7 +39,7 @@ class AIClientTests(SimpleTestCase):
         self.assertTrue(all(question['reference_answer'] for question in questions))
 
     @patch.dict(os.environ, {'GROQ_API_KEY': 'test-key', 'GROQ_MODEL': 'groq-test'}, clear=True)
-    @patch('apps.ai_engine.client.urlopen')
+    @patch('apps.ai_engine.client.urllib.request.urlopen')
     def test_configured_groq_returns_structured_json(self, mock_urlopen):
         provider_body = {
             'choices': [{'message': {'content': '{"is_correct": true}'}}],
@@ -57,7 +57,9 @@ class AIClientTests(SimpleTestCase):
         request = mock_urlopen.call_args.args[0]
         self.assertEqual(request.full_url, 'https://api.groq.com/openai/v1/chat/completions')
         self.assertEqual(request.headers['Authorization'], 'Bearer test-key')
-        self.assertEqual(request.headers['User-agent'], 'AI-thinking/1.0')
+        # A generic browser-like User-Agent avoids Cloudflare (fronting
+        # Groq's API) bot-flagging urllib's default identifier.
+        self.assertEqual(request.headers['User-agent'], 'Mozilla/5.0')
         payload = json.loads(request.data.decode('utf-8'))
         self.assertEqual(payload['model'], 'groq-test')
         self.assertEqual(payload['messages'][0], {'role': 'system', 'content': 'Evaluate.'})
@@ -65,7 +67,7 @@ class AIClientTests(SimpleTestCase):
         self.assertEqual(payload['response_format']['type'], 'json_schema')
 
     @patch.dict(os.environ, {'GROQ_API_KEY': 'test-key', 'GROQ_MODEL': ''}, clear=True)
-    @patch('apps.ai_engine.client.urlopen')
+    @patch('apps.ai_engine.client.urllib.request.urlopen')
     def test_empty_model_uses_default(self, mock_urlopen):
         response = mock_urlopen.return_value.__enter__.return_value
         response.read.return_value = json.dumps({
@@ -81,7 +83,7 @@ class AIClientTests(SimpleTestCase):
         self.assertEqual(payload['model'], 'openai/gpt-oss-20b')
 
     @patch.dict(os.environ, {'GROQ_API_KEY': 'test-key'}, clear=True)
-    @patch('apps.ai_engine.client.urlopen')
+    @patch('apps.ai_engine.client.urllib.request.urlopen')
     def test_groq_http_error_includes_safe_provider_message(self, mock_urlopen):
         mock_urlopen.side_effect = HTTPError(
             url='https://api.groq.com/openai/v1/chat/completions',
@@ -95,6 +97,6 @@ class AIClientTests(SimpleTestCase):
 
         with self.assertRaisesRegex(
             AIServiceUnavailable,
-            r'HTTP 403.*Key \[redacted\] is not permitted',
+            r'error \(403\).*Key \[redacted\] is not permitted',
         ):
             generate_ai_response(system_prompt='Teach.', user_prompt='Create a quiz.')
