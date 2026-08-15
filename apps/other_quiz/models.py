@@ -18,6 +18,12 @@ class Lesson(models.Model):
     def __str__(self):
         return f"{self.chapter}: {self.title}"
 
+    @property
+    def progress_percent(self):
+        total = self.questions.count()
+        if total == 0: return 0
+        return round((self.questions.filter(is_correct=True).count() / total) * 100)
+
 class Question(models.Model):
     QUESTION_TYPES = [
         ('MULTIPLE_CHOICE', 'Trắc nghiệm'),
@@ -32,6 +38,7 @@ class Question(models.Model):
     correct_answer = models.TextField(blank=True, null=True)
     rubric_keywords = models.JSONField(blank=True, null=True)
     explanation = models.TextField(blank=True, null=True)
-
+    is_correct = models.BooleanField(default=False)
+    
     def __str__(self):
         return f"{self.lesson.title} - {self.title}"

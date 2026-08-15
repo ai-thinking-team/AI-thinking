@@ -30,7 +30,7 @@
   <div class="space-y-4 mb-8">
     {% for lesson in subject.lessons.all %}
       <div class="panel">
-        <div class="flex items-center justify-between border-b pb-3 mb-4 border-gray-100">
+        <div class="flex items-center justify-between border-b pb-3 mb-3 border-gray-100">
           <div>
             <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">{{ lesson.chapter }}</span>
             <h3 class="text-lg font-bold text-gray-800">{{ lesson.title }}</h3>
@@ -38,6 +38,16 @@
           <span class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
             {{ lesson.questions.all|length }} câu hỏi
           </span>
+        </div>
+
+        <!-- THANH TIẾN ĐỘ -->
+        <div class="mb-4">
+          <div class="flex justify-between text-xs text-gray-600 mb-1">
+            <span>Tiến độ hoàn thành</span>
+            <span class="font-bold text-indigo-600">{{ lesson.progress_percent }}%</span>
+          </div>
+            <div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="--p: {{ lesson.progress_percent }}%; width: var(--p);"></div>
+          </div>
         </div>
 
         <!-- Preview danh sách dạng câu hỏi trong bài -->
@@ -80,7 +90,6 @@
       </button>
     </div>
 
-    <!-- Form Upload (Mặc định ẩn) -->
     {% if messages %}
       <div class="mb-4 max-w-xl mx-auto">
         {% for message in messages %}
@@ -91,8 +100,8 @@
       </div>
     {% endif %}
 
-    <!-- Form Upload với UX Loading -->
-    <div class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200 p-4">
+    <!-- Form Upload với UX Loading (Đã fix ID và Style) -->
+    <div id="uploadDocForm" style="display: none;" class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200 p-4">
       <form method="POST" enctype="multipart/form-data" 
             onsubmit="let btn = document.getElementById('btnSubmit'); btn.innerHTML = '⏳ AI đang xử lý...'; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');">
         {% csrf_token %}

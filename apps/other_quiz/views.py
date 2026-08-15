@@ -45,23 +45,25 @@ def subject_detail(request, subject_id):
 def lesson_detail(request, subject_id, lesson_id):
     subject = get_object_or_404(Subject, id=subject_id)
     lesson = get_object_or_404(Lesson, id=lesson_id, subject=subject)
-    
     questions = list(lesson.questions.all())
 
     if request.method == "POST":
         question_id = request.POST.get("question_id")
         action = request.POST.get("action")
-        
         question = next((q for q in questions if str(q.id) == str(question_id)), None)
 
         if question:
             if action == "submit_mc":
                 selected = request.POST.get(f"question_{question_id}")
                 question.eval = evaluate_multiple_choice(selected, question.correct_answer)
+                question.is_correct = question.eval['is_correct']
+                question.save()
                 
             elif action == "submit_rubric":
                 user_text = request.POST.get("rubric_text", "")
                 question.eval = evaluate_rubric(user_text, question.rubric_keywords or [])
+                question.is_correct = question.eval['is_passed']
+                question.save()
 
     return render(request, 'other_quiz/lesson_detail.html', {
         'subject': subject,
