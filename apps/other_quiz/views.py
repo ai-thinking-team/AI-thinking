@@ -1,14 +1,15 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Subject, Lesson
-from .services import evaluate_multiple_choice, evaluate_rubric
+from .services import (
+    evaluate_multiple_choice, 
+    evaluate_rubric, 
+    generate_and_save_lesson
+)
+from django.contrib import messages
 
 def home(request):
     subjects = Subject.objects.all()
     return render(request, 'other_quiz/home.html', {'subjects': subjects})
-
-def subject_detail(request, subject_id):
-    subject = get_object_or_404(Subject, id=subject_id)
-    return render(request, 'other_quiz/subject_detail.html', {'subject': subject})
 
 def create_subject(request):
     if request.method == "POST":
@@ -27,18 +28,30 @@ def create_subject(request):
             
     return redirect('other_quiz:home')
 
+def subject_detail(request, subject_id):
+    subject = get_object_or_404(Subject, id=subject_id)
+    
+    if request.method == "POST" and request.FILES.get("document"):
+        try:
+            generate_and_save_lesson(subject, request.FILES["document"])
+            messages.success(request, "🎉 Đã tạo bài học mới thành công!")
+        except Exception as e:
+            messages.error(request, f"Lỗi tạo bài học: {str(e)}")
+        
+        return redirect('other_quiz:subject_detail', subject_id=subject.id)
+
+    return render(request, 'other_quiz/subject_detail.html', {'subject': subject})
+
 def lesson_detail(request, subject_id, lesson_id):
     subject = get_object_or_404(Subject, id=subject_id)
     lesson = get_object_or_404(Lesson, id=lesson_id, subject=subject)
     
-    # Chuyển QuerySet thành list để lưu thuộc tính tạm .eval trên RAM
     questions = list(lesson.questions.all())
 
     if request.method == "POST":
         question_id = request.POST.get("question_id")
         action = request.POST.get("action")
         
-        # Tìm câu hỏi bằng cách so sánh string ID
         question = next((q for q in questions if str(q.id) == str(question_id)), None)
 
         if question:

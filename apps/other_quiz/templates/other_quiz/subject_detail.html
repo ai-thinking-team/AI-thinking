@@ -81,20 +81,27 @@
     </div>
 
     <!-- Form Upload (Mặc định ẩn) -->
-    <div id="uploadDocForm" style="display: none;" class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200">
-      <h3 class="text-lg font-bold text-gray-800 mb-2">Tải lên tài liệu bài học</h3>
-      <p class="text-sm text-gray-600 mb-4">Chọn file (.pdf, .txt, .docx) để AI phân tích và tự động tạo bài học + câu hỏi.</p>
+    {% if messages %}
+      <div class="mb-4 max-w-xl mx-auto">
+        {% for message in messages %}
+          <div class="p-3 rounded mb-2 {% if message.tags == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
-      <form method="POST" action="#" enctype="multipart/form-data" class="space-y-4">
+    <!-- Form Upload với UX Loading -->
+    <div class="max-w-xl mx-auto panel border-2 border-dashed border-indigo-200 p-4">
+      <form method="POST" enctype="multipart/form-data" 
+            onsubmit="let btn = document.getElementById('btnSubmit'); btn.innerHTML = '⏳ AI đang xử lý...'; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');">
         {% csrf_token %}
-        <div>
-          <input type="file" name="document" accept=".pdf,.txt,.docx" required
-                 class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer border border-gray-300 rounded-lg bg-white p-2">
-        </div>
-
-        <div class="flex justify-end space-x-3 pt-2">
-          <button type="button" onclick="document.getElementById('uploadDocForm').style.display = 'none';" class="px-4 py-2 text-sm text-gray-600 hover:underline">Hủy</button>
-          <button type="submit" class="btn btn-primary text-sm">
+        
+        <input type="file" name="document" accept=".pdf,.txt,.docx" required
+              class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer border rounded-lg bg-white p-2 mb-4">
+        
+        <div class="flex justify-end">
+          <button id="btnSubmit" type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
             🚀 Bắt đầu tạo bài học
           </button>
         </div>
