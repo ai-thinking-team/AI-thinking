@@ -1,5 +1,6 @@
 from django.db import migrations
 
+
 def create_sample_data(apps, schema_editor):
     Subject = apps.get_model('other_quiz', 'Subject')
     Lesson = apps.get_model('other_quiz', 'Lesson')
@@ -9,7 +10,7 @@ def create_sample_data(apps, schema_editor):
     subject = Subject.objects.create(
         id="sub_triet_hoc",
         title="Triết học Mác - Lênin",
-        icon="🧠",
+        icon="📖",
         description="Lý luận về quy luật vận động chung nhất của tự nhiên, xã hội và tư duy."
     )
 
@@ -34,7 +35,8 @@ def create_sample_data(apps, schema_editor):
             "D. Đồng nhất vật chất với khối lượng"
         ],
         correct_answer="A. Định nghĩa thông qua sự đối lập với ý thức",
-        explanation="Lênin định nghĩa vật chất bằng cách đặt nó trong sự đối lập với ý thức: Vật chất là thực tại khách quan được đem lại cho con người trong cảm giác."
+        explanation="Lênin định nghĩa vật chất bằng cách đặt nó trong sự đối lập với ý thức: Vật chất là thực tại khách quan được đem lại cho con người trong cảm giác.",
+        is_correct=False
     )
 
     # 4. Tạo câu hỏi trả lời ngắn / Rubric (q2)
@@ -45,12 +47,15 @@ def create_sample_data(apps, schema_editor):
         q_type="RUBRIC",
         correct_answer="Ý thức là sự phản ánh năng động, sáng tạo thế giới khách quan vào bộ óc con người; là hình ảnh chủ quan của thế giới khách quan.",
         rubric_keywords=["phản ánh", "sáng tạo", "thế giới khách quan", "bộ óc", "hình ảnh chủ quan"],
-        explanation="Ý thức không phải là sự phản ánh thụ động, bê nguyên xi mà là quá trình thu nhận, chọn lọc và sáng tạo thông tin."
+        explanation="Ý thức không phải là sự phản ánh thụ động, bê nguyên xi mà là quá trình thu nhận, chọn lọc và sáng tạo thông tin.",
+        is_correct=False
     )
+
 
 def reverse_sample_data(apps, schema_editor):
     Subject = apps.get_model('other_quiz', 'Subject')
     Subject.objects.filter(id="sub_triet_hoc").delete()
+
 
 class Migration(migrations.Migration):
 
