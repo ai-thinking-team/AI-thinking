@@ -1,5 +1,6 @@
 from django.db import migrations
 
+
 def create_sample_data(apps, schema_editor):
     Subject = apps.get_model('other_quiz', 'Subject')
     Lesson = apps.get_model('other_quiz', 'Lesson')
@@ -9,7 +10,7 @@ def create_sample_data(apps, schema_editor):
     subject = Subject.objects.create(
         id="sub_triet_hoc",
         title="Triết học Mác - Lênin",
-        icon="🧠",
+        icon="📖",
         description="Lý luận về quy luật vận động chung nhất của tự nhiên, xã hội và tư duy."
     )
 
@@ -50,9 +51,11 @@ def create_sample_data(apps, schema_editor):
         is_correct=False
     )
 
+
 def reverse_sample_data(apps, schema_editor):
     Subject = apps.get_model('other_quiz', 'Subject')
     Subject.objects.filter(id="sub_triet_hoc").delete()
+
 
 class Migration(migrations.Migration):
 

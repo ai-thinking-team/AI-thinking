@@ -41,22 +41,22 @@
               {% endfor %}
             </div>
 
-            <button type="submit" class="btn btn-primary text-sm shadow-sm transition-all duration-200">Kiểm tra đáp án</button>
+            <button type="submit" class="btn btn-primary text-sm shadow-sm transition-all duration-200">Submit</button>
           </form>
 
           {% if q.eval %}
             <div class="mt-5 p-4 rounded-lg border {% if q.eval.is_correct %}bg-green-50 border-green-300 text-green-900{% else %}bg-red-50 border-red-300 text-red-900{% endif %}">
               <div class="flex items-center space-x-2 mb-2 font-bold text-lg">
                 {% if q.eval.is_correct %}
-                  <span>✅ Chính xác!</span>
+                  <span>✅ Correct!</span>
                 {% else %}
-                  <span>❌ Chưa chính xác!</span>
+                  <span>❌ Incorrect!</span>
                 {% endif %}
               </div>
               <div class="pl-7">
-                <p class="text-sm"><strong>Đáp án đúng:</strong> {{ q.correct_answer }}</p>
+                <p class="text-sm"><strong>Answer:</strong> {{ q.correct_answer }}</p>
                 {% if q.explanation %}
-                  <p class="text-sm mt-1"><strong>Giải thích:</strong> {{ q.explanation }}</p>
+                  <p class="text-sm mt-1"><strong>Explanation:</strong> {{ q.explanation }}</p>
                 {% endif %}
               </div>
             </div>
@@ -70,11 +70,11 @@
             <input type="hidden" name="action" value="submit_rubric">
 
             <div class="mb-4">
-              <textarea name="rubric_text" rows="4" placeholder="Nhập câu trả lời của bạn vào đây..."
+              <textarea name="rubric_text" rows="4" placeholder="Enter your answer here..."
                         class="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-y">{{ q.eval.user_text|default:'' }}</textarea>
             </div>
 
-            <button type="submit" class="btn btn-primary text-sm shadow-sm transition-all duration-200">Nộp bài & Chấm tự động</button>
+            <button type="submit" class="btn btn-primary text-sm shadow-sm transition-all duration-200">Submit</button>
           </form>
 
           {% if q.eval %}
@@ -82,24 +82,24 @@
               <div class="mb-3">
                 <div class="flex items-center justify-between mb-1.5">
                   {% if q.eval.is_passed %}
-                    <span class="text-green-800 font-bold flex items-center"><span class="mr-2">✅</span> ĐẠT YÊU CẦU</span>
+                    <span class="text-green-800 font-bold flex items-center"><span class="mr-2">✅</span> Passed</span>
                   {% else %}
-                    <span class="text-amber-800 font-bold flex items-center"><span class="mr-2">⚠️</span> CHƯA ĐẠT</span>
+                    <span class="text-amber-800 font-bold flex items-center"><span class="mr-2">⚠️</span> Failed</span>
                   {% endif %}
-                  <span class="font-bold {% if q.eval.is_passed %}text-green-700{% else %}text-amber-700{% endif %}">{{ q.eval.score_percent }}% Độ khớp</span>
+                  <span class="font-bold {% if q.eval.is_passed %}text-green-700{% else %}text-amber-700{% endif %}"> - Score: {{ q.eval.score_percent }}% </span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2">
                   <div class="h-2 rounded-full transition-all duration-500 {% if q.eval.is_passed %}bg-green-500{% else %}bg-amber-500{% endif %}" style="--p: {{ q.eval.score_percent }}%; width: var(--p);"></div>
                 </div>
-                <p class="text-xs text-gray-500 mt-1 text-right">Cần tối thiểu 75% để đạt</p>
+                <p class="text-xs text-gray-500 mt-1 text-right">Need at least 75% to pass</p>
               </div>
 
               <div class="pt-3 border-t {% if q.eval.is_passed %}border-green-200{% else %}border-amber-200{% endif %}">
-                <p class="text-sm text-gray-800 mb-2"><strong>Đáp án chuẩn tham chiếu:</strong></p>
+                <p class="text-sm text-gray-800 mb-2"><strong>Reference answer:</strong></p>
                 <div class="bg-white p-3 rounded border border-gray-200 text-sm text-gray-700 mb-2">{{ q.correct_answer }}</div>
                 
                 {% if q.explanation %}
-                  <p class="text-sm text-gray-800 mt-3"><strong>Nhận xét:</strong></p>
+                  <p class="text-sm text-gray-800 mt-3"><strong>Requirements:</strong></p>
                   <p class="text-sm text-gray-600 italic">{{ q.explanation }}</p>
                 {% endif %}
               </div>
@@ -110,7 +110,7 @@
       </div>
     {% empty %}
       <div class="panel text-center py-10 border border-dashed border-gray-300">
-        <p class="text-gray-500 text-lg">Chưa có câu hỏi nào trong bài học này.</p>
+        <p class="text-gray-500 text-lg">No question available.</p>
       </div>
     {% endfor %}
   </div>
@@ -141,7 +141,7 @@
           if (actionType === "submit_mc") {
             const hasSelection = form.querySelector('input[type="radio"]:checked');
             if (!hasSelection) {
-              alert("⚠️ Vui lòng chọn một đáp án trước khi kiểm tra!");
+              alert("⚠️ Choose an answer before submitting!");
               return;
             }
           }
@@ -178,7 +178,7 @@
             }
           } catch (err) {
             console.error(err);
-            alert("❌ Lỗi kết nối mạng hoặc server không phản hồi!");
+            alert("❌ Can't connect to the server!");
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
             submitBtn.classList.remove("opacity-70", "cursor-not-allowed");
