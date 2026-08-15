@@ -1,5 +1,4 @@
 import datetime
-import json
 from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError
@@ -48,12 +47,11 @@ def _ai_json(*, system_prompt, user_prompt, response_schema, files=None):
     language_instruction = ai_prompts.LANGUAGE_INSTRUCTIONS.get(
         translation.get_language(), ai_prompts.LANGUAGE_INSTRUCTIONS['ja'],
     )
-    text = generate_ai_response(
+    return generate_ai_response(
         system_prompt=f'{system_prompt}\n{language_instruction}',
         user_prompt=user_prompt, response_schema=response_schema,
         files=files,
     )
-    return json.loads(text)
 
 
 def _unit_material_files(unit):

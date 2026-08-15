@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Myself Material Adventure{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <a href="{% url 'lang_quiz:material_setup' 'myself' %}" class="back-link">← My Materials</a>
+  <span class="hero-badge">MY MATERIAL ADVENTURE</span>
+  <h1>{{ pack.source_name }}</h1>
+  <p>{{ pack.instruction }}</p>
+</div>
+
+{% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+<section class="setup-section world-map world-map-myself">
+  <div class="world-map-header">
+    <div>
+      <span class="section-kicker">ADVENTURE MODE</span>
+      <h2>World 1 · My Material Quest</h2>
+      <p>同じ教材から作られた全5ステージです。各10問、70%以上で次のステージが解放されます。回答形式：{% if pack.answer_mode == 'multiple_choice' %}5択{% else %}タイピング{% endif %}</p>
+    </div>
+    <a class="btn btn-secondary" href="{% url 'lang_quiz:material_setup' 'myself' %}">＋ Add New Material</a>
+  </div>
+  <div class="world-progress" aria-label="My material progress">
+    <div><strong>{{ cleared_count }} / 5 STAGES CLEARED</strong><span>{{ world_progress_percent }}%</span></div>
+    <div class="world-progress-track"><i style="width: {{ world_progress_percent }}%"></i></div>
+  </div>
+  <ol class="stage-path stage-path-five" aria-label="My material stages">
+    {% for stage in stages %}
+      <li class="stage-stop {% if stage.completed %}stage-complete{% elif stage.unlocked %}stage-open{% else %}stage-locked{% endif %} {% if stage.boss %}stage-final{% endif %}">
+        {% if stage.unlocked %}<a href="{% url 'lang_quiz:start_myself_stage' pack.id stage.rank %}" aria-label="Stage {{ stage.number }} {{ stage.title }}">
+        {% else %}<div class="stage-locked-card" aria-label="Stage {{ stage.number }} locked">
+        {% endif %}
+          <span class="stage-status">{% if stage.completed %}✓{% elif stage.unlocked %}▶{% else %}🔒{% endif %}</span>
+          <strong class="stage-number">{{ stage.number }}</strong>
+          <span class="stage-title">{{ stage.title }}</span>
+          <small>{{ stage.level }} · 10 QUESTIONS</small>
+          <span class="stage-score">{% if stage.completed %}CLEAR · {% endif %}{{ stage.score_percent }}%</span>
+        {% if stage.unlocked %}</a>{% else %}</div>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  <div class="world-legend"><span>▶ PLAYABLE</span><span>✓ CLEARED</span><span>🔒 CLEAR THE PREVIOUS STAGE</span><strong>Goal: 1-5</strong></div>
+</section>
+{% endblock %}

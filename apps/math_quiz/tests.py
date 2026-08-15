@@ -1,5 +1,4 @@
 import datetime
-import json
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -25,40 +24,40 @@ from .templatetags.math_extras import latexify
 
 
 def _fake_generate_ai_response(*, system_prompt, user_prompt, response_schema=None, files=None):
-    """Routes to canned JSON based on which prompt/schema is being asked
+    """Routes to a canned dict based on which prompt/schema is being asked
     for, so AI-path tests never make a real network call."""
     if 'セクションを' in system_prompt and '設計' in system_prompt:
-        return json.dumps({'sections': [
+        return {'sections': [
             {'title': 'AI生成セクション1', 'content': 'AIが生成した内容1'},
             {'title': 'AI生成セクション2', 'content': 'AIが生成した内容2'},
-        ]})
+        ]}
     if '練習問題を1問作成' in system_prompt:
-        return json.dumps({'problem': 'AIが生成した問題: 2 + 2 は何ですか？'})
+        return {'problem': 'AIが生成した問題: 2 + 2 は何ですか？'}
     if '採点してください' in system_prompt:
         is_correct = 'CORRECT_ANSWER' in user_prompt
-        return json.dumps({'is_correct': is_correct, 'explanation': 'AIによる採点説明です。'})
+        return {'is_correct': is_correct, 'explanation': 'AIによる採点説明です。'}
     if '誤解を診断する専門家' in system_prompt:
-        return json.dumps({'question': 'AIによる診断質問です。', 'possible_misconception': '符号ミス'})
+        return {'question': 'AIによる診断質問です。', 'possible_misconception': '符号ミス'}
     if '自信度が低いと申告' in system_prompt:
-        return json.dumps({'question': 'AIによる確認質問です。'})
+        return {'question': 'AIによる確認質問です。'}
     if '理解を確認するための質問に回答しました' in system_prompt:
         understanding = 'CLEAR' if 'CLEAR_VERIFICATION_ANSWER' in user_prompt else 'UNCLEAR'
-        return json.dumps({'understanding': understanding})
+        return {'understanding': understanding}
     if 'まだ誤解が残っていないか' in system_prompt:
-        return json.dumps({'question': 'AIによるTargeted Teach-Back質問です。'})
+        return {'question': 'AIによるTargeted Teach-Back質問です。'}
     if 'Teach-Back' in system_prompt and 'CLEAR_UNDERSTANDING' in system_prompt:
         evaluation = 'CLEAR_UNDERSTANDING' if 'CLEAR_TEACH_BACK_ANSWER' in user_prompt else 'PARTIAL_UNDERSTANDING'
         follow_up = '' if evaluation == 'CLEAR_UNDERSTANDING' else 'AIによる追質問です。'
-        return json.dumps({
+        return {
             'evaluation': evaluation, 'feedback': 'AIによるTeach-Backフィードバックです。',
             'follow_up_question': follow_up,
-        })
+        }
     if 'ヒントを段階的に与える' in system_prompt:
-        return json.dumps({'content': 'AIによるヒントです。'})
+        return {'content': 'AIによるヒントです。'}
     if 'Transfer Task' in system_prompt:
-        return json.dumps({'problem': 'AIが生成した応用問題です。'})
+        return {'problem': 'AIが生成した応用問題です。'}
     if '習熟レベルで完了できません' in system_prompt:
-        return json.dumps({'recommendation': 'AIによる復習提案です。'})
+        return {'recommendation': 'AIによる復習提案です。'}
     raise AssertionError(f'Unexpected system prompt in test: {system_prompt[:50]}')
 
 
@@ -883,7 +882,7 @@ class MathUnitMaterialTests(TestCase):
         response_patcher = patch('apps.math_quiz.services.generate_ai_response')
         mock_response = response_patcher.start()
         self.addCleanup(response_patcher.stop)
-        mock_response.return_value = json.dumps({'sections': [{'title': 'セクション1', 'content': '内容'}]})
+        mock_response.return_value = {'sections': [{'title': 'セクション1', 'content': '内容'}]}
 
         services.generate_sections(unit, unit.name, [(b'creation time bytes', 'application/pdf')])
 
@@ -963,7 +962,7 @@ class MathAIGenerationTests(TestCase):
         objects) must also fall back — the response not raising doesn't
         mean it's usable."""
         self.mock_response.side_effect = None
-        self.mock_response.return_value = json.dumps({'sections': []})
+        self.mock_response.return_value = {'sections': []}
         services.generate_sections(self.unit, self.unit.name)
         titles = list(self.unit.sections.order_by('order').values_list('title', flat=True))
         self.assertEqual(titles, [title for title, _ in demo_content.DEFAULT_SECTION_TEMPLATE])
@@ -1007,7 +1006,7 @@ class MathAIGenerationTests(TestCase):
         section = Section.objects.create(unit=self.unit, title='セクションE', content='内容')
         session, _ = services.get_or_create_section_session(section=section, browser_session_key='ai-browser-5')
         self.mock_response.side_effect = None
-        self.mock_response.return_value = json.dumps({'problem': '  '})
+        self.mock_response.return_value = {'problem': '  '}
         problem = services.ensure_first_problem(session=session)
         demo_problem, _ = demo_content.build_problem(section, kind='first')
         self.assertEqual(problem, demo_problem)
@@ -1272,13 +1271,13 @@ class MathAIFallbackGenerationTests(TestCase):
     def test_ai_success_but_off_topic_falls_back_to_subject_matched_problem(self):
         # This is the exact reported bug reproduced directly: AI call
         # "succeeds" but hands back an unrelated linear equation.
-        self.mock_response.return_value = json.dumps({'problem': '6x + 1 = -47'})
+        self.mock_response.return_value = {'problem': '6x + 1 = -47'}
         problem = services._generate_problem(section=self.section, kind='first')
         self.assertIn(problem, self._catalog_problem_texts())
 
     def test_ai_success_with_on_topic_content_is_used_as_is(self):
         on_topic = 'フーリエ変換を用いてこの信号の周波数成分を求めなさい。'
-        self.mock_response.return_value = json.dumps({'problem': on_topic})
+        self.mock_response.return_value = {'problem': on_topic}
         problem = services._generate_problem(section=self.section, kind='first')
         self.assertEqual(problem, on_topic)
 
@@ -1529,7 +1528,7 @@ class MathProblemDedupTests(TestCase):
         unit = Unit.objects.create(name='群論', is_demo=False)
         section = Section.objects.create(unit=unit, title='セクションA', content='内容')
         excluded = 'すでに出題済みの問題文'
-        mock_response.return_value = json.dumps({'problem': excluded})
+        mock_response.return_value = {'problem': excluded}
 
         problem = services._generate_problem(section=section, kind='first', exclude={excluded})
         self.assertNotEqual(problem, excluded)
@@ -1649,7 +1648,7 @@ class MathCrossSectionDedupTests(TestCase):
         response_patcher = patch('apps.math_quiz.services.generate_ai_response')
         mock_response = response_patcher.start()
         self.addCleanup(response_patcher.stop)
-        mock_response.return_value = json.dumps({'problem': problem_a})
+        mock_response.return_value = {'problem': problem_a}
 
         session_b, _ = services.get_or_create_section_session(
             section=section_b, browser_session_key='cross-dedup-browser',
@@ -1698,7 +1697,7 @@ class MathCrossSectionDedupTests(TestCase):
         response_patcher = patch('apps.math_quiz.services.generate_ai_response')
         mock_response = response_patcher.start()
         self.addCleanup(response_patcher.stop)
-        mock_response.return_value = json.dumps({'problem': '新しい問題文'})
+        mock_response.return_value = {'problem': '新しい問題文'}
 
         session_b, _ = services.get_or_create_section_session(
             section=section_b, browser_session_key='prompt-browser',
@@ -2590,7 +2589,7 @@ class MathI18nTests(TestCase):
         response_patcher = patch('apps.math_quiz.services.generate_ai_response')
         self.addCleanup(response_patcher.stop)
         mock_response = response_patcher.start()
-        mock_response.return_value = json.dumps({'problem': 'What is 2 + 2?'})
+        mock_response.return_value = {'problem': 'What is 2 + 2?'}
 
         unit = Unit.objects.create(name='英語AIテスト単元', is_demo=False)
         section = Section.objects.create(unit=unit, title='セクションA', content='内容')
@@ -2617,7 +2616,7 @@ class MathI18nTests(TestCase):
         response_patcher = patch('apps.math_quiz.services.generate_ai_response')
         self.addCleanup(response_patcher.stop)
         mock_response = response_patcher.start()
-        mock_response.return_value = json.dumps({'sections': [{'title': 'What Is Probability?', 'content': '...'}]})
+        mock_response.return_value = {'sections': [{'title': 'What Is Probability?', 'content': '...'}]}
 
         unit = Unit.objects.create(name='English Language Test Unit', is_demo=False)
         with translation.override('en'):

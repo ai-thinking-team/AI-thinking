@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -11,7 +12,7 @@ GEMINI_ENDPOINT = (
     f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 )
 
-DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
+DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b'
 GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
 # name -> its required API key env var
@@ -38,6 +39,32 @@ def _provider_order():
     return _DEFAULT_PROVIDER_ORDER
 
 
+def _json_schema(schema):
+    """Convert the app's compact schema notation (e.g. a bare 'string', or
+    a dict of field name -> type with no explicit 'type' key) to strict
+    JSON Schema. A schema that already looks like JSON Schema (has a
+    top-level 'type') is returned unchanged, so callers that already build
+    full JSON Schema (apps/math_quiz/ai_prompts.py) and callers that use
+    the compact shorthand (generate_questions_from_text below) can share
+    this one converter."""
+    if isinstance(schema, str):
+        return {'type': schema}
+    if isinstance(schema, list):
+        item = schema[0] if schema else 'string'
+        return {'type': 'array', 'items': _json_schema(item)}
+    if isinstance(schema, dict) and 'type' in schema:
+        return schema
+    if isinstance(schema, dict):
+        properties = {key: _json_schema(value) for key, value in schema.items()}
+        return {
+            'type': 'object',
+            'properties': properties,
+            'required': list(properties),
+            'additionalProperties': False,
+        }
+    return {'type': 'string'}
+
+
 def generate_ai_response(
     *, system_prompt, user_prompt, response_schema=None, files=None
 ):
@@ -55,7 +82,30 @@ def generate_ai_response(
     and ignores this, so whenever `files` is non-empty Gemini is tried
     first regardless of AI_PROVIDER: trying a file-blind provider first
     would silently succeed while ignoring every attached file.
+
+    Returns the provider's raw text when no response_schema is given.
+    When one is given (as either full JSON Schema or the compact
+    shorthand — see _json_schema), the response is parsed here and the
+    resulting dict/list is returned directly: passing a schema is the
+    caller's declaration that it wants structured output, so parsing is
+    this function's job rather than every caller's. A schema whose
+    natural shape is a list gets wrapped in a top-level object for the
+    request (both providers' structured-output modes require that) and
+    unwrapped again before returning.
     """
+    converted_schema = None
+    unwrap_array = False
+    if response_schema is not None:
+        converted_schema = _json_schema(response_schema)
+        if converted_schema.get('type') == 'array':
+            converted_schema = {
+                'type': 'object',
+                'properties': {'items': converted_schema},
+                'required': ['items'],
+                'additionalProperties': False,
+            }
+            unwrap_array = True
+
     generators = {
         'gemini': _generate_gemini_response,
         'groq': _generate_groq_response,
@@ -73,16 +123,32 @@ def generate_ai_response(
             'AI support is unavailable. Continue with the curated diagnostic and hint ladder.'
         )
 
+    text = None
     last_error = None
     for generate in attempts:
         try:
-            return generate(
+            text = generate(
                 system_prompt=system_prompt, user_prompt=user_prompt,
-                response_schema=response_schema, files=files,
+                response_schema=converted_schema, files=files,
             )
+            break
         except AIEngineError as exc:
             last_error = exc
-    raise last_error
+    if text is None:
+        raise last_error
+
+    if response_schema is None:
+        return text
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise InvalidAIResponse('AI provider returned invalid structured output.') from exc
+    if not unwrap_array:
+        return result
+    try:
+        return result['items']
+    except (KeyError, TypeError) as exc:
+        raise InvalidAIResponse('AI provider returned invalid structured output.') from exc
 
 
 REQUEST_TIMEOUT_SECONDS = 45
@@ -94,6 +160,11 @@ REQUEST_TIMEOUT_SECONDS = 45
 # per-provider since every request goes through this one function.
 _USER_AGENT = 'Mozilla/5.0'
 
+# Matches Groq's API key format (gsk_...) so it never leaks into a
+# surfaced error message if it happens to appear in the provider's
+# response body (e.g. an auth error echoing the bad key back).
+_API_KEY_PATTERN = re.compile(r'gsk_[A-Za-z0-9_-]+')
+
 
 def _request_json(request):
     request.add_header('User-Agent', _USER_AGENT)
@@ -101,7 +172,7 @@ def _request_json(request):
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode('utf-8', errors='replace')
+        detail = _API_KEY_PATTERN.sub('[redacted]', exc.read().decode('utf-8', errors='replace'))
         if exc.code == 429:
             raise AIServiceUnavailable(
                 'AI利用の上限（レート制限）に達しました。しばらく待ってから再試行してください。'
@@ -180,6 +251,7 @@ def _generate_groq_response(*, system_prompt, user_prompt, response_schema, file
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_prompt},
         ],
+        'max_completion_tokens': 6000,
     }
     if response_schema is not None:
         payload['response_format'] = {
@@ -201,3 +273,82 @@ def _generate_groq_response(*, system_prompt, user_prompt, response_schema, file
         return body['choices'][0]['message']['content']
     except (KeyError, IndexError) as exc:
         raise InvalidAIResponse('AI provider returned an unexpected response shape.') from exc
+
+
+# --- Legacy upload workflow (lang_quiz) --------------------------------
+
+_MATERIAL_QUESTION_SCHEMA = [{
+    'prompt': 'string',
+    'reference_answer': 'string',
+    'question_type': 'string',
+    'skill_focus': 'string',
+    'rubric_target_gap': 'string',
+    'transfer_prompt': 'string',
+}]
+
+
+def generate_questions_from_text(raw_text, subject_name='Languages', count=10, section='reading'):
+    """Compatibility entry point for the legacy upload workflow, now using
+    the shared generate_ai_response() boundary (Gemini/Groq) instead of
+    calling Groq directly."""
+    material = (raw_text or '').strip()[:12000]
+    if not material:
+        return []
+    try:
+        specs = generate_ai_response(
+            system_prompt=(
+                'You are an English teacher. Create questions only from the supplied material. '
+                'Return exactly the requested count. Use short, unambiguous reference answers. '
+                'For reading, test detail, inference, main idea, vocabulary in context, and cause/effect. '
+                'For grammar, use fill-in-the-blank, error correction, and sentence transformation.'
+            ),
+            user_prompt=(
+                f'Subject: {subject_name}\nSection: {section}\nQuestion count: {count}\n'
+                f'Material:\n{material}'
+            ),
+            response_schema=_MATERIAL_QUESTION_SCHEMA,
+        )
+        if isinstance(specs, list) and len(specs) >= count:
+            result = []
+            for spec in specs[:count]:
+                if not isinstance(spec, dict) or not spec.get('prompt') or not spec.get('reference_answer'):
+                    return []
+                result.append({
+                    'prompt': str(spec['prompt']),
+                    'reference_answer': str(spec['reference_answer']).casefold(),
+                    'question_type': str(spec.get('question_type') or section.upper()),
+                    'skill_focus': str(spec.get('skill_focus') or ''),
+                    'rubric': {
+                        'target_gap': str(spec.get('rubric_target_gap') or (
+                            'context_misunderstanding' if section == 'reading' else 'grammar_misconception'
+                        )),
+                        'source': 'uploaded_file',
+                    },
+                    'transfer_prompt': str(spec.get('transfer_prompt') or ''),
+                })
+            return result
+    except (AIServiceUnavailable, InvalidAIResponse):
+        pass
+
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r'(?<=[.!?])\s+|\r?\n', material)
+        if len(sentence.strip()) > 20
+    ]
+    questions = []
+    for index in range(count):
+        sentence = sentences[index % len(sentences)] if sentences else material
+        words = re.findall(r'\b[A-Za-z]{3,}\b', sentence)
+        answer = (words[index % len(words)] if words else sentence.split()[0]).casefold()
+        questions.append({
+            'prompt': f'Complete or explain this {section} excerpt: "{sentence.replace(answer, "____", 1)}"',
+            'reference_answer': answer,
+            'question_type': section.upper(),
+            'skill_focus': 'Text evidence' if section == 'reading' else 'Grammar in context',
+            'rubric': {
+                'target_gap': 'context_misunderstanding' if section == 'reading' else 'grammar_misconception',
+                'source': 'uploaded_file',
+            },
+            'transfer_prompt': 'Write one new sentence using the same idea or rule.',
+        })
+    return questions

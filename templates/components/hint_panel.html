@@ -1,24 +1,5 @@
 <aside class="hint-panel">
-  <h2>Five-level hint ladder</h2>
-  <ol>
-    <li>Guiding question</li>
-    <li>Concept reminder</li>
-    <li>Related example</li>
-    <li>Partial method</li>
-    <li class="hint-last-resort">Complete solution — last resort</li>
-  </ol>
-  {% if hint_usage %}
-    <h3>Unlocked hints</h3>
-    <ol>
-      {% for hint in hint_usage %}
-        <li class="{% if hint.level == 5 %}hint-last-resort{% endif %}"><strong>Level {{ hint.level }}:</strong> {{ hint.content }}</li>
-      {% endfor %}
-    </ol>
-  {% endif %}
-  <p>After a hint, save a new revision before requesting the next level. Level 5 gives away the full answer — only unlock it if the first four hints were not enough.</p>
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="hint">
-    <button type="submit">Unlock next hint</button>
-  </form>
+  <h2>Four-level hint ladder</h2>
+  <ol><li>Guiding question</li><li>Concept reminder</li><li>Related example</li><li>Partial method</li></ol>
+  <p>Each next hint requires another learner action. Hints are disabled during Transfer Check.</p>
 </aside>

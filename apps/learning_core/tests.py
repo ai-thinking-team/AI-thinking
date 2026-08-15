@@ -22,14 +22,7 @@ class WorkflowStateMachineTests(SimpleTestCase):
         self.assertFalse(ai_assistance_allowed(WorkflowState.TOPIC_SELECTED))
         self.assertFalse(ai_assistance_allowed(WorkflowState.FIRST_ATTEMPT))
         self.assertTrue(ai_assistance_allowed(WorkflowState.DIAGNOSIS))
-        self.assertTrue(ai_assistance_allowed(WorkflowState.VERIFICATION))
         self.assertFalse(hints_allowed(WorkflowState.TRANSFER_TASK))
-
-    def test_response_evaluation_can_branch_to_verification(self):
-        validate_transition(WorkflowState.RESPONSE_EVALUATION, WorkflowState.VERIFICATION)
-        validate_transition(WorkflowState.VERIFICATION, WorkflowState.TEACH_BACK)
-        with self.assertRaises(InvalidWorkflowTransition):
-            validate_transition(WorkflowState.VERIFICATION, WorkflowState.DIAGNOSIS)
 
     def test_mastery_requires_unassisted_transfer(self):
         self.assertFalse(mastery_requirements_met(

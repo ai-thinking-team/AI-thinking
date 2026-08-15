@@ -1,17 +1,69 @@
 {% extends "base.html" %}
 
-{% block title %}Learning progress{% endblock %}
+{% block title %}学習進捗・スコア履歴 & 復習ダッシュボード{% endblock %}
 
 {% block content %}
-<h1>Learning progress</h1>
-<p>This dashboard reports evidence from this browser session, not only quiz scores.</p>
+<section class="hero-section">
+  <h1>学習進捗 & スコア履歴 (Progress & Review Dashboard)</h1>
+  <p class="hero-lead">
+    コースごとのスコア・正答率・ヒント利用履歴を都度記録し、誤りがあった単元をいつでも復習（Review）できます。
+  </p>
+</section>
+
 {% if learning_sessions %}
-  <ul class="session-list">
-  {% for session in learning_sessions %}
-    <li><strong>{{ session.topic.subject.name }} — {{ session.topic.name }}</strong>: {{ session.get_current_state_display }}</li>
-  {% endfor %}
-  </ul>
+  <div class="panel">
+    <h2>コース別スコア履歴一覧</h2>
+    <table class="progress-table">
+      <thead>
+        <tr>
+          <th>教科 / コース名</th>
+          <th>最終状態</th>
+          <th>スコア (正答率)</th>
+          <th>最終更新日時</th>
+          <th>アクション</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for session in learning_sessions %}
+          <tr>
+            <td>
+              <strong>{{ session.topic.subject.name }}</strong>
+              <div class="small-text">{{ session.topic.name }}</div>
+            </td>
+            <td>
+              {% if session.mastered %}
+                <span class="badge badge-success">🌟 Mastered! (習得済み)</span>
+              {% elif session.current_state == 'NEEDS_REVIEW' %}
+                <span class="badge badge-warning">⚠️ Needs Review (要復習)</span>
+              {% else %}
+                <span class="badge badge-info">{{ session.get_current_state_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="score-display">
+                <span class="score-number">{{ session.score_percent }}%</span>
+                {% if session.score_percent == 100 %}
+                  <span class="badge badge-success">100% PERFECT!</span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="small-text">{{ session.updated_at|date:"Y/m/d H:i" }}</td>
+            <td>
+              {% if session.topic.subject.slug == 'languages' %}
+                <a href="{% url 'lang_quiz:exercise' %}" class="btn btn-secondary btn-sm">🔄 復習・再挑戦する</a>
+              {% else %}
+                <a href="{% url 'core:home' %}" class="btn btn-secondary btn-sm">詳細を見る</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 {% else %}
-  <p>No learning evidence has been recorded in this browser yet.</p>
+  <div class="panel">
+    <p>まだこのブラウザセッションでの学習記録がありません。</p>
+    <a href="{% url 'core:home' %}" class="btn btn-primary">コースを選択して学習を開始する</a>
+  </div>
 {% endif %}
 {% endblock %}

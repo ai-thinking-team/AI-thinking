@@ -59,6 +59,10 @@ class LearningSession(models.Model):
         choices=WorkflowState.choices,
         default=WorkflowState.TOPIC_SELECTED,
     )
+    score_percent = models.PositiveSmallIntegerField(default=0)
+    total_questions = models.PositiveIntegerField(default=1)
+    correct_count = models.PositiveIntegerField(default=0)
+    mastered = models.BooleanField(default=False)
     started_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -69,6 +73,7 @@ class LearningSession(models.Model):
                 name='unique_browser_topic_session',
             )
         ]
+
 
 
 class LearnerAttempt(models.Model):
@@ -87,38 +92,17 @@ class LearnerAttempt(models.Model):
     )
     revision_number = models.PositiveIntegerField(default=0)
     evaluation = models.JSONField(default=dict, blank=True)
-    diagnosis_question = models.TextField(blank=True, default='')
-    suspected_misconception = models.CharField(max_length=100, blank=True)
-    verification_question = models.TextField(blank=True, default='')
-    verification_answer = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
 
 class HintUsage(models.Model):
     learner_attempt = models.ForeignKey(LearnerAttempt, on_delete=models.CASCADE, related_name='hint_usage')
-    level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(4)])
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ('created_at',)
-
-
-class DiagnosticQuizAttempt(models.Model):
-    class Source(models.TextChoices):
-        AI = 'ai', 'AI generated'
-        CURATED = 'curated', 'Curated fallback'
-
-    learning_session = models.OneToOneField(
-        LearningSession,
-        on_delete=models.CASCADE,
-        related_name='diagnostic_quiz_attempt',
-    )
-    question = models.TextField()
-    answer = models.TextField(blank=True)
-    source = models.CharField(max_length=20, choices=Source.choices, default=Source.CURATED)
-    created_at = models.DateTimeField(auto_now_add=True)
-    answered_at = models.DateTimeField(null=True, blank=True)
 
 
 class MisconceptionRecord(models.Model):
@@ -144,7 +128,6 @@ class TeachBackAttempt(models.Model):
     response = models.TextField()
     evaluation = models.CharField(max_length=40, blank=True)
     feedback = models.TextField(blank=True)
-    follow_up_question = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -168,5 +151,4 @@ class TransferAttempt(models.Model):
     )
     used_assistance = models.BooleanField(default=False)
     passed = models.BooleanField(default=False)
-    evaluation = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
