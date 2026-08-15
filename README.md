@@ -15,6 +15,16 @@ AIを当たり前に使う時代に、学生が自分で考え、判断し、成
 - Python / Django
 - 必要になったらライブラリを追加していく（現時点では未確定）
 
+### Groqによる自動作問
+
+`.env.example` をコピーして `.env` を作り、Groq Consoleで発行したAPIキーを設定してください。
+APIキーをコードやGitへ保存しないでください。
+
+```dotenv
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
 ### セットアップ（Mac / Linux）
 
 ```bash

@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Language Learning - Diagnostic Quiz &amp; 9-Stage Process{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
+{% block content %}
+<div class="exercise-header">
+  <a href="{% url 'lang_quiz:home' %}" class="back-link">&larr; Back to Language Hub</a>
+  <h1>Languages — Diagnostic Quiz</h1>
+  <p class="subtitle">Topic: <strong>{{ question.activity.concept.topic.name }}</strong> / Concept: <strong>{{ question.activity.concept.name }}</strong></p>
+</div>
+
+<!-- Workflow State Bar -->
+<div class="workflow-stepper">
+  <div class="step-pill {% if learning_session.current_state == 'DIAGNOSTIC_QUIZ' or learning_session.current_state == 'FIRST_ATTEMPT' %}active{% endif %}">1. Diagnostic Quiz &amp; Self-Answer</div>
+  <div class="step-pill {% if learning_session.current_state == 'RESPONSE_EVALUATION' or learning_session.current_state == 'DIAGNOSIS' or learning_session.current_state == 'GUIDED_REVISION' %}active{% endif %}">2. Error Evaluation &amp; Guided Hints</div>
+  <div class="step-pill {% if learning_session.current_state == 'TEACH_BACK' %}active{% endif %}">3. Teach-Back (Explain in your own words)</div>
+  <div class="step-pill {% if learning_session.current_state == 'TRANSFER_TASK' %}active{% endif %}">4. Transfer Check (Apply the knowledge)</div>
+  <div class="step-pill {% if learning_session.current_state == 'MASTERED' or learning_session.current_state == 'NEEDS_REVIEW' %}completed{% endif %}">5. Progress Update</div>
+</div>
+
+{% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="exercise-grid">
+  <!-- Left Side: Problem & Current Task -->
+  <div class="main-column">
+    
+    {% if learning_session.current_state == 'MASTERED' or learning_session.current_state == 'NEEDS_REVIEW' %}
+      <section class="panel result-card {% if learning_session.current_state == 'MASTERED' %}mastered-bg{% else %}needs-review-bg{% endif %}">
+        <h2>🎉 Learning Complete</h2>
+        {% if learning_session.current_state == 'MASTERED' %}
+          <div class="badge badge-success">🌟 Status: Mastered! (100% — fully acquired)</div>
+          <p>Excellent! You answered the question correctly, explained the concept in Teach-Back, and completed the transfer task without assistance.</p>
+        {% else %}
+          <div class="badge badge-warning">⚠️ Status: Needs Review</div>
+          <p>Based on the transfer check, a review is recommended. Try again to deepen your understanding.</p>
+        {% endif %}
+        
+        <form method="post" style="margin-top: 1.5rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reset_session">
+          <button type="submit" class="btn btn-secondary">Take the diagnostic quiz again</button>
+        </form>
+      </section>
+
+      {% if recommended_courses %}
+        <section class="panel recommendations-section" style="margin-top: 1.5rem;">
+          <h3>🎯 Recommended Next Courses (Adaptive Recommendations)</h3>
+          <p class="small-text">AI-selected courses based on your performance in this session.</p>
+          <div class="grid-container" style="margin-top: 1rem;">
+            {% for rec in recommended_courses %}
+              <div class="process-card">
+                <span class="badge badge-info" style="margin-bottom: 0.5rem; display: inline-block;">{{ rec.tag }}</span>
+                <h4>{{ rec.title }}</h4>
+                <p>{{ rec.description }}</p>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+    {% elif learning_session.current_state == 'TRANSFER_TASK' %}
+      <!-- Step 8: Transfer Check -->
+      <section class="panel">
+        <div class="section-tag">Step 8: Transfer Check</div>
+        <h2>Apply your knowledge</h2>
+        <p class="instruction-text">Answer a similar question without AI support or hints.</p>
+        
+        <div class="question-box">
+          <span class="question-type">Transfer Task (Unassisted)</span>
+          <p class="question-prompt">{{ question.transfer_prompt }}</p>
+        </div>
+
+        <form method="post" class="attempt-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="submit_transfer">
+          {{ transfer_form.non_field_errors }}
+          
+          <div class="form-group">
+            <label for="{{ transfer_form.answer.id_for_label }}">{{ transfer_form.answer.label }}</label>
+            {{ transfer_form.answer }}
+            {{ transfer_form.answer.errors }}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ transfer_form.reasoning.id_for_label }}">{{ transfer_form.reasoning.label }}</label>
+            {{ transfer_form.reasoning }}
+            {{ transfer_form.reasoning.errors }}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ transfer_form.confidence.id_for_label }}">{{ transfer_form.confidence.label }}</label>
+            {{ transfer_form.confidence }}
+            {{ transfer_form.confidence.errors }}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Submit transfer answer</button>
+        </form>
+      </section>
+
+    {% elif learning_session.current_state == 'TEACH_BACK' %}
+      <!-- Step 7: Teach-Back -->
+      <section class="panel">
+        <div class="section-tag">Step 7: Teach-Back (Explain in your own words)</div>
+        <h2>Explain what you learned in your own words</h2>
+        <p class="instruction-text">You answered correctly! To confirm genuine understanding (not just memorisation), explain the solution and the underlying rule in your own words.</p>
+        
+        <div class="question-box">
+          <p><strong>Original question:</strong> {{ question.prompt }}</p>
+          <p><strong>Correct answer:</strong> <code>{{ question.reference_answer }}</code></p>
+        </div>
+
+        <form method="post" class="attempt-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="submit_teach_back">
+          {{ teach_back_form.non_field_errors }}
+
+          <div class="form-group">
+            <label for="{{ teach_back_form.response.id_for_label }}">{{ teach_back_form.response.label }}</label>
+            {{ teach_back_form.response }}
+            {{ teach_back_form.response.errors }}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Submit Teach-Back explanation</button>
+        </form>
+      </section>
+
+    {% else %}
+      <!-- Step 2-6: Diagnostic & Guided Revision -->
+      <section class="panel">
+        <div class="section-tag">
+          {% if learning_session.current_state == 'GUIDED_REVISION' %}
+            Step 6: Revise your answer (Guided Revision)
+          {% else %}
+            Step 3: Think it through before AI support (Think-First Gate)
+          {% endif %}
+        </div>
+        <h2>Diagnostic Question</h2>
+        
+        <div class="question-box">
+          <span class="question-type">{{ question.get_question_type_display }}</span>
+          <p class="question-prompt">{{ question.prompt }}</p>
+        </div>
+
+        {% if evaluation and not evaluation.is_correct %}
+          <div class="diagnosis-banner">
+            <h3>🔍 Automatic Error Diagnosis</h3>
+            <p>Detected error type: <strong>{{ evaluation.gap_type }}</strong></p>
+            <p class="small-text">{{ evaluation.explanation }}</p>
+          </div>
+        {% endif %}
+
+        <form method="post" class="attempt-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="submit_attempt">
+          {{ form.non_field_errors }}
+
+          <div class="form-group">
+            <label for="{{ form.answer.id_for_label }}">{{ form.answer.label }}</label>
+            {{ form.answer }}
+            {{ form.answer.errors }}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.reasoning.id_for_label }}">{{ form.reasoning.label }}</label>
+            {{ form.reasoning }}
+            {{ form.reasoning.errors }}
+          </div>
+
+          <div class="form-group">
+            <label for="{{ form.confidence.id_for_label }}">{{ form.confidence.label }}</label>
+            {{ form.confidence }}
+            {{ form.confidence.errors }}
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            {% if learning_session.current_state == 'GUIDED_REVISION' %}
+              Submit revised answer
+            {% else %}
+              Submit my answer (Think-First)
+            {% endif %}
+          </button>
+        </form>
+      </section>
+    {% endif %}
+
+    <!-- External File Upload Section -->
+    <section class="panel file-upload-panel" style="margin-top: 1.5rem;">
+      <h3>📁 Upload a file to auto-generate questions (AI File Import)</h3>
+      <p class="small-text">Upload a material file (.txt, .md, .json, .csv, .pdf) and AI will analyse the content to generate diagnostic questions.</p>
+      
+      <form method="post" enctype="multipart/form-data" class="file-form" style="margin-top: 1rem;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload_file">
+        <div class="form-group">
+          {{ file_form.file.label_tag }}
+          {{ file_form.file }}
+        </div>
+        <button type="submit" class="btn btn-secondary">Upload file &amp; generate questions</button>
+      </form>
+    </section>
+  </div>
+
+  <!-- Right Side: Dynamic Tiered Support & Workflow Rules Sidebar -->
+  <div class="sidebar-column">
+    <aside class="panel hint-section">
+      <h3>💡 5. Tiered Support (4-Level Hint Ladder)</h3>
+      
+      <div class="active-level-indicator" style="margin: 0.5rem 0 1rem; padding: 0.5rem; background: #e0f2fe; border-radius: 0.35rem; border-left: 4px solid #0284c7;">
+        <span class="small-text" style="color: #0369a1; font-weight: 700;">Current hint level:</span>
+        <strong style="color: #0c4a6e;">
+          {% if active_hint_level > 0 %}
+            Level {{ active_hint_level }} active
+          {% else %}
+            Locked (submit an attempt to unlock)
+          {% endif %}
+        </strong>
+      </div>
+
+      <ol class="hint-ladder-list">
+        <li class="{% if active_hint_level == 1 %}active-hint{% endif %}">Level 1: A guiding question to focus your thinking</li>
+        <li class="{% if active_hint_level == 2 %}active-hint{% endif %}">Level 2: A related concept or rule hint</li>
+        <li class="{% if active_hint_level == 3 %}active-hint{% endif %}">Level 3: A similar worked example</li>
+        <li class="{% if active_hint_level == 4 %}active-hint{% endif %}">Level 4: Partial solution revealed</li>
+      </ol>
+      <p class="micro-note">* The full answer is only shown as a last resort.</p>
+
+      {% if hints %}
+        <div class="unlocked-hints">
+          <h4>Unlocked hints:</h4>
+          {% for hint in hints %}
+            <div class="hint-card {% if hint.level == active_hint_level %}current-hint-card{% endif %}">
+              <span class="hint-level">Level {{ hint.level }} {% if hint.level == active_hint_level %}(currently shown){% endif %}</span>
+              <p>{{ hint.content }}</p>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if hints_allowed %}
+        <form method="post" style="margin-top: 1rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="request_hint">
+          <button type="submit" class="btn btn-secondary btn-full">Request hint (Level {{ active_hint_level|add:1 }})</button>
+        </form>
+      {% else %}
+        <div class="hint-disabled-note">
+          {% if learning_session.current_state == 'TRANSFER_TASK' %}
+            🔒 Hints are disabled during the Transfer Check.
+          {% else %}
+            🔒 Hints become available after you submit your first attempt.
+          {% endif %}
+        </div>
+      {% endif %}
+    </aside>
+
+    <aside class="panel workflow-info">
+      <h3>📋 9-Stage Learning Workflow</h3>
+      <ul class="workflow-checklist">
+        <li class="checked">1. Select subject &amp; topic</li>
+        <li class="checked">2. Take the diagnostic quiz</li>
+        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">3. Think it through (answer, reasoning, confidence)</li>
+        <li class="{% if learning_session.current_state != 'DIAGNOSTIC_QUIZ' %}checked{% endif %}">4. Evaluate response &amp; identify errors</li>
+        <li class="{% if hints %}checked{% endif %}">5. Tiered support provided</li>
+        <li class="{% if learning_session.current_state == 'TEACH_BACK' or learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">6. Revise answer</li>
+        <li class="{% if learning_session.current_state == 'TRANSFER_TASK' or learning_session.current_state == 'MASTERED' %}checked{% endif %}">7. Teach-Back (explain in your own words)</li>
+        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">8. Transfer task (apply independently)</li>
+        <li class="{% if learning_session.current_state == 'MASTERED' %}checked{% endif %}">9. Progress update (Mastered)</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+{% endblock %}

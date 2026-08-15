@@ -2,11 +2,66 @@
 {% block title %}Languages{% endblock %}
 {% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
 {% block content %}
-<h1>Languages</h1>
-<p>This general scaffold covers vocabulary, grammar, reading comprehension, and written answers.</p>
-<p>Audio and pronunciation are intentionally deferred.</p>
-<div class="subject-grid">
-  <article class="panel"><h2>Diagnose the gap</h2><p>Separate vocabulary, grammar, and context misunderstandings.</p></article>
-  <article class="panel"><h2>Explain and transfer</h2><p>Teach the rule back, then apply it in a new sentence or passage without hints.</p></article>
-</div>
+<section class="language-hero">
+  <div>
+    <span class="hero-badge">AI Language Studio</span>
+    <h1>ことばを、使える知識に。</h1>
+    <p>Choose from five sections. Practice sessions provide 10 fresh questions with adaptive hints, while the diagnostic test measures your level without hints.</p>
+  </div>
+  <a class="diagnostic-button" href="{% url 'lang_quiz:start_quiz' 'diagnostic' %}">
+    <span>Check your current level</span>
+    <strong>Start Diagnostic Test →</strong>
+    <small>Resets every time · 10 questions</small>
+  </a>
+</section>
+
+{% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+<section class="language-section-grid" aria-label="Language Learning Sections">
+  <a class="language-section-card vocab-card" href="{% url 'lang_quiz:material_setup' 'vocabulary' %}">
+    <span class="section-icon">Aa</span>
+    <span class="section-kicker">WORDS &amp; MEANING</span>
+    <h2>Vocabulary</h2>
+    <p>Advance from Stage 1-1 to 1-10, or upload your own material to build vocabulary.</p>
+    <span class="card-arrow">Choose →</span>
+  </a>
+  <a class="language-section-card reading-card" href="{% url 'lang_quiz:material_setup' 'reading' %}">
+    <span class="section-icon">¶</span>
+    <span class="section-kicker">READ &amp; INFER</span>
+    <h2>Reading</h2>
+    <p>Upload a passage or PDF and get 10 comprehension questions based on its content.</p>
+    <span class="card-arrow">Upload &amp; Generate →</span>
+  </a>
+  <a class="language-section-card grammar-card" href="{% url 'lang_quiz:material_setup' 'grammar' %}">
+    <span class="section-icon">{ }</span>
+    <span class="section-kicker">RULES &amp; PATTERNS</span>
+    <h2>Grammar</h2>
+    <p>Upload text and get 10 grammar questions — fill-in-the-blank and error correction.</p>
+    <span class="card-arrow">Upload &amp; Generate →</span>
+  </a>
+  <a class="language-section-card myself-card" href="{% url 'lang_quiz:material_setup' 'myself' %}">
+    <span class="section-icon">＋</span>
+    <span class="section-kicker">YOUR MATERIALS</span>
+    <h2>Myself</h2>
+    <p>Turn your own files and instructions into a five-stage learning adventure.</p>
+    <span class="card-arrow">Create 5 stages →</span>
+  </a>
+  <a class="language-section-card missing-card" href="{% url 'lang_quiz:start_quiz' 'missing' %}">
+    <span class="section-icon">↻</span>
+    <span class="section-kicker">RETRY &amp; MASTER</span>
+    <h2>Missing <span class="missing-count">{{ missing_count }}</span></h2>
+    <p>Review questions you got wrong. Correct answers are removed automatically.</p>
+    <span class="card-arrow">Review →</span>
+  </a>
+</section>
+
+<section class="how-it-works">
+  <div><strong>01</strong><span>Answer 10 questions</span></div>
+  <div><strong>02</strong><span>Hints unlock on wrong answers</span></div>
+  <div><strong>03</strong><span>Review explanation &amp; next step</span></div>
+</section>
 {% endblock %}
