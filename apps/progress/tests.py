@@ -20,6 +20,13 @@ from apps.learning_core.models import (
     TransferAttempt,
 )
 from apps.learning_core.state_machine import WorkflowState
+from apps.math_quiz.models import ConceptMastery as MathConceptMastery
+from apps.math_quiz.models import MasteryState as MathMasteryState
+from apps.math_quiz.models import Section, Unit
+from apps.other_quiz.models import Lesson as OtherLesson
+from apps.other_quiz.models import Question as OtherQuestion
+from apps.other_quiz.models import QuestionAttempt
+from apps.other_quiz.models import Subject as OtherSubject
 
 from .services import subject_progress_detail, subject_progress_summary
 
@@ -177,9 +184,126 @@ class QueryCountTests(TestCase):
 
     def test_dashboard_grid_query_count_does_not_scale_with_topic_count(self):
         """Guards against the N+1 query pattern in _is_review_item() coming back.
-        3 queries: all subjects, sessions, prefetched misconceptions."""
-        with self.assertNumQueries(3):
+
+        5 queries, none of them per-topic: all subjects, sessions, prefetched
+        misconceptions, then one each for the subjects that keep progress
+        outside learning_core (Maths' ConceptMastery, Other Subjects'
+        QuestionAttempt). Other Subjects takes a sixth to count questions,
+        but only once it has attempts to count them for.
+        """
+        with self.assertNumQueries(5):
             self.client.get(reverse('progress:dashboard'))
+
+
+class MathProgressTests(TestCase):
+    """Maths writes to its own ConceptMastery, never to learning_core, so the
+    grid only shows it via services._math_topics()."""
+
+    def setUp(self):
+        self.session_key = 'math-progress-browser'
+        unit = Unit.objects.create(name='Algebra')
+        self.section = Section.objects.create(unit=unit, title='Linear equations')
+
+    def _mastery(self, state, *, section=None):
+        return MathConceptMastery.objects.create(
+            section=section or self.section,
+            browser_session_key=self.session_key,
+            mastery_state=state,
+        )
+
+    def _math_entry(self):
+        return next(
+            entry for entry in subject_progress_detail(self.session_key)
+            if entry['subject'].slug == 'math'
+        )
+
+    def test_mastered_section_appears_as_mastered(self):
+        self._mastery(MathMasteryState.MASTERED)
+
+        topics = self._math_entry()['topics']
+        self.assertEqual([topic['name'] for topic in topics], ['Algebra - Linear equations'])
+        self.assertTrue(topics[0]['is_mastered'])
+
+    def test_needs_review_section_appears_as_review_item(self):
+        self._mastery(MathMasteryState.NEEDS_REVIEW)
+
+        topics = self._math_entry()['topics']
+        self.assertTrue(topics[0]['is_review_item'])
+        self.assertFalse(topics[0]['is_mastered'])
+
+    def test_untouched_sections_are_left_out(self):
+        self._mastery(MathMasteryState.NOT_STARTED)
+
+        self.assertEqual(self._math_entry()['topics'], [])
+
+    def test_another_browsers_maths_progress_is_not_shown(self):
+        MathConceptMastery.objects.create(
+            section=self.section,
+            browser_session_key='someone-else',
+            mastery_state=MathMasteryState.MASTERED,
+        )
+
+        self.assertEqual(self._math_entry()['topics'], [])
+
+
+class OtherSubjectProgressTests(TestCase):
+    """Other Subjects has no workflow states, so services._other_subject_topics()
+    derives them from right/wrong answers."""
+
+    def setUp(self):
+        self.session_key = 'other-progress-browser'
+        self.course = OtherSubject.objects.create(id='sub_hist', title='History')
+        lesson = OtherLesson.objects.create(
+            id='les_ww2', subject=self.course, chapter='1', title='WWII',
+        )
+        self.questions = [
+            OtherQuestion.objects.create(
+                lesson=lesson, title=f'Q{index}', prompt='...', correct_answer='a',
+            )
+            for index in range(3)
+        ]
+
+    def _answer(self, question, is_correct):
+        QuestionAttempt.objects.create(
+            question=question, browser_session_key=self.session_key, is_correct=is_correct,
+        )
+
+    def _other_entry(self):
+        return next(
+            entry for entry in subject_progress_detail(self.session_key)
+            if entry['subject'].slug == 'other'
+        )
+
+    def test_all_questions_correct_counts_as_mastered(self):
+        for question in self.questions:
+            self._answer(question, True)
+
+        topic = self._other_entry()['topics'][0]
+        self.assertEqual(topic['name'], 'History')
+        self.assertEqual(topic['state_label'], '3/3 correct')
+        self.assertTrue(topic['is_mastered'])
+
+    def test_a_wrong_answer_counts_as_review(self):
+        self._answer(self.questions[0], True)
+        self._answer(self.questions[1], False)
+
+        topic = self._other_entry()['topics'][0]
+        self.assertTrue(topic['is_review_item'])
+        self.assertFalse(topic['is_mastered'])
+
+    def test_partly_answered_course_counts_as_in_progress(self):
+        self._answer(self.questions[0], True)
+
+        topic = self._other_entry()['topics'][0]
+        self.assertFalse(topic['is_mastered'])
+        self.assertFalse(topic['is_review_item'])
+
+    def test_another_browsers_answers_are_not_shown(self):
+        QuestionAttempt.objects.create(
+            question=self.questions[0], browser_session_key='someone-else', is_correct=True,
+        )
+
+        self.assertEqual(self._other_entry()['topics'], [])
 
 
 class CodingSessionEvidenceTests(TestCase):
