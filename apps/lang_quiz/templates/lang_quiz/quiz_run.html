@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section_label }} - {{ total_questions }}-Question Quiz{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Languages" subject_icon="languages" %}{% endblock %}
+
+{% block content %}
+<div class="quiz-shell">
+  <header class="quiz-topbar">
+    <a href="{% url 'lang_quiz:home' %}" class="back-link">← Exit &amp; Return</a>
+    <div class="quiz-title"><span>{{ section_label }}</span>{% if stage_label %}<strong>STAGE {{ stage_label }}</strong>{% elif run.course_slug %}<strong>{{ run.course_slug }}</strong>{% endif %}</div>
+    {% if not run.finished %}<div class="quiz-counter">{{ question_number }} <span>/ {{ total_questions }}</span></div>{% endif %}
+  </header>
+
+  {% if run.finished %}
+    <section class="result-summary">
+      <span class="result-eyebrow">SESSION COMPLETE</span>
+      <div class="score-ring" style="--score: {{ score_percent }}"><strong>{{ score_percent }}%</strong><span>{{ run.correct_count }} / {{ total_questions }}</span></div>
+      <h1>Great work — {{ total_questions }} questions done!</h1>
+      {% if run.mode == 'stage' or run.mode == 'myself_stage' %}
+        {% if score_percent >= 70 %}
+        <div class="complete-banner">Stage Clear! Next stage unlocked</div>
+        {% else %}
+        <div class="stage-retry-banner">Score 70% or higher to unlock the next stage.</div>
+        {% endif %}
+      {% elif score_percent == 100 %}<div class="complete-banner">Complete!</div>{% endif %}
+      <p>Questions you got wrong have been saved to Missing. Questions you answered correctly are automatically removed from Missing.</p>
+      {% if run.section == 'diagnostic' %}
+        <section class="diagnostic-review">
+          <h2>診断テスト結果一覧</h2>
+          {% for item in run.questions %}
+            <article class="answer-result {% if item.is_correct %}answer-correct{% else %}answer-wrong{% endif %}">
+              <span>QUESTION {{ forloop.counter|stringformat:'02d' }} — {% if item.is_correct %}CORRECT{% else %}INCORRECT{% endif %}</span>
+              <h3>{{ item.prompt }}</h3>
+              <p><small>Your answer</small><br><strong>{{ item.submitted_answer|default:'No answer' }}</strong></p>
+              <p><small>Correct answer</small><br><strong>{{ item.answer }}</strong></p>
+              <h4>Explanation</h4>
+              <p>{{ item.explanation }}</p>
+            </article>
+          {% endfor %}
+        </section>
+      {% endif %}
+      {% if recommendations %}
+        <div class="recommendation-grid">
+          {% for recommendation in recommendations %}
+            <article><span>AI FEEDBACK</span><h3>{{ recommendation.title }}</h3><p>{{ recommendation.detail }}</p></article>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="result-actions">
+        {% if run.mode == 'myself_stage' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:myself_stage_pack' myself_pack_id %}">My Material Stage Map</a>
+        {% elif run.mode == 'stage' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">World 1 Stage Map</a>
+        {% elif run.mode == 'course' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_course' run.course_slug %}">Retry this course</a>
+        {% elif run.mode == 'upload' or run.mode == 'upload_exact' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:material_setup' run.section %}">Upload another file</a>
+        {% elif run.section == 'vocabulary' and run.mode == 'typing' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_vocabulary' 'typing' %}">Try 10 new typing questions</a>
+        {% elif run.section == 'vocabulary' and run.mode == 'multiple_choice' %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_vocabulary' 'multiple_choice' %}">Try 10 new 5-choice questions</a>
+        {% else %}
+          <a class="btn btn-primary btn-lg" href="{% url 'lang_quiz:start_quiz' run.section %}">Try 10 new questions</a>
+        {% endif %}
+        <a class="btn btn-secondary btn-lg" href="{% url 'lang_quiz:home' %}">Back to Hub</a>
+      </div>
+    </section>
+  {% else %}
+    <div class="quiz-progress"><span style="width: {% widthratio question_number total_questions 100 %}%"></span></div>
+    <main class="question-stage">
+      <section class="question-main">
+        <div class="question-meta"><span>QUESTION {{ question_number|stringformat:'02d' }}</span><span>{{ section_label }} · {% if question.stage_level_label %}{{ question.stage_level_label }}{% elif question.stage_level %}CEFR {{ question.stage_level }}{% else %}{{ question.difficulty|default:'intermediate' }}{% endif %}</span></div>
+        {% if question.skill_focus %}<div class="skill-focus-badge">🎯 {{ question.skill_focus }}</div>{% endif %}
+        <h1>{{ question.prompt }}</h1>
+
+        {% if question.resolved %}
+          <div class="answer-result {% if question.is_correct %}answer-correct{% else %}answer-wrong{% endif %}">
+            <span>{% if question.is_correct %}CORRECT{% else %}REVIEW{% endif %}</span>
+            <h2>{{ question.last_feedback }}</h2>
+            <div class="answer-reveal"><small>Answer</small><strong>{{ question.answer }}</strong></div>
+            <h3>Explanation</h3><p>{{ question.explanation }}</p>
+            <h3>Next step</h3><p>{{ question.next_step }}</p>
+          </div>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="next"><button class="btn btn-primary btn-lg btn-full" type="submit">{% if question_number == total_questions %}See results{% else %}Next question →{% endif %}</button></form>
+        {% else %}
+          {% if question.last_feedback %}<div class="alert alert-warning">{{ question.last_feedback }}</div>{% endif %}
+          <form method="post" class="quiz-answer-form">
+            {% csrf_token %}<input type="hidden" name="action" value="answer">
+            {{ form.answer.label_tag }}{{ form.answer }}{{ form.answer.errors }}
+            <button type="submit" class="btn btn-primary btn-lg">Submit answer</button>
+          </form>
+        {% endif %}
+      </section>
+
+      {% if question.hint_level > 0 and run.section != 'diagnostic' %}<aside class="smart-hint">
+        <div class="hint-heading"><span>SMART HINT</span><strong>LEVEL {{ question.hint_level }} / 5</strong></div>
+        <div class="hint-levels">{% for hint in question.hints %}<i class="{% if forloop.counter <= question.hint_level %}active{% endif %}"></i>{% endfor %}</div>
+        <p>{{ question.hints|slice:question.hint_level|last }}</p>
+        <small>Hints become more specific with each wrong answer.</small>
+        {% if question.hint_level == 5 and not question.resolved %}
+          <form method="post" class="give-up-form">{% csrf_token %}<input type="hidden" name="action" value="give_up"><button type="submit" class="text-button">レベル5でも分からない（不正解として次へ）</button></form>
+        {% endif %}
+      </aside>{% endif %}
+    </main>
+  {% endif %}
+</div>
+{% endblock %}

@@ -33,6 +33,17 @@ def get_or_create_demo_session(*, browser_session_key, topic, activity=None):
     )
 
 
+def mastery_requirements_met(*, original_passed, teach_back_clear, transfer_passed,
+                             transfer_unassisted, misconception_repeated):
+    """Return whether the shared learning workflow has sufficient mastery evidence."""
+    return all((
+        original_passed,
+        teach_back_clear,
+        transfer_passed,
+        transfer_unassisted,
+    )) and not misconception_repeated
+
+
 @dataclass(frozen=True)
 class MasteryDecision:
     status: str

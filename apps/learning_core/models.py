@@ -66,6 +66,10 @@ class LearningSession(models.Model):
         choices=WorkflowState.choices,
         default=WorkflowState.TOPIC_SELECTED,
     )
+    score_percent = models.PositiveSmallIntegerField(default=0)
+    total_questions = models.PositiveIntegerField(default=1)
+    correct_count = models.PositiveIntegerField(default=0)
+    mastered = models.BooleanField(default=False)
     started_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     ended_at = models.DateTimeField(null=True, blank=True)

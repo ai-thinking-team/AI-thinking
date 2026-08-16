@@ -1,3 +1,4 @@
+import re
 from typing import Protocol
 
 from django.conf import settings
@@ -67,3 +68,32 @@ def generate_ai_response(*, system_prompt, user_prompt, response_schema=None, pr
         raise
     except Exception as exc:
         raise AIServiceUnavailable('The configured AI provider failed.') from exc
+
+
+def generate_questions_from_text(raw_text, subject_name='Languages', count=10, section='reading'):
+    """Create upload-grounded questions locally without exporting document text."""
+    material = (raw_text or '').strip()[:12000]
+    if not material:
+        return []
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r'(?<=[.!?])\s+|\r?\n', material)
+        if len(sentence.strip()) > 20
+    ]
+    questions = []
+    for index in range(count):
+        sentence = sentences[index % len(sentences)] if sentences else material
+        words = re.findall(r'\b[A-Za-z]{3,}\b', sentence)
+        answer = (words[index % len(words)] if words else sentence.split()[0]).casefold()
+        questions.append({
+            'prompt': f'Complete or explain this {section} excerpt: "{sentence.replace(answer, "____", 1)}"',
+            'reference_answer': answer,
+            'question_type': section.upper(),
+            'skill_focus': 'Text evidence' if section == 'reading' else 'Grammar in context',
+            'rubric': {
+                'target_gap': 'context_misunderstanding' if section == 'reading' else 'grammar_misconception',
+                'source': 'uploaded_file',
+            },
+            'transfer_prompt': 'Write one new sentence using the same idea or rule.',
+        })
+    return questions

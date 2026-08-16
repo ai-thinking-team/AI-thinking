@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -238,6 +239,12 @@ GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '20'))
 DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-v4-flash')
 DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
 DEEPSEEK_TIMEOUT_SECONDS = int(os.environ.get('DEEPSEEK_TIMEOUT_SECONDS', '20'))
+
+if 'test' in sys.argv:
+    AI_PROVIDER_CLASS = ''
+    CODE_RUNNER_URL = ''
+    CODE_RUNNER_GATEWAY_CLASS = ''
+    CODE_RUNNER_AUTOSTART = False
 
 
 LOGGING = {
