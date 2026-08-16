@@ -105,6 +105,25 @@ class SubjectFilterTests(TestCase):
         self.assertContains(response, 'Coding')
 
 
+class KnownSubjectTests(TestCase):
+    def test_all_four_subjects_appear_before_anything_is_used(self):
+        """learning_core only grows a Subject row once a subject writes one —
+        Languages waits until a learner's first visit, Maths and Other never
+        write at all — so the grid must not depend on those rows existing."""
+        slugs = [entry['subject'].slug for entry in subject_progress_detail('unused-browser')]
+
+        self.assertEqual(sorted(slugs), ['coding', 'languages', 'math', 'other'])
+
+    def test_a_real_subject_row_is_preferred_over_the_stand_in(self):
+        Subject.objects.get_or_create(slug='languages', defaults={'name': 'Languages'})
+
+        entry = next(
+            entry for entry in subject_progress_detail('unused-browser')
+            if entry['subject'].slug == 'languages'
+        )
+        self.assertIsInstance(entry['subject'], Subject)
+
+
 class EmptySubjectTests(TestCase):
     def test_subject_with_no_sessions_still_shows_as_not_started(self):
         Subject.objects.get_or_create(slug='coding', defaults={'name': 'Coding'})[0]

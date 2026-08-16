@@ -122,14 +122,26 @@ def overall_progress_totals(summary):
 class _SubjectStandIn:
     """Stands in for a learning_core.Subject row that does not exist.
 
-    Maths and Other Subjects keep their progress in their own apps, so
-    nothing guarantees learning_core has a Subject row for them. The
-    templates only ever read .slug and .name, and creating real rows as a
-    side effect of loading a page would be a write on a GET, so they get
-    this instead.
+    The templates only ever read .slug and .name, and creating real rows as
+    a side effect of loading a page would be a write on a GET, so missing
+    subjects get this instead.
     """
     slug: str
     name: str
+
+
+# The four learning areas Home offers (core/subject_selection.html). A
+# learning_core.Subject row only appears once something writes one — Coding
+# at migration time, Languages on a learner's first visit, Maths and Other
+# Subjects never, since they store progress in their own apps. Seeding the
+# grid from this list instead means the card set does not change depending
+# on which subjects happen to have been used already.
+KNOWN_SUBJECTS = (
+    ('math', 'Mathematics'),
+    ('coding', 'Coding'),
+    ('languages', 'Languages'),
+    ('other', 'Other Subjects'),
+)
 
 
 def _math_topics(browser_session_key):
@@ -206,16 +218,14 @@ def _other_subject_topics(browser_session_key):
     return topics
 
 
-def _merge_adapted_topics(by_subject, slug, name, topics):
+def _merge_adapted_topics(by_subject, slug, topics):
     """Fold topics sourced outside learning_core into the same grid.
 
     Merges rather than replaces: in DEBUG, dev_seed.py fabricates
     learning_core sessions under these same slugs, and dropping either side
     would silently hide real work or make the dev tools look broken.
     """
-    entry = by_subject.setdefault(
-        slug, {'subject': _SubjectStandIn(slug=slug, name=name), 'topics': [], 'mastered': 0},
-    )
+    entry = by_subject[slug]
     entry['topics'].extend(topics)
     entry['mastered'] += sum(1 for topic in topics if topic['is_mastered'])
 
@@ -227,6 +237,10 @@ def subject_progress_detail(browser_session_key):
         subject.slug: {'subject': subject, 'topics': [], 'mastered': 0}
         for subject in Subject.objects.order_by('name')
     }
+    for slug, name in KNOWN_SUBJECTS:
+        by_subject.setdefault(
+            slug, {'subject': _SubjectStandIn(slug=slug, name=name), 'topics': [], 'mastered': 0},
+        )
     for session in sessions_for_browser(browser_session_key):
         subject = session.topic.subject
         entry = by_subject.setdefault(subject.slug, {'subject': subject, 'topics': [], 'mastered': 0})
@@ -246,10 +260,8 @@ def subject_progress_detail(browser_session_key):
 
     # Maths and Other Subjects never write to learning_core, so the loop
     # above cannot see them; they are read from their own apps instead.
-    _merge_adapted_topics(by_subject, 'math', 'Mathematics', _math_topics(browser_session_key))
-    _merge_adapted_topics(
-        by_subject, 'other', 'Other Subjects', _other_subject_topics(browser_session_key),
-    )
+    _merge_adapted_topics(by_subject, 'math', _math_topics(browser_session_key))
+    _merge_adapted_topics(by_subject, 'other', _other_subject_topics(browser_session_key))
 
     for entry in by_subject.values():
         entry['topics'].sort(key=lambda topic: not topic['is_review_item'])
