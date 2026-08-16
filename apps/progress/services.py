@@ -7,6 +7,10 @@ from apps.learning_core.state_machine import WorkflowState
 # Maths and Other Subjects track progress in their own models rather than in
 # learning_core, so this page reads those directly. Aliased because both app
 # and learning_core define a ConceptMastery / Question / Subject.
+from apps.lang_quiz.models import LanguageQuizRun
+# Imported rather than repeated so the Progress page cannot drift from the
+# mark the Languages app itself treats as a pass.
+from apps.lang_quiz.quiz_engine import STAGE_CLEAR_PERCENT as LANGUAGE_PASS_PERCENT
 from apps.math_quiz.models import ConceptMastery as MathConceptMastery
 from apps.math_quiz.models import MasteryState as MathMasteryState
 from apps.other_quiz.models import Question as OtherQuestion
@@ -175,6 +179,51 @@ def _math_topics(browser_session_key):
     ]
 
 
+def _language_topics(browser_session_key):
+    """Language sections this browser has run a quiz in.
+
+    Read from LanguageQuizRun because every way into a language quiz goes
+    through it (views._create_run), while the two records that might look
+    like better sources do not: LearningSession is only written by the older
+    exercise page, and LanguageCourseProgress is skipped entirely for a plain
+    section quiz, which passes no course_slug.
+
+    A section counts as mastered once any finished run reached the app's own
+    pass mark, so a weak early attempt is not held against a later good one.
+    """
+    if not browser_session_key:
+        return []
+    runs = LanguageQuizRun.objects.filter(
+        browser_session_key=browser_session_key,
+    ).order_by('section', 'created_at')
+
+    per_section = {}
+    for run in runs:
+        bucket = per_section.setdefault(
+            run.section, {'label': run.get_section_display(), 'best': None, 'finished': False},
+        )
+        if not run.finished:
+            continue
+        bucket['finished'] = True
+        total = len(run.questions)
+        score = round(run.correct_count / total * 100) if total else 0
+        if bucket['best'] is None or score > bucket['best']:
+            bucket['best'] = score
+
+    topics = []
+    for bucket in per_section.values():
+        best = bucket['best']
+        is_mastered = best is not None and best >= LANGUAGE_PASS_PERCENT
+        topics.append({
+            'name': bucket['label'],
+            'state_label': 'In progress' if best is None else f'{best}% best score',
+            'is_review_item': bucket['finished'] and not is_mastered,
+            'is_mastered': is_mastered,
+            'detail_session_id': None,
+        })
+    return topics
+
+
 def _other_subject_topics(browser_session_key):
     """Other Subjects courses this browser has answered questions in.
 
@@ -258,9 +307,12 @@ def subject_progress_detail(browser_session_key):
             'detail_session_id': session.pk if has_detail_page(session) else None,
         })
 
-    # Maths and Other Subjects never write to learning_core, so the loop
-    # above cannot see them; they are read from their own apps instead.
+    # Maths, Languages and Other Subjects record progress in their own apps,
+    # so the loop above cannot see them. (Languages does write learning_core
+    # sessions, but only from its older exercise page — never from the quiz
+    # runs the app actually leads you to.)
     _merge_adapted_topics(by_subject, 'math', _math_topics(browser_session_key))
+    _merge_adapted_topics(by_subject, 'languages', _language_topics(browser_session_key))
     _merge_adapted_topics(by_subject, 'other', _other_subject_topics(browser_session_key))
 
     for entry in by_subject.values():

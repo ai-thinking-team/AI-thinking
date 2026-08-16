@@ -19,6 +19,7 @@ from apps.learning_core.models import (
     Topic,
     TransferAttempt,
 )
+from apps.lang_quiz.models import LanguageQuizRun
 from apps.learning_core.state_machine import WorkflowState
 from apps.math_quiz.models import ConceptMastery as MathConceptMastery
 from apps.math_quiz.models import MasteryState as MathMasteryState
@@ -204,13 +205,14 @@ class QueryCountTests(TestCase):
     def test_dashboard_grid_query_count_does_not_scale_with_topic_count(self):
         """Guards against the N+1 query pattern in _is_review_item() coming back.
 
-        5 queries, none of them per-topic: all subjects, sessions, prefetched
-        misconceptions, then one each for the subjects that keep progress
-        outside learning_core (Maths' ConceptMastery, Other Subjects'
-        QuestionAttempt). Other Subjects takes a sixth to count questions,
-        but only once it has attempts to count them for.
+        6 queries, none of them per-topic: all subjects, sessions, prefetched
+        misconceptions, then one each for the three subjects that keep
+        progress outside learning_core (Maths' ConceptMastery, Languages'
+        LanguageQuizRun, Other Subjects' QuestionAttempt). Other Subjects
+        takes a seventh to count questions, but only once it has attempts to
+        count them for.
         """
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             self.client.get(reverse('progress:dashboard'))
 
 
@@ -263,6 +265,79 @@ class MathProgressTests(TestCase):
         )
 
         self.assertEqual(self._math_entry()['topics'], [])
+
+
+class LanguageProgressTests(TestCase):
+    """Languages records quiz runs in its own LanguageQuizRun, so the grid
+    only sees them via services._language_topics()."""
+
+    def setUp(self):
+        self.session_key = 'language-progress-browser'
+
+    def _run(self, *, correct, finished=True, section='vocabulary'):
+        return LanguageQuizRun.objects.create(
+            browser_session_key=self.session_key,
+            section=section,
+            questions=[{'key': f'q{index}'} for index in range(10)],
+            correct_count=correct,
+            finished=finished,
+        )
+
+    def _language_entry(self):
+        return next(
+            entry for entry in subject_progress_detail(self.session_key)
+            if entry['subject'].slug == 'languages'
+        )
+
+    def test_reaching_the_pass_mark_counts_as_mastered(self):
+        self._run(correct=7)
+
+        topic = self._language_entry()['topics'][0]
+        self.assertEqual(topic['name'], 'Vocabulary')
+        self.assertEqual(topic['state_label'], '70% best score')
+        self.assertTrue(topic['is_mastered'])
+
+    def test_finishing_below_the_pass_mark_counts_as_review(self):
+        self._run(correct=4)
+
+        topic = self._language_entry()['topics'][0]
+        self.assertTrue(topic['is_review_item'])
+        self.assertFalse(topic['is_mastered'])
+
+    def test_a_later_better_run_replaces_an_early_weak_one(self):
+        self._run(correct=3)
+        self._run(correct=9)
+
+        topics = self._language_entry()['topics']
+        self.assertEqual(len(topics), 1)
+        self.assertTrue(topics[0]['is_mastered'])
+        self.assertEqual(topics[0]['state_label'], '90% best score')
+
+    def test_an_unfinished_run_counts_as_in_progress(self):
+        self._run(correct=2, finished=False)
+
+        topic = self._language_entry()['topics'][0]
+        self.assertEqual(topic['state_label'], 'In progress')
+        self.assertFalse(topic['is_mastered'])
+        self.assertFalse(topic['is_review_item'])
+
+    def test_each_section_gets_its_own_row(self):
+        self._run(correct=9, section='vocabulary')
+        self._run(correct=2, section='grammar')
+
+        names = sorted(topic['name'] for topic in self._language_entry()['topics'])
+        self.assertEqual(names, ['Grammar', 'Vocabulary'])
+
+    def test_another_browsers_runs_are_not_shown(self):
+        LanguageQuizRun.objects.create(
+            browser_session_key='someone-else',
+            section='vocabulary',
+            questions=[{'key': 'q0'}],
+            correct_count=1,
+            finished=True,
+        )
+
+        self.assertEqual(self._language_entry()['topics'], [])
 
 
 class OtherSubjectProgressTests(TestCase):
