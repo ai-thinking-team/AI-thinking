@@ -1,6 +1,17 @@
 from django.db import migrations
 
 
+def ensure_current_schema(apps, schema_editor):
+    """Repair databases where the historical 0001 name was reused for a new schema."""
+    existing_tables = set(schema_editor.connection.introspection.table_names())
+    for model_name in ('Subject', 'Lesson', 'Question'):
+        model = apps.get_model('other_quiz', model_name)
+        table_name = model._meta.db_table
+        if table_name not in existing_tables:
+            schema_editor.create_model(model)
+            existing_tables.add(table_name)
+
+
 def create_sample_data(apps, schema_editor):
     Subject = apps.get_model('other_quiz', 'Subject')
     Lesson = apps.get_model('other_quiz', 'Lesson')
@@ -64,5 +75,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(ensure_current_schema, migrations.RunPython.noop),
         migrations.RunPython(create_sample_data, reverse_sample_data),
     ]
