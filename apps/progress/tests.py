@@ -21,7 +21,7 @@ from apps.learning_core.models import (
 )
 from apps.learning_core.state_machine import WorkflowState
 
-from .services import subject_progress_summary
+from .services import subject_progress_detail, subject_progress_summary
 
 
 class ProgressRouteTests(TestCase):
@@ -186,6 +186,37 @@ class CodingSessionEvidenceTests(TestCase):
     """The Coding drill-down at progress:coding_session_detail. Its own
     class because these build real Coding evidence via coding_quiz views,
     unlike the subject-neutral dashboard tests above."""
+
+    def test_coding_subject_page_links_each_session_to_its_detail(self):
+        self.client.get(reverse('coding_quiz:exercise_detail', args=('double-numbers',)))
+        learning_session = LearningSession.objects.get(
+            browser_session_key=self.client.session.session_key,
+        )
+
+        response = self.client.get(reverse('progress:dashboard'), {'subject': 'coding'})
+
+        self.assertContains(
+            response,
+            reverse('progress:coding_session_detail', args=(learning_session.pk,)),
+        )
+
+    def test_sessions_without_a_coding_exercise_are_not_linked(self):
+        """dev_seed seeds Coding topics with no activity; linking those 404s."""
+        session_key = 'no-activity-browser'
+        subject, _ = Subject.objects.get_or_create(slug='coding', defaults={'name': 'Coding'})
+        topic = Topic.objects.create(subject=subject, name='Seeded topic', slug='seeded-topic')
+        LearningSession.objects.create(
+            browser_session_key=session_key,
+            topic=topic,
+            current_state=WorkflowState.FIRST_ATTEMPT,
+        )
+
+        entry = next(
+            entry for entry in subject_progress_detail(session_key)
+            if entry['subject'].slug == 'coding'
+        )
+        seeded = next(topic for topic in entry['topics'] if topic['name'] == 'Seeded topic')
+        self.assertIsNone(seeded['detail_session_id'])
 
     def test_detail_shows_exercise_history(self):
         self.client.get(reverse('coding_quiz:exercise_detail', args=('double-numbers',)))

@@ -3,13 +3,23 @@ from django.db.models import Prefetch
 from apps.learning_core.models import LearningSession, MisconceptionRecord, Subject
 from apps.learning_core.state_machine import WorkflowState
 
+# This module stays subject-neutral; the one exception is asking coding.py
+# whether a row has a drill-down page, so subject_progress_detail() can link
+# to it. coding.py does not import back, so there is no import cycle.
+from .coding import has_detail_page
+
 
 def sessions_for_browser(browser_session_key):
     if not browser_session_key:
         return LearningSession.objects.none()
     return LearningSession.objects.filter(
         browser_session_key=browser_session_key
-    ).select_related('topic__subject').prefetch_related(
+    ).select_related(
+        'topic__subject',
+        # Lets has_detail_page() answer from this one query instead of firing
+        # a lookup per session.
+        'activity__coding_exercise',
+    ).prefetch_related(
         # Ordered explicitly because _is_review_item() keeps the last row per
         # code as the current one; an unordered prefetch would make which
         # record wins depend on the database's arbitrary row order.
@@ -123,6 +133,10 @@ def subject_progress_detail(browser_session_key):
             'state_label': session.get_current_state_display(),
             'is_review_item': _is_review_item(session),
             'is_mastered': is_mastered,
+            # None unless a drill-down page exists for this row. Coding is the
+            # only subject with one so far; when another subject grows one,
+            # widen this rather than adding a second key.
+            'detail_session_id': session.pk if has_detail_page(session) else None,
         })
     for entry in by_subject.values():
         entry['topics'].sort(key=lambda topic: not topic['is_review_item'])

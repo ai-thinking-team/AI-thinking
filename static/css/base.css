@@ -742,6 +742,12 @@ details { margin: .75rem 0; }
 .m-list { list-style: none; margin: 0; padding: 0; }
 .m-list li { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-top: 1px solid var(--color-border); font-size: .88rem; }
 .m-list li .name { flex: 1; font-weight: 500; }
+/* Rows that have a drill-down page (see _subject_card.html). Inherits the
+   row's colour so the list still reads as one block, with the underline on
+   hover as the only affordance. */
+.m-list li a.topic-link { color: inherit; text-decoration: none; }
+.m-list li a.topic-link:hover,
+.m-list li a.topic-link:focus-visible { color: var(--color-primary); text-decoration: underline; }
 .m-list li .state { color: var(--color-muted-fg); font-size: .82rem; }
 .m-list li.review .state { color: var(--color-accent); font-weight: 600; }
 .m-list li.mastered .state { color: var(--color-success); font-weight: 600; }

@@ -19,7 +19,13 @@
       {% for topic in topics %}
         <li class="{% if topic.is_review_item %}review{% elif topic.is_mastered %}mastered{% else %}progress{% endif %}">
           <span class="dot"></span>
-          <span class="name">{{ topic.name }}</span>
+          {# Only rows with a drill-down page become links — see
+             services.subject_progress_detail's detail_session_id. #}
+          {% if topic.detail_session_id %}
+            <a class="name topic-link" href="{% url 'progress:coding_session_detail' topic.detail_session_id %}">{{ topic.name }}</a>
+          {% else %}
+            <span class="name">{{ topic.name }}</span>
+          {% endif %}
           <span class="state">{{ topic.state_label }}</span>
         </li>
       {% endfor %}

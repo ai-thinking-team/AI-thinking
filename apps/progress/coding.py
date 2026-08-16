@@ -81,6 +81,23 @@ def sessions_for_browser(browser_session_key, *, include_evidence=False):
     return sessions.prefetch_related(*_ordered_prefetches()) if include_evidence else sessions
 
 
+def has_detail_page(session):
+    """Whether views.coding_session_detail can render this session.
+
+    The same condition as sessions_for_browser()'s
+    `activity__coding_exercise__isnull=False` filter, but evaluated in Python
+    so services.subject_progress_detail() can decide per row whether to link,
+    without a second query — it select_related()s the same relation. Sessions
+    without a coding exercise do occur: dev_seed.py seeds Coding topics with
+    no activity at all, and linking those would 404.
+    """
+    activity = session.activity
+    # A missing reverse one-to-one raises RelatedObjectDoesNotExist, which
+    # Django deliberately makes an AttributeError subclass, so getattr's
+    # default covers both "no activity" and "activity isn't a coding one".
+    return activity is not None and getattr(activity, 'coding_exercise', None) is not None
+
+
 def _status_badge(status):
     if status in {ConceptMastery.Status.MASTERED, 'CLEAR_UNDERSTANDING', 'PASSED', 'RESOLVED'}:
         return 'success'
