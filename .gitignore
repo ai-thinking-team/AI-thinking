@@ -5,6 +5,8 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *.pyc
+media/
+units/
 db.sqlite3
 .env*
 !.env.example

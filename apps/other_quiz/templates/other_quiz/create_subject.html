@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Tạo môn học mới{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-10">
+    <div class="panel">
+        <h1 class="text-2xl font-bold mb-4">Tạo môn học mới bằng AI</h1>
+        <p class="text-gray-600 mb-6">Nhập yêu cầu hoặc chủ đề, AI sẽ tự động tạo cấu trúc môn học cho bạn.</p>
+        
+        <form method="POST" action="{% url 'other_quiz:create_subject' %}">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Chủ đề môn học:</label>
+                <textarea name="ai_prompt" rows="4" class="w-full p-3 border rounded-lg" placeholder="Ví dụ: Tạo cho tôi môn học về Lịch sử Đảng..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary w-full">
+                ✨ Bắt đầu tạo bằng AI
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

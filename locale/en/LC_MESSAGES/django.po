@@ -1,0 +1,380 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "1 = 勘 ・ 3 = 部分的に理解 ・ 5 = 説明できる"
+msgstr "1 = Guess, 3 = Partial understanding, 5 = Can explain"
+
+msgid "1〜2文でOKです"
+msgstr "1-2 sentences is fine"
+
+msgid "AIのヒントなしで解いてください。"
+msgstr "Solve this without AI hints."
+
+msgid "Complete! 🎉"
+msgstr "Complete! 🎉"
+
+msgid "「追加」を押すと、セクションが自動生成されます。"
+msgstr "Sections will be generated automatically when you press \"Add\"."
+
+msgid "おすすめのセクション"
+msgstr "Recommended sections"
+
+msgid "ここにファイルをドラッグ&ドロップ"
+msgstr "Drag & drop files here"
+
+msgid "ここに回答を入力してください"
+msgstr "Enter your answer here"
+
+msgid "ここに解答を入力してください"
+msgstr "Enter your answer here"
+
+msgid "このコースはComplete!です 🎉"
+msgstr "This course is Complete! 🎉"
+
+msgid "この科目に入る前に、いくつかの問題を解いて今の理解度を確認しましょう。"
+msgstr "Before starting this subject, let's check your current understanding with a few questions."
+
+msgid "この科目を削除しますか？"
+msgstr "Delete this subject?"
+
+msgid "この科目を追加"
+msgstr "Add this subject"
+
+msgid "どう考えて修正したか説明してください"
+msgstr "Explain how you thought about the correction"
+
+msgid "どう考えて解いたか説明してください"
+msgstr "Explain how you thought about solving it"
+
+msgid "もう少し練習するとよさそうな点"
+msgstr "Areas that could use more practice"
+
+msgid "サンプル"
+msgstr "Sample"
+
+msgid "セクションがまだありません。"
+msgstr "There are no sections yet."
+
+msgid "セクション一覧へ進む"
+msgstr "Go to section list"
+
+msgid "ホームに戻る"
+msgstr "Back to home"
+
+msgid "メニュー"
+msgstr "Menu"
+
+msgid "不正解"
+msgstr "Incorrect"
+
+msgid "不正解でした。誤解を明らかにするための質問です。"
+msgstr "That was incorrect. Here's a question to help identify the misunderstanding."
+
+msgid "例: x = 4"
+msgstr "e.g. x = 4"
+
+msgid "例: 二次関数、微分の基礎"
+msgstr "e.g. Quadratic functions, Basics of differentiation"
+
+msgid "再提出"
+msgstr "Resubmit"
+
+msgid "削除"
+msgstr "Delete"
+
+msgid "参考ファイルをダウンロード"
+msgstr "Download reference file"
+
+msgid "参考ファイル（任意・複数可）"
+msgstr "Reference files (optional, multiple allowed)"
+
+msgid "資料"
+msgstr "Materials"
+
+msgid "資料を追加"
+msgstr "Add material"
+
+msgid "追加"
+msgstr "Add"
+
+msgid "資料はまだありません。"
+msgstr "No materials yet."
+
+msgid "回答して次へ"
+msgstr "Answer and continue"
+
+msgid "回答する"
+msgstr "Answer"
+
+msgid "学習の記録"
+msgstr "Learning record"
+
+msgid "提出"
+msgstr "Submit"
+
+msgid "わからない"
+msgstr "I don't know"
+
+msgid "数学"
+msgstr "Math"
+
+msgid "新しい科目を追加"
+msgstr "Add a new subject"
+
+msgid "最初からやり直す"
+msgstr "Start over"
+
+msgid "最初の解答"
+msgstr "First attempt"
+
+msgid "最後に、今回の考え方を自分の言葉で確認してみましょう。長い説明は必要ありません（目安10〜20秒、1〜2文でOKです）。"
+msgstr "Finally, let's check your thinking in your own words. A long explanation isn't necessary (about 10-20 seconds, 1-2 sentences is fine)."
+
+msgid "未選択でも追加できます"
+msgstr "You can add it even without selecting a file"
+
+msgid "次のおすすめ:"
+msgstr "Next recommendation:"
+
+msgid "正解"
+msgstr "Correct"
+
+msgid "正解でした！自信度が低かったので、理解を確認します。"
+msgstr "That was correct! Since your confidence was low, let's check your understanding."
+
+msgid "理解の証拠"
+msgstr "Evidence of understanding"
+
+msgid "理解度の自己評価と結果に少しズレがあります。次は自信度も意識して答えてみましょう。"
+msgstr "There's a slight mismatch between your self-assessed understanding and the result. Try being mindful of your confidence next time."
+
+msgid "科目"
+msgstr "Subject"
+
+msgid "科目を選んで診断からTransfer Checkまで進めましょう。学び終えた分だけ、コースの達成率が積み上がります。"
+msgstr "Choose a subject and work from the diagnostic through to the Transfer Check. Your course completion rate builds up as you learn."
+
+msgid "科目名"
+msgstr "Subject name"
+
+msgid "科目名を入力し、参考資料があればドラッグ&ドロップしてください。セクション構成は自動で作成されます。"
+msgstr "Enter a subject name, and drag & drop reference material if you have any. The section structure will be created automatically."
+
+msgid "考え方"
+msgstr "Reasoning"
+
+msgid "考え方の説明"
+msgstr "Explanation of your reasoning"
+
+msgid "自信度"
+msgstr "Confidence"
+
+msgid "解答"
+msgstr "Answer"
+
+msgid "解答（修正版）"
+msgstr "Answer (revised)"
+
+msgid "診断クイズ"
+msgstr "Diagnostic quiz"
+
+msgid "診断結果"
+msgstr "Diagnostic result"
+
+msgid "達成率"
+msgstr "Completion rate"
+
+msgid "選択中"
+msgstr "Selected"
+
+msgid "（またはクリックして選択、複数選択可）"
+msgstr "(or click to select, multiple files allowed)"
+
+msgid "（最終手段）"
+msgstr "(last resort)"
+
+msgid "達成率 %(percent)s%%（%(mastered)s/%(total)s）"
+msgstr "Completion rate %(percent)s%% (%(mastered)s/%(total)s)"
+
+msgid "セクション %(n)s"
+msgstr "Section %(n)s"
+
+msgid "コース達成率 %(course_percent)s%%"
+msgstr "Course completion %(course_percent)s%%"
+
+msgid "ヒント レベル%(level)s"
+msgstr "Hint level %(level)s"
+
+msgid "これまでのヒントを見る（%(count_hints)s件）"
+msgstr "View previous hints (%(count_hints)s)"
+
+msgid "レベル%(level)s:"
+msgstr "Level %(level)s:"
+
+msgid "今回つまずいたポイント: %(point)s"
+msgstr "What tripped you up this time: %(point)s"
+
+msgid "修正 %(n)s"
+msgstr "Revision %(n)s"
+
+msgid "使用したヒント（%(count_hints)s件）"
+msgstr "Hints used (%(count_hints)s)"
+
+msgid "診断問題 %(current)s / %(total)s"
+msgstr "Diagnostic question %(current)s / %(total)s"
+
+msgid "%(total)s 問正解"
+msgstr "%(total)s correct"
+
+msgid "%(total)sセクション"
+msgstr "%(total)s sections"
+
+msgid "「%(name)s」はすでに登録されています。"
+msgstr "\"%(name)s\" is already registered."
+
+msgid "この学習セッションをリセットしました。"
+msgstr "This learning session has been reset."
+
+msgid "サンプル科目は削除できません。"
+msgstr "The sample subject cannot be deleted."
+
+msgid "不明な操作です。"
+msgstr "Unknown action."
+
+msgid "不正なリクエストです。"
+msgstr "Invalid request."
+
+msgid "ファイルを選択してください。"
+msgstr "Please select a file."
+
+msgid "資料を追加しました。"
+msgstr "Material added."
+
+msgid "修正"
+msgstr "Revision"
+
+msgid "完了"
+msgstr "Done"
+
+msgid "新しい問題から、この学習セッションを始めます。"
+msgstr "Starting this learning session over with a new question."
+
+msgid "次のヒントを確認してみましょう。"
+msgstr "Take a look at the next hint."
+
+msgid "理解が確認できました。"
+msgstr "Your understanding has been confirmed."
+
+msgid "確認"
+msgstr "Verification"
+
+msgid "確認質問への回答を保存しました。"
+msgstr "Your answer to the verification question has been saved."
+
+msgid "科目名を入力してください。"
+msgstr "Please enter a subject name."
+
+msgid "診断"
+msgstr "Diagnosis"
+
+msgid "診断クイズがまだ完了していません。"
+msgstr "The diagnostic quiz is not yet complete."
+
+msgid "診断質問への回答を保存しました。"
+msgstr "Your answer to the diagnostic question has been saved."
+
+msgid "Mastered"
+msgstr "Mastered"
+
+msgid "再確認の時期です"
+msgstr "Time for a recheck"
+
+msgid "未着手"
+msgstr "Not started"
+
+msgid "理解途中"
+msgstr "In progress"
+
+msgid "自信不足かもしれません"
+msgstr "May be underconfident"
+
+msgid "自信過剰かもしれません"
+msgstr "May be overconfident"
+
+msgid "要復習"
+msgstr "Needs review"
+
+msgid "AIの助けなしで解く応用問題（Transfer Check）に進みます。"
+msgstr "Moving on to an application problem (Transfer Check) you'll solve without AI help."
+
+msgid "この単元は習得（Mastered）と判定されました。"
+msgstr "This unit has been marked as Mastered."
+
+msgid "ヒントを見ながら解答を修正します。"
+msgstr "Revise your answer using the hints."
+
+msgid "不正解だったので、誤解を診断する質問に進みます。"
+msgstr "That was incorrect, so let's move to a question that diagnoses the misunderstanding."
+
+msgid "復習が必要です。"
+msgstr "This needs review."
+
+msgid "正解でしたが自信度が低いので、理解を確認する質問に進みます。"
+msgstr "That was correct, but since your confidence was low, let's move to a question to check your understanding."
+
+msgid "自分の言葉で説明するTeach-Backに進みます。"
+msgstr "Moving on to Teach-Back, where you explain it in your own words."
+
+msgid "Teach-Backの回答を入力してください。"
+msgstr "Please enter your Teach-Back answer."
+
+msgid "Teach-Backの質問が見つかりません。"
+msgstr "The Teach-Back question could not be found."
+
+msgid "Teach-Backはこのステップでは利用できません。"
+msgstr "Teach-Back is not available at this step."
+
+msgid "Transfer Checkはこのステップでは利用できません。"
+msgstr "Transfer Check is not available at this step."
+
+msgid "Transfer Checkはすでに提出済みです。"
+msgstr "The Transfer Check has already been submitted."
+
+msgid "この問題はすでに回答済みか、存在しません。"
+msgstr "This question has already been answered, or does not exist."
+
+msgid "この診断クイズはすでに完了しています。"
+msgstr "This diagnostic quiz has already been completed."
+
+msgid "修正の提出はこのステップでは利用できません。"
+msgstr "Submitting a revision is not available at this step."
+
+msgid "回答を入力してください。"
+msgstr "Please enter an answer."
+
+msgid "最初の解答はこのステップでは提出できません。"
+msgstr "The first attempt cannot be submitted at this step."
+
+msgid "最初の解答はすでに提出済みです。"
+msgstr "The first attempt has already been submitted."
+
+msgid "確認質問に回答してから進んでください。"
+msgstr "Please answer the verification question before continuing."
+
+msgid "確認質問はこのステップでは利用できません。"
+msgstr "The verification question is not available at this step."
+
+msgid "自信度を選択してください。"
+msgstr "Please select a confidence level."
+
+msgid "解答と考え方の説明の両方を入力してください。"
+msgstr "Please enter both your answer and an explanation of your reasoning."
+
+msgid "診断質問に回答してから進んでください。"
+msgstr "Please answer the diagnostic question before continuing."
+
+msgid "診断質問はこのステップでは利用できません。"
+msgstr "The diagnostic question is not available at this step."
+

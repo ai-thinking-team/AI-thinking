@@ -28,6 +28,11 @@ def ai_provider_configured():
     return bool(getattr(settings, 'AI_PROVIDER_CLASS', ''))
 
 
+def is_ai_configured():
+    """Compatibility alias used by subject modules merged from main."""
+    return ai_provider_configured()
+
+
 def ai_provider_status(*, assistance_enabled=True):
     """Return a local, non-network status for the learner-facing AI Coach."""
     if not ai_provider_configured():
@@ -55,8 +60,12 @@ def ai_provider_status(*, assistance_enabled=True):
     }
 
 
-def generate_ai_response(*, system_prompt, user_prompt, response_schema=None, provider=None):
+def generate_ai_response(*, system_prompt, user_prompt, response_schema=None, provider=None, files=None):
     """Call a replaceable provider and normalize failures at one boundary."""
+    if files:
+        raise AIServiceUnavailable(
+            'Uploaded files are not sent to external AI providers. Use curated local processing.'
+        )
     selected_provider = provider or get_ai_provider()
     try:
         return selected_provider.generate(

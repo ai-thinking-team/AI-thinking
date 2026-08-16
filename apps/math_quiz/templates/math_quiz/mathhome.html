@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "数学" %} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
+{% include "math_quiz/_style.html" %}
+<style>
+  /* base.html's .container already supplies the page gutter, so these sections
+     only carry vertical rhythm. */
+  .math-toolbar { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
+
+  .hero { padding: 0 0 1.5rem; max-width: 720px; }
+  .hero .eyebrow { color: var(--primary); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: .78rem; }
+  .hero h1 { font-size: clamp(1.7rem, 3.2vw, 2.3rem); margin: .4rem 0 .5rem; letter-spacing: -.01em; }
+  .hero p { color: var(--muted); margin: 0; font-size: 1rem; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 1rem;
+  }
+
+  .new-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .6rem;
+    min-height: 190px;
+    border: 2px dashed #bbf7d0;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 700;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .new-card:hover { border-color: var(--primary); background: var(--primary-soft); }
+  .new-card .plus {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--primary-soft); color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; line-height: 1;
+  }
+
+  .course-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    min-height: 190px;
+    padding: 1.3rem 1.3rem 1.15rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .course-card:hover { transform: translateY(-2px); box-shadow: 0 1px 2px rgba(28,25,23,.06), 0 16px 30px -16px rgba(28,25,23,.28); }
+  .course-card.is-complete { border-color: #b7ecd6; }
+
+  .course-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem; }
+  .course-card h2 { font-size: 1.05rem; margin: 0; line-height: 1.35; }
+  .course-card .sub { color: var(--muted); font-size: .82rem; margin: 0; }
+
+  .progress-row { margin-top: auto; display: flex; flex-direction: column; gap: .4rem; }
+  .progress-track { height: 7px; border-radius: 999px; background: var(--primary-soft); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #22c55e); }
+  .is-complete .progress-fill { background: linear-gradient(90deg, var(--success), #4fd3a0); }
+  .progress-label { display: flex; justify-content: space-between; font-size: .78rem; font-weight: 700; color: var(--muted); }
+  .is-complete .progress-label { color: var(--success); }
+
+  .delete-form { position: absolute; top: .7rem; right: .7rem; }
+  .icon-btn {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: none; background: var(--color-muted); color: var(--muted);
+    font-size: .8rem; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:hover { background: var(--danger-soft); color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="math-toolbar">{% include "math_quiz/_language_switcher.html" %}</div>
+
+<section class="hero">
+  <p class="eyebrow">{% trans "数学" %}</p>
+  <p>{% trans "科目を選んで診断からTransfer Checkまで進めましょう。学び終えた分だけ、コースの達成率が積み上がります。" %}</p>
+</section>
+
+<div class="grid">
+  <a class="new-card" href="{% url 'math_quiz:new' %}">
+    <span class="plus">+</span>
+    {% trans "新しい科目を追加" %}
+  </a>
+
+  {% for course in courses %}
+  <a class="course-card card{% if course.complete %} is-complete{% endif %}" href="{% url 'math_quiz:unit_detail' course.unit.id %}">
+    {% if not course.unit.is_demo %}
+    <form class="delete-form" method="post" action="{% url 'math_quiz:delete_unit' course.unit.id %}" onclick="event.stopPropagation()">
+      {% csrf_token %}
+      {% trans "この科目を削除しますか？" as delete_confirm_message %}
+      <button type="submit" class="icon-btn" title="{% trans '削除' %}" onclick="return confirm('{{ delete_confirm_message|escapejs }}')">×</button>
+    </form>
+    {% endif %}
+    <div class="course-card-head">
+      <div>
+        <h2>{{ course.unit.name }}</h2>
+        <p class="sub">{% blocktrans with total=course.total %}{{ total }}セクション{% endblocktrans %}{% if course.unit.is_demo %} ・ {% trans "サンプル" %}{% endif %}</p>
+      </div>
+      {% if course.complete %}<span class="pill pill-success">Complete!</span>{% endif %}
+    </div>
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" style="width: {{ course.percent }}%;"></div></div>
+      <div class="progress-label"><span>{% trans "達成率" %}</span><span>{{ course.percent }}%</span></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

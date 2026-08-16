@@ -1,0 +1,126 @@
+<style>
+  /* Page-scoped styles for the maths section. Only the templates that include
+     this file load it, so the component names below (.card, .btn) can differ
+     from the site-wide ones in base.css without colliding on other pages.
+
+     The tokens are aliases onto base.css's, not values of their own: the rules
+     further down all read them, so the section tracks the brand palette
+     instead of drifting from it the way the old hardcoded set did. */
+  :root {
+    --bg: var(--color-bg);
+    --surface: var(--color-surface);
+    --ink: var(--color-fg);
+    --muted: var(--color-muted-fg);
+    --border: var(--color-border);
+    --primary: var(--color-primary);
+    --primary-dark: var(--color-primary-hover);
+    --primary-soft: var(--color-primary-tint);
+    --success: #0ea672;
+    --success-soft: #e3f9ef;
+    --warning: var(--color-accent);
+    --warning-soft: #fff7ea;
+    --danger: #c23a3a;
+    --danger-soft: #fdeaea;
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 9px;
+    --shadow: 0 1px 2px rgba(28, 25, 23, 0.06), 0 8px 24px -12px rgba(28, 25, 23, 0.18);
+  }
+
+  a { color: inherit; }
+
+  .lang-switch { display: inline-flex; align-items: center; gap: .4rem; }
+  .lang-switch form { margin: 0; display: inline; }
+  .lang-link {
+    background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+    font-size: .85rem; font-weight: 600; color: var(--muted);
+  }
+  .lang-link:hover { color: var(--primary); }
+  .lang-link.active { color: var(--primary-dark); font-weight: 800; }
+  .lang-sep { color: var(--border); font-size: .8rem; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    border: none;
+    border-radius: 999px;
+    padding: .85rem 1.6rem;
+    font-family: inherit;
+    font-size: .95rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease, background .15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--primary); color: white; box-shadow: 0 10px 20px -10px rgba(91, 69, 224, .7); }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-quiet { background: transparent; color: var(--muted); padding: .6rem 1rem; }
+  .btn-quiet:hover { color: var(--ink); }
+  .btn-block { width: 100%; }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .7rem;
+    border-radius: 999px;
+    font-size: .76rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+  }
+  .pill-success { background: var(--success-soft); color: var(--success); }
+  .pill-warning { background: var(--warning-soft); color: var(--warning); }
+  .pill-muted { background: var(--primary-soft); color: var(--primary); }
+
+  .status-banner {
+    border-radius: var(--radius-md);
+    padding: .95rem 1.15rem;
+    font-size: .92rem;
+    font-weight: 600;
+    margin: 0 0 1.1rem;
+  }
+  .status-banner.success { background: var(--success-soft); color: #0a7a53; }
+  .status-banner.info { background: var(--primary-soft); color: var(--primary-dark); }
+  .status-banner.warning { background: var(--warning-soft); color: #8a5a08; }
+  .status-banner.error { background: var(--danger-soft); color: var(--danger); }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    font: inherit;
+    font-size: .95rem;
+    padding: .8rem .95rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    resize: vertical;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  textarea:focus, input[type="text"]:focus, button:focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+  }
+</style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    },
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>

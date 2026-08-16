@@ -6,6 +6,8 @@ class AccessibleForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.error_messages['required'] = 'This field is required.'
         if not self.is_bound:
             return
         for name in self.fields:
