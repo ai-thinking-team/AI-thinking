@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from .models import Subject, Lesson
+from .models import Lesson, QuestionAttempt, Subject
 from .services import (
     evaluate_multiple_choice, 
     evaluate_rubric, 
@@ -43,6 +43,23 @@ def subject_detail(request, subject_id):
 
     return render(request, 'other_quiz/subject_detail.html', {'subject': subject})
 
+def _record_attempt(request, question):
+    """Save this browser's own outcome next to the shared Question.is_correct.
+
+    Written on every submission so re-answering updates the row rather than
+    piling up duplicates — the Progress page only cares where the learner
+    stands now. A session key has to exist first: Django does not assign one
+    until something is stored in the session, and anonymous visitors here
+    never store anything.
+    """
+    if request.session.session_key is None:
+        request.session.create()
+    QuestionAttempt.objects.update_or_create(
+        question=question,
+        browser_session_key=request.session.session_key,
+        defaults={'is_correct': question.is_correct},
+    )
+
 def lesson_detail(request, subject_id, lesson_id):
     subject = get_object_or_404(Subject, id=subject_id)
     lesson = get_object_or_404(Lesson, id=lesson_id, subject=subject)
@@ -59,12 +76,14 @@ def lesson_detail(request, subject_id, lesson_id):
                 question.eval = evaluate_multiple_choice(selected, question.correct_answer)
                 question.is_correct = question.eval['is_correct']
                 question.save()
-                
+                _record_attempt(request, question)
+
             elif action == "submit_rubric":
                 user_text = request.POST.get("rubric_text", "")
                 question.eval = evaluate_rubric(user_text, question.rubric_keywords or [])
                 question.is_correct = question.eval['is_passed']
                 question.save()
+                _record_attempt(request, question)
 
     return render(request, 'other_quiz/lesson_detail.html', {
         'subject': subject,

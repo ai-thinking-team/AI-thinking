@@ -49,6 +49,33 @@ class Question(models.Model):
     rubric_keywords = models.JSONField(blank=True, null=True)
     explanation = models.TextField(blank=True, null=True)
     is_correct = models.BooleanField(default=False)
-    
+
     def __str__(self):
         return f"{self.lesson.title} - {self.title}"
+
+
+class QuestionAttempt(models.Model):
+    """One learner's outcome on one question.
+
+    Question.is_correct above is a single flag on the question itself, so
+    whoever answers last overwrites everyone before them — fine for showing
+    the current page, useless for per-learner progress. This table keys the
+    same outcome by browser session instead, which is what apps/progress
+    reads to give Other Subjects a real progress figure. Question.is_correct
+    is deliberately left in place: the lesson page still renders from it.
+    """
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='attempts')
+    browser_session_key = models.CharField(max_length=40, db_index=True)
+    is_correct = models.BooleanField(default=False)
+    answered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('question', 'browser_session_key'),
+                name='unique_other_quiz_question_browser',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.question} - {'correct' if self.is_correct else 'incorrect'}"

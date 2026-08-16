@@ -323,6 +323,11 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--color-prima
   /* Elevation reads as occluded light, so it stays neutral. A brand-tinted
      shadow is invisible against the brand-coloured hero block. */
   --color-shadow: rgba(28, 25, 23, .16);
+  /* Brighter than --color-primary on purpose: mastery feedback sits next to
+     brand-green buttons and nav elsewhere on these pages, and needs to read
+     as a distinct signal rather than more brand chrome. See docs/decisions.md
+     (2026-08-14) — pair with an icon/shape where this marks state, not text. */
+  --color-success: #22c55e;
   --color-accent: #b45309;
   --color-bg: #faf9f5;
   --color-surface: #ffffff;
@@ -462,9 +467,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   border-radius: 1rem;
   background: var(--color-primary-tint);
   color: var(--color-primary);
-  margin-bottom: 1.25rem;
+  margin-bottom: .45rem;
 }
 .card p, .panel p { color: var(--color-muted-fg); margin-bottom: 0; font-size: .92rem; }
+.card-progress {
+  margin: .6rem 0 0;
+  padding-top: .6rem;
+  border-top: 1px solid var(--color-border);
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
 
 label { display: block; margin: 1rem 0; font-weight: 600; }
 input, textarea, select {
@@ -639,7 +652,7 @@ details { margin: .75rem 0; }
 .tagline-break { display: inline; }
 .home-cards-panel { flex: 1; }
 .home-cards-panel .subject-grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.home-cards-panel .card { padding: 2.25rem 1.75rem; border: none; border-radius: 1.25rem; box-shadow: 0 10px 30px var(--color-shadow); }
+.home-cards-panel .card { padding: 1.5rem 1.75rem 1.15rem; border: none; border-radius: 1.25rem; box-shadow: 0 10px 30px var(--color-shadow); }
 /* These cards sit on the brand-coloured block, where a brand-coloured focus
    ring would be invisible. White is the only high-contrast option here. */
 .home-cards-panel .card:focus-visible { outline-color: #ffffff; }
@@ -657,6 +670,118 @@ details { margin: .75rem 0; }
 @media (max-width: 560px) {
   .home-cards-panel .subject-grid { grid-template-columns: 1fr; }
 }
+
+.overall-summary { padding: 1.1rem 1.4rem; margin-top: 1.25rem; margin-bottom: 1.5rem; }
+.overall-summary a { font-size: .82rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.overall-summary a:hover { text-decoration: underline; }
+
+.overall-summary.style-plain {
+  background: var(--color-surface);
+  border-radius: .9rem;
+  box-shadow: 0 4px 14px var(--color-shadow);
+}
+.overall-summary.style-plain a { color: var(--color-primary); }
+
+.overall-summary.stats-row { display: flex; gap: 1.75rem; }
+.overall-summary .stat .num { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+.overall-summary .stat .label { font-size: .76rem; margin-top: .25rem; }
+.overall-summary.style-plain .stat .num { color: var(--color-primary); }
+.overall-summary.style-plain .stat .label { color: var(--color-muted-fg); }
+
+.overall-summary.style-indigo { background: var(--color-primary); border-radius: 1.1rem; display: flex; gap: 1.75rem; }
+.overall-summary.style-indigo .stat .num { color: #fff; }
+.overall-summary.style-indigo .stat .label { color: rgba(255, 255, 255, .72); }
+
+.summary-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .6rem; }
+.summary-title { font-size: .85rem; font-weight: 700; color: var(--color-muted-fg); }
+
+.stack-track { height: .9rem; border-radius: 999px; overflow: hidden; display: flex; background: var(--color-border); margin-bottom: .6rem; }
+.stack-track span { height: 100%; }
+
+.stack-legend { display: flex; gap: 1.4rem; }
+.stack-legend span { display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--color-muted-fg); }
+.stack-legend i { display: inline-block; width: .6rem; height: .6rem; border-radius: 999px; font-style: normal; }
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+  text-underline-offset: .2rem;
+}
+.back-link:hover { text-decoration: underline; color: var(--color-primary-hover); }
+
+.progress-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 720px) {
+  .progress-grid { grid-template-columns: 1fr; }
+}
+
+.subject-card { padding: 1.5rem; }
+.subject-focused { display: block; }
+.subject-card-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .9rem; }
+.subject-card-head .chip {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: .65rem;
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.subject-card-head .chip svg { width: 1.3rem; height: 1.3rem; }
+.subject-card-head h2 { font-size: 1.05rem; margin: 0; flex: 1; }
+.subject-card-ratio { font-size: .82rem; font-weight: 700; color: var(--color-primary); }
+
+.bar-track { height: .4rem; background: var(--color-border); border-radius: 999px; overflow: hidden; margin-bottom: 1rem; }
+.bar-fill { height: 100%; background: var(--color-primary); border-radius: 999px; }
+
+.m-list { list-style: none; margin: 0; padding: 0; }
+.m-list li { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-top: 1px solid var(--color-border); font-size: .88rem; }
+.m-list li .name { flex: 1; font-weight: 500; }
+/* Rows that have a drill-down page (see _subject_card.html). Inherits the
+   row's colour so the list still reads as one block, with the underline on
+   hover as the only affordance. */
+.m-list li a.topic-link { color: inherit; text-decoration: none; }
+.m-list li a.topic-link:hover,
+.m-list li a.topic-link:focus-visible { color: var(--color-primary); text-decoration: underline; }
+.m-list li .state { color: var(--color-muted-fg); font-size: .82rem; }
+.m-list li.review .state { color: var(--color-accent); font-weight: 600; }
+.m-list li.mastered .state { color: var(--color-success); font-weight: 600; }
+
+.dot { width: 1.05rem; height: 1.05rem; border-radius: 999px; border: 2px solid var(--color-border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.m-list li.mastered .dot { background: var(--color-success); border-color: var(--color-success); }
+.m-list li.mastered .dot::after { content: '✓'; color: #fff; font-size: .58rem; font-weight: 700; }
+.m-list li.review .dot { border-color: var(--color-accent); }
+.m-list li.review .dot::after { content: '!'; color: var(--color-accent); font-size: .62rem; font-weight: 800; }
+.m-list li.progress .dot { border-color: var(--color-primary); }
+.m-list li.progress .dot::after { content: ''; width: .38rem; height: .38rem; border-radius: 999px; background: var(--color-primary); }
+
+.show-more-link { display: inline-block; margin-top: .8rem; font-size: .85rem; font-weight: 600; color: var(--color-primary); text-decoration: none; }
+.show-more-link:hover { text-decoration: underline; }
+
+.empty-state {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: .9rem;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+.empty-state h2 { margin: 0 0 .5rem; }
+.empty-state p { color: var(--color-muted-fg); margin: 0 0 1.5rem; }
+.empty-state .button-link {
+  display: inline-block;
+  padding: .7rem 1.3rem;
+  border-radius: .4rem;
+  background: var(--color-primary);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+.empty-state .button-link:hover { background: var(--color-primary-hover); }
 
 @media (max-width: 760px) {
   .workflow { grid-template-columns: 1fr 1fr; }

@@ -1,35 +1,26 @@
 from django.shortcuts import render
 
-from apps.learning_core.models import LearningSession
+from apps.progress.services import overall_progress_totals, subject_progress_summary
 
 
-def _mastered_context(request):
-    """Subjects this browser session has already mastered.
+def _progress_context(request):
+    """Per-subject badges plus the overall totals bar.
 
-    Both entry points below render the same subject cards, so the lookup lives
-    here rather than being duplicated or tied to just one of them.
+    core/home.html includes core/subject_selection.html, and that partial is
+    also served on its own at /subjects/ — so both entry points need this
+    context or the standalone page silently renders "Not started yet" for
+    every subject (Django swallows missing template variables).
     """
-    session_key = request.session.session_key
-    mastered_subjects = set()
-    mastered_sessions = []
-    if session_key:
-        mastered_sessions = list(LearningSession.objects.filter(
-            browser_session_key=session_key,
-            mastered=True,
-        ).select_related('topic__subject'))
-        for s in mastered_sessions:
-            if s.topic and s.topic.subject:
-                mastered_subjects.add(s.topic.subject.slug)
-
+    progress_summary = subject_progress_summary(request.session.session_key)
     return {
-        'mastered_subjects': mastered_subjects,
-        'mastered_sessions': mastered_sessions,
+        'progress_summary': progress_summary,
+        'overall_progress': overall_progress_totals(progress_summary),
     }
 
 
 def home(request):
-    return render(request, 'core/home.html', _mastered_context(request))
+    return render(request, 'core/home.html', _progress_context(request))
 
 
 def subject_selection(request):
-    return render(request, 'core/subject_selection.html', _mastered_context(request))
+    return render(request, 'core/subject_selection.html', _progress_context(request))

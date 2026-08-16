@@ -1,0 +1,37 @@
+<section class="{% if focused %}subject-focused{% else %}panel subject-card{% endif %}">
+  <div class="subject-card-head">
+    <span class="chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        {% if entry.subject.slug == "math" %}{% include "components/icons/math.html" %}
+        {% elif entry.subject.slug == "coding" %}{% include "components/icons/coding.html" %}
+        {% elif entry.subject.slug == "languages" %}{% include "components/icons/languages.html" %}
+        {% elif entry.subject.slug == "other" %}{% include "components/icons/other.html" %}
+        {% else %}{% include "components/icons/generic.html" %}
+        {% endif %}
+      </svg>
+    </span>
+    <h2>{{ entry.subject.name }}</h2>
+    <span class="subject-card-ratio">{% if entry.total %}{{ entry.mastered }}/{{ entry.total }}{% else %}Not started yet{% endif %}</span>
+  </div>
+  {% if entry.total %}
+    <div class="bar-track"><div class="bar-fill" style="width: {% widthratio entry.mastered entry.total 100 %}%"></div></div>
+    <ul class="m-list">
+      {% for topic in topics %}
+        <li class="{% if topic.is_review_item %}review{% elif topic.is_mastered %}mastered{% else %}progress{% endif %}">
+          <span class="dot"></span>
+          {# Only rows with a drill-down page become links — see
+             services.subject_progress_detail's detail_session_id. #}
+          {% if topic.detail_session_id %}
+            <a class="name topic-link" href="{% url 'progress:coding_session_detail' topic.detail_session_id %}">{{ topic.name }}</a>
+          {% else %}
+            <span class="name">{{ topic.name }}</span>
+          {% endif %}
+          <span class="state">{{ topic.state_label }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% if not focused %}
+      <a class="show-more-link" href="?subject={{ entry.subject.slug }}">Show more →</a>
+    {% endif %}
+  {% endif %}
+</section>

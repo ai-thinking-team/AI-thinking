@@ -3,7 +3,9 @@
 {% block title %}Coding session evidence{% endblock %}
 
 {% block content %}
-<p><a href="{% url 'progress:dashboard' %}">← Back to Coding progress</a></p>
+{# Back to the focused Coding subject page, the level this drill-down came
+   from — not the all-subjects grid, which is one level further up. #}
+<p><a href="{% url 'progress:dashboard' %}?subject=coding">← Back to Coding progress</a></p>
 <header class="page-header progress-header">
   <div>
     <p class="eyebrow">Coding evidence trail</p>

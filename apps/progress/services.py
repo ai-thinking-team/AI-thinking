@@ -1,246 +1,351 @@
-"""Read-only Coding progress projections from append-only learning evidence."""
-
-import json
 from dataclasses import dataclass
 
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 
-from apps.learning_core.models import (
-    CoachInteraction,
-    ConceptMastery,
-    LearnerAttempt,
-    LearningSession,
-    MisconceptionRecord,
-    TeachBackAttempt,
-    TransferAttempt,
-)
+from apps.learning_core.models import LearningSession, MisconceptionRecord, Subject
+from apps.learning_core.state_machine import WorkflowState
+# Maths and Other Subjects track progress in their own models rather than in
+# learning_core, so this page reads those directly. Aliased because both app
+# and learning_core define a ConceptMastery / Question / Subject.
+from apps.lang_quiz.models import LanguageQuizRun
+# Imported rather than repeated so the Progress page cannot drift from the
+# mark the Languages app itself treats as a pass.
+from apps.lang_quiz.quiz_engine import ALL_STAGES as LANGUAGE_STAGES
+from apps.lang_quiz.quiz_engine import COURSES as LANGUAGE_COURSES
+from apps.lang_quiz.quiz_engine import STAGE_CLEAR_PERCENT as LANGUAGE_PASS_PERCENT
+from apps.math_quiz.models import ConceptMastery as MathConceptMastery
+from apps.math_quiz.models import MasteryState as MathMasteryState
+from apps.other_quiz.models import Question as OtherQuestion
+from apps.other_quiz.models import QuestionAttempt
 
-
-TEACH_BACK_FIELD_LABELS = {
-    'original_issue': 'Original issue',
-    'failure_reason': 'Why the original approach failed',
-    'correction': 'Correction',
-    'concept': 'Underlying concept',
-    'prevention': 'How to prevent this error',
-}
-
-
-def _ordered_prefetches():
-    return (
-        Prefetch(
-            'attempts',
-            queryset=LearnerAttempt.objects.order_by('revision_number', 'created_at', 'pk').prefetch_related(
-                'hint_usage'
-            ),
-            to_attr='progress_attempts',
-        ),
-        Prefetch(
-            'teach_back_attempts',
-            queryset=TeachBackAttempt.objects.order_by('created_at', 'pk'),
-            to_attr='progress_teach_back_attempts',
-        ),
-        Prefetch(
-            'transfer_attempts',
-            queryset=TransferAttempt.objects.select_related('activity').order_by('created_at', 'pk'),
-            to_attr='progress_transfer_attempts',
-        ),
-        Prefetch(
-            'misconceptions',
-            queryset=MisconceptionRecord.objects.select_related('concept').order_by('created_at', 'pk'),
-            to_attr='progress_misconceptions',
-        ),
-        Prefetch(
-            'mastery_records',
-            queryset=ConceptMastery.objects.select_related('concept').order_by('created_at', 'pk'),
-            to_attr='progress_mastery_records',
-        ),
-    )
+# This module stays subject-neutral; the one exception is asking coding.py
+# whether a row has a drill-down page, so subject_progress_detail() can link
+# to it. coding.py does not import back, so there is no import cycle.
+from .coding import has_detail_page
 
 
-def sessions_for_browser(browser_session_key, *, include_evidence=False):
-    """Return only sessions owned by the current browser, newest first."""
+def sessions_for_browser(browser_session_key):
     if not browser_session_key:
         return LearningSession.objects.none()
-    sessions = LearningSession.objects.filter(
-        browser_session_key=browser_session_key,
-        activity__coding_exercise__isnull=False,
+    return LearningSession.objects.filter(
+        browser_session_key=browser_session_key
     ).select_related(
         'topic__subject',
-        'activity__concept',
+        # Lets has_detail_page() answer from this one query instead of firing
+        # a lookup per session.
         'activity__coding_exercise',
-        'coding_plan',
-    ).order_by('-started_at', '-pk')
-    return sessions.prefetch_related(*_ordered_prefetches()) if include_evidence else sessions
+    ).prefetch_related(
+        # Ordered explicitly because _is_review_item() keeps the last row per
+        # code as the current one; an unordered prefetch would make which
+        # record wins depend on the database's arbitrary row order.
+        Prefetch(
+            'misconceptions',
+            queryset=MisconceptionRecord.objects.order_by('created_at', 'pk'),
+        ),
+    ).order_by('-updated_at')
 
 
-def _status_badge(status):
-    if status in {ConceptMastery.Status.MASTERED, 'CLEAR_UNDERSTANDING', 'PASSED', 'RESOLVED'}:
-        return 'success'
-    if status in {ConceptMastery.Status.NEEDS_REVIEW, 'REPEATED', 'CONFIRMED'}:
-        return 'danger'
-    return 'warning'
+def _is_review_item(session):
+    """A topic needs review if the final Transfer Check failed, or a confirmed
+    misconception is still open.
 
-
-def _latest(records):
-    return records[-1] if records else None
-
-
-def _latest_misconceptions_by_code(records):
-    latest = {}
-    for record in records:
-        latest[record.code] = record
-    return tuple(latest.values())
-
-
-def _unresolved_misconceptions(records):
-    return tuple(
-        record for record in _latest_misconceptions_by_code(records)
-        if record.status in {
+    MisconceptionRecord is append-only: re-diagnosing the same `code` writes a
+    new row rather than editing the old one, so only the newest row per code
+    describes the learner's current state. CONFIRMED/REPEATED mean still open;
+    DISMISSED/RESOLVED mean closed. This mirrors coding.py's
+    _unresolved_misconceptions(), which does the same grouping for the
+    per-session drill-down.
+    """
+    if session.current_state == WorkflowState.NEEDS_REVIEW:
+        return True
+    if session.current_state == WorkflowState.MASTERED:
+        return False
+    # session.misconceptions.all() reuses the prefetch_related() cache above
+    # instead of firing one extra query per session (an N+1 query pattern).
+    latest_by_code = {}
+    for record in session.misconceptions.all():
+        latest_by_code[record.code] = record
+    return any(
+        record.status in {
             MisconceptionRecord.Status.CONFIRMED,
             MisconceptionRecord.Status.REPEATED,
         }
+        for record in latest_by_code.values()
     )
 
 
-def _confidence_change(attempts):
-    if not attempts:
-        return 'No code attempt yet.'
-    first = attempts[0].confidence
-    latest = attempts[-1].confidence
-    return f'{first}/5' if first == latest else f'{first}/5 → {latest}/5'
+def _badge_text(bucket):
+    parts = []
+    if bucket['mastered']:
+        parts.append(f"{bucket['mastered']} mastered")
+    if bucket['needs_review']:
+        parts.append(f"{bucket['needs_review']} to review")
+    if bucket['in_progress']:
+        parts.append(f"{bucket['in_progress']} in progress")
+    return ' · '.join(parts) if parts else 'Not started yet'
 
 
-def _highest_hint_level(attempts):
-    return max(
-        (hint.level for attempt in attempts for hint in attempt.hint_usage.all()),
-        default=0,
-    )
+def subject_progress_summary(browser_session_key):
+    """Per-subject counts for the Home page's brief overview badges.
+
+    Delegates so Home and the Progress page can never disagree: both now
+    have to account for the subjects that keep progress outside
+    learning_core (see _adapted_subject_topics), and duplicating that here
+    is how the two would drift apart.
+    """
+    return summary_from_detail(subject_progress_detail(browser_session_key))
+
+
+def summary_from_detail(subjects_detail):
+    """Same shape as subject_progress_summary(), built from an already-fetched
+    subject_progress_detail() result instead of querying the database again."""
+    summary = {}
+    for entry in subjects_detail:
+        bucket = summary.setdefault(entry['subject'].slug, {'mastered': 0, 'needs_review': 0, 'in_progress': 0})
+        for topic in entry['topics']:
+            if topic['is_mastered']:
+                bucket['mastered'] += 1
+            elif topic['is_review_item']:
+                bucket['needs_review'] += 1
+            else:
+                bucket['in_progress'] += 1
+    for bucket in summary.values():
+        bucket['badge'] = _badge_text(bucket)
+    return summary
+
+
+def overall_progress_totals(summary):
+    """Grand totals across all subjects, for the Home page's overall summary widget."""
+    totals = {'mastered': 0, 'needs_review': 0, 'in_progress': 0}
+    for bucket in summary.values():
+        totals['mastered'] += bucket['mastered']
+        totals['needs_review'] += bucket['needs_review']
+        totals['in_progress'] += bucket['in_progress']
+    return totals
 
 
 @dataclass(frozen=True)
-class CodingSessionSummary:
-    session: LearningSession
-    title: str
-    concept: str
-    state: str
-    state_label: str
-    active: bool
-    attempt_count: int
-    confidence_change: str
-    highest_hint_level: int
-    teach_back: TeachBackAttempt | None
-    transfer: TransferAttempt | None
-    mastery: ConceptMastery | None
-    unresolved_misconceptions: tuple
+class _SubjectStandIn:
+    """Stands in for a learning_core.Subject row that does not exist.
 
-    @property
-    def mastery_badge(self):
-        return _status_badge(self.mastery.status) if self.mastery else 'warning'
-
-    @property
-    def teach_back_badge(self):
-        return _status_badge(self.teach_back.evaluation) if self.teach_back else 'warning'
-
-    @property
-    def transfer_badge(self):
-        return 'success' if self.transfer and self.transfer.passed else 'warning'
+    The templates only ever read .slug and .name, and creating real rows as
+    a side effect of loading a page would be a write on a GET, so missing
+    subjects get this instead.
+    """
+    slug: str
+    name: str
 
 
-def coding_session_summary(session):
-    """Build one template-ready summary without querying related managers."""
-    attempts = getattr(session, 'progress_attempts', ())
-    teach_back_attempts = getattr(session, 'progress_teach_back_attempts', ())
-    transfer_attempts = getattr(session, 'progress_transfer_attempts', ())
-    misconceptions = getattr(session, 'progress_misconceptions', ())
-    mastery_records = getattr(session, 'progress_mastery_records', ())
-    activity = session.activity
-    return CodingSessionSummary(
-        session=session,
-        title=activity.title if activity else session.topic.name,
-        concept=activity.concept.name if activity else '',
-        state=session.current_state,
-        state_label=session.get_current_state_display(),
-        active=session.ended_at is None,
-        attempt_count=len(attempts),
-        confidence_change=_confidence_change(attempts),
-        highest_hint_level=_highest_hint_level(attempts),
-        teach_back=_latest(teach_back_attempts),
-        transfer=_latest(transfer_attempts),
-        mastery=_latest(mastery_records),
-        unresolved_misconceptions=_unresolved_misconceptions(misconceptions),
+# The four learning areas Home offers (core/subject_selection.html). A
+# learning_core.Subject row only appears once something writes one — Coding
+# at migration time, Languages on a learner's first visit, Maths and Other
+# Subjects never, since they store progress in their own apps. Seeding the
+# grid from this list instead means the card set does not change depending
+# on which subjects happen to have been used already.
+KNOWN_SUBJECTS = (
+    ('math', 'Mathematics'),
+    ('coding', 'Coding'),
+    ('languages', 'Languages'),
+    ('other', 'Other Subjects'),
+)
+
+
+def _math_topics(browser_session_key):
+    """Maths sections this browser has worked on, as progress topic rows.
+
+    Source is ConceptMastery rather than SectionSession because
+    SectionSession is deleted and recreated whenever a learner restarts a
+    section, while ConceptMastery persists across restarts — restarting a
+    section should not erase it from the Progress page. Its mastery_state
+    already carries the same four values this page groups by, so the
+    mapping is direct.
+    """
+    if not browser_session_key:
+        return []
+    records = MathConceptMastery.objects.filter(
+        browser_session_key=browser_session_key,
+    ).exclude(
+        mastery_state=MathMasteryState.NOT_STARTED,
+    ).select_related('section__unit').order_by('-updated_at')
+    return [
+        {
+            # str(Section) is "<unit> - <title>", which keeps sections from
+            # different courses apart in a flat list.
+            'name': str(record.section),
+            'state_label': record.get_mastery_state_display(),
+            'is_review_item': record.mastery_state == MathMasteryState.NEEDS_REVIEW,
+            'is_mastered': record.mastery_state == MathMasteryState.MASTERED,
+            'detail_session_id': None,
+        }
+        for record in records
+    ]
+
+
+def _language_run_label(run):
+    """What to call one quiz run's group on the Progress page.
+
+    A course or stage run carries the section it drew questions from, so
+    labelling by section alone would file "World 1 Stage 1" under plain
+    "Vocabulary". Prefer the course's own title, then the uploaded material's
+    name, then the slug, and only fall back to the section for the plain
+    section quizzes that have no course at all.
+    """
+    if not run.course_slug:
+        return run.get_section_display()
+    catalogued = LANGUAGE_COURSES.get(run.course_slug) or LANGUAGE_STAGES.get(run.course_slug)
+    if catalogued and catalogued.get('title'):
+        return catalogued['title']
+    return run.source_name or run.course_slug
+
+
+def _language_topics(browser_session_key):
+    """Language quizzes this browser has run.
+
+    Read from LanguageQuizRun because every way into a language quiz goes
+    through it (views._create_run), while the two records that might look
+    like better sources do not: LearningSession is only written by the older
+    exercise page, and LanguageCourseProgress is skipped entirely for a plain
+    section quiz, which passes no course_slug.
+
+    Grouped by (section, course) rather than section alone so a course's
+    stages stay separate from the plain quiz they share a section with.
+    Within a group, the best finished run wins, so a weak early attempt is
+    not held against a later good one.
+    """
+    if not browser_session_key:
+        return []
+    # Every run's full question payload (~10KB) is loaded just to read
+    # len(questions) as the score denominator, and runs are never pruned, so
+    # this grows with a learner's history. Left as is because the alternatives
+    # are worse: a JSON-length annotation would be per-database, and
+    # LanguageCourseProgress — which stores a ready-made score_percent — is
+    # never written for the plain section quizzes that have no course_slug.
+    runs = LanguageQuizRun.objects.filter(
+        browser_session_key=browser_session_key,
+    ).order_by('section', 'course_slug', 'created_at')
+
+    per_group = {}
+    for run in runs:
+        bucket = per_group.setdefault(
+            (run.section, run.course_slug),
+            {'label': _language_run_label(run), 'best': None, 'finished': False},
+        )
+        if not run.finished:
+            continue
+        bucket['finished'] = True
+        total = len(run.questions)
+        score = round(run.correct_count / total * 100) if total else 0
+        if bucket['best'] is None or score > bucket['best']:
+            bucket['best'] = score
+
+    topics = []
+    for bucket in per_group.values():
+        best = bucket['best']
+        is_mastered = best is not None and best >= LANGUAGE_PASS_PERCENT
+        topics.append({
+            'name': bucket['label'],
+            'state_label': 'In progress' if best is None else f'{best}% best score',
+            'is_review_item': bucket['finished'] and not is_mastered,
+            'is_mastered': is_mastered,
+            'detail_session_id': None,
+        })
+    return topics
+
+
+def _other_subject_topics(browser_session_key):
+    """Other Subjects courses this browser has answered questions in.
+
+    other_quiz has no workflow states to read, only right/wrong answers, so
+    mastery is derived: every question answered correctly is mastered, any
+    wrong answer means review, and a partly-finished course is in progress.
+    """
+    if not browser_session_key:
+        return []
+    attempts = QuestionAttempt.objects.filter(
+        browser_session_key=browser_session_key,
+    ).select_related('question__lesson__subject')
+
+    per_course = {}
+    for attempt in attempts:
+        course = attempt.question.lesson.subject
+        bucket = per_course.setdefault(course.id, {'course': course, 'answered': 0, 'correct': 0})
+        bucket['answered'] += 1
+        bucket['correct'] += 1 if attempt.is_correct else 0
+
+    if not per_course:
+        return []
+    # One grouped query for the denominators, rather than one per course.
+    question_totals = dict(
+        OtherQuestion.objects.filter(lesson__subject_id__in=per_course)
+        .values_list('lesson__subject_id')
+        .annotate(total=Count('id'))
     )
 
+    topics = []
+    for course_id, bucket in per_course.items():
+        total = question_totals.get(course_id, 0)
+        is_mastered = total > 0 and bucket['correct'] == total
+        topics.append({
+            'name': bucket['course'].title,
+            'state_label': f"{bucket['correct']}/{total} correct",
+            'is_review_item': not is_mastered and bucket['answered'] > bucket['correct'],
+            'is_mastered': is_mastered,
+            'detail_session_id': None,
+        })
+    return topics
 
-def coding_dashboard_for_browser(browser_session_key):
-    summaries = tuple(
-        coding_session_summary(session)
-        for session in sessions_for_browser(browser_session_key, include_evidence=True)
-    )
-    return {
-        'sessions': summaries,
-        'total_sessions': len(summaries),
-        'active_sessions': sum(summary.active for summary in summaries),
-        'mastered_sessions': sum(
-            summary.mastery is not None
-            and summary.mastery.status == ConceptMastery.Status.MASTERED
-            for summary in summaries
-        ),
-        'needs_review_sessions': sum(
-            summary.mastery is not None
-            and summary.mastery.status == ConceptMastery.Status.NEEDS_REVIEW
-            for summary in summaries
-        ),
+
+def _merge_adapted_topics(by_subject, slug, topics):
+    """Fold topics sourced outside learning_core into the same grid.
+
+    Merges rather than replaces: in DEBUG, dev_seed.py fabricates
+    learning_core sessions under these same slugs, and dropping either side
+    would silently hide real work or make the dev tools look broken.
+    """
+    entry = by_subject[slug]
+    entry['topics'].extend(topics)
+    entry['mastered'] += sum(1 for topic in topics if topic['is_mastered'])
+
+
+def subject_progress_detail(browser_session_key):
+    """Per-subject, per-topic breakdown for the Progress page. Subjects with
+    no sessions yet are still included, as an empty 'not started' entry."""
+    by_subject = {
+        subject.slug: {'subject': subject, 'topics': [], 'mastered': 0}
+        for subject in Subject.objects.order_by('name')
     }
+    for slug, name in KNOWN_SUBJECTS:
+        by_subject.setdefault(
+            slug, {'subject': _SubjectStandIn(slug=slug, name=name), 'topics': [], 'mastered': 0},
+        )
+    for session in sessions_for_browser(browser_session_key):
+        subject = session.topic.subject
+        entry = by_subject.setdefault(subject.slug, {'subject': subject, 'topics': [], 'mastered': 0})
+        is_mastered = session.current_state == WorkflowState.MASTERED
+        if is_mastered:
+            entry['mastered'] += 1
+        entry['topics'].append({
+            'name': session.topic.name,
+            'state_label': session.get_current_state_display(),
+            'is_review_item': _is_review_item(session),
+            'is_mastered': is_mastered,
+            # None unless a drill-down page exists for this row. Coding is the
+            # only subject with one so far; when another subject grows one,
+            # widen this rather than adding a second key.
+            'detail_session_id': session.pk if has_detail_page(session) else None,
+        })
 
+    # Maths, Languages and Other Subjects record progress in their own apps,
+    # so the loop above cannot see them. (Languages does write learning_core
+    # sessions, but only from its older exercise page — never from the quiz
+    # runs the app actually leads you to.)
+    _merge_adapted_topics(by_subject, 'math', _math_topics(browser_session_key))
+    _merge_adapted_topics(by_subject, 'languages', _language_topics(browser_session_key))
+    _merge_adapted_topics(by_subject, 'other', _other_subject_topics(browser_session_key))
 
-def _teach_back_fields(response):
-    try:
-        values = json.loads(response)
-    except (TypeError, json.JSONDecodeError):
-        return ()
-    if not isinstance(values, dict):
-        return ()
-    return tuple(
-        {'label': label, 'value': str(values.get(field, '')).strip()}
-        for field, label in TEACH_BACK_FIELD_LABELS.items()
-        if str(values.get(field, '')).strip()
-    )
-
-
-def coding_session_detail(session):
-    """Project a fully prefetched session into labelled, privacy-safe evidence."""
-    summary = coding_session_summary(session)
-    attempts = getattr(session, 'progress_attempts', ())
-    interactions = getattr(session, 'progress_coach_interactions', ())
-    teach_back_attempts = getattr(session, 'progress_teach_back_attempts', ())
-    transfers = getattr(session, 'progress_transfer_attempts', ())
-    misconceptions = getattr(session, 'progress_misconceptions', ())
-    mastery_records = getattr(session, 'progress_mastery_records', ())
-    return {
-        'summary': summary,
-        'plan': getattr(session, 'coding_plan', None),
-        'attempts': attempts,
-        'interactions': interactions,
-        'teach_back_attempts': tuple({
-            'attempt': attempt,
-            'response_fields': _teach_back_fields(attempt.response),
-            'badge': _status_badge(attempt.evaluation),
-        } for attempt in teach_back_attempts),
-        'transfer_attempts': transfers,
-        'misconceptions': misconceptions,
-        'unresolved_misconceptions': summary.unresolved_misconceptions,
-        'mastery_records': mastery_records,
-    }
-
-
-def coding_session_for_browser(browser_session_key, session_id):
-    """Fetch one browser-owned session with all detail evidence in fixed query count."""
-    return sessions_for_browser(browser_session_key, include_evidence=True).prefetch_related(
-        Prefetch(
-            'coach_interactions',
-            queryset=CoachInteraction.objects.select_related('learner_attempt').prefetch_related(
-                'learner_response'
-            ).order_by('created_at', 'pk'),
-            to_attr='progress_coach_interactions',
-        ),
-    ).filter(pk=session_id).first()
+    for entry in by_subject.values():
+        entry['topics'].sort(key=lambda topic: not topic['is_review_item'])
+        entry['total'] = len(entry['topics'])
+    # Sorted by name because the adapted subjects are appended after the
+    # learning_core ones, which would otherwise leave the grid half-ordered.
+    return sorted(by_subject.values(), key=lambda entry: entry['subject'].name)
