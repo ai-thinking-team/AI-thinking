@@ -10,6 +10,8 @@ from apps.learning_core.state_machine import WorkflowState
 from apps.lang_quiz.models import LanguageQuizRun
 # Imported rather than repeated so the Progress page cannot drift from the
 # mark the Languages app itself treats as a pass.
+from apps.lang_quiz.quiz_engine import ALL_STAGES as LANGUAGE_STAGES
+from apps.lang_quiz.quiz_engine import COURSES as LANGUAGE_COURSES
 from apps.lang_quiz.quiz_engine import STAGE_CLEAR_PERCENT as LANGUAGE_PASS_PERCENT
 from apps.math_quiz.models import ConceptMastery as MathConceptMastery
 from apps.math_quiz.models import MasteryState as MathMasteryState
@@ -179,8 +181,25 @@ def _math_topics(browser_session_key):
     ]
 
 
+def _language_run_label(run):
+    """What to call one quiz run's group on the Progress page.
+
+    A course or stage run carries the section it drew questions from, so
+    labelling by section alone would file "World 1 Stage 1" under plain
+    "Vocabulary". Prefer the course's own title, then the uploaded material's
+    name, then the slug, and only fall back to the section for the plain
+    section quizzes that have no course at all.
+    """
+    if not run.course_slug:
+        return run.get_section_display()
+    catalogued = LANGUAGE_COURSES.get(run.course_slug) or LANGUAGE_STAGES.get(run.course_slug)
+    if catalogued and catalogued.get('title'):
+        return catalogued['title']
+    return run.source_name or run.course_slug
+
+
 def _language_topics(browser_session_key):
-    """Language sections this browser has run a quiz in.
+    """Language quizzes this browser has run.
 
     Read from LanguageQuizRun because every way into a language quiz goes
     through it (views._create_run), while the two records that might look
@@ -188,19 +207,28 @@ def _language_topics(browser_session_key):
     exercise page, and LanguageCourseProgress is skipped entirely for a plain
     section quiz, which passes no course_slug.
 
-    A section counts as mastered once any finished run reached the app's own
-    pass mark, so a weak early attempt is not held against a later good one.
+    Grouped by (section, course) rather than section alone so a course's
+    stages stay separate from the plain quiz they share a section with.
+    Within a group, the best finished run wins, so a weak early attempt is
+    not held against a later good one.
     """
     if not browser_session_key:
         return []
+    # Every run's full question payload (~10KB) is loaded just to read
+    # len(questions) as the score denominator, and runs are never pruned, so
+    # this grows with a learner's history. Left as is because the alternatives
+    # are worse: a JSON-length annotation would be per-database, and
+    # LanguageCourseProgress — which stores a ready-made score_percent — is
+    # never written for the plain section quizzes that have no course_slug.
     runs = LanguageQuizRun.objects.filter(
         browser_session_key=browser_session_key,
-    ).order_by('section', 'created_at')
+    ).order_by('section', 'course_slug', 'created_at')
 
-    per_section = {}
+    per_group = {}
     for run in runs:
-        bucket = per_section.setdefault(
-            run.section, {'label': run.get_section_display(), 'best': None, 'finished': False},
+        bucket = per_group.setdefault(
+            (run.section, run.course_slug),
+            {'label': _language_run_label(run), 'best': None, 'finished': False},
         )
         if not run.finished:
             continue
@@ -211,7 +239,7 @@ def _language_topics(browser_session_key):
             bucket['best'] = score
 
     topics = []
-    for bucket in per_section.values():
+    for bucket in per_group.values():
         best = bucket['best']
         is_mastered = best is not None and best >= LANGUAGE_PASS_PERCENT
         topics.append({

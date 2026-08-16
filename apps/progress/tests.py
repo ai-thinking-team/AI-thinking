@@ -20,6 +20,7 @@ from apps.learning_core.models import (
     TransferAttempt,
 )
 from apps.lang_quiz.models import LanguageQuizRun
+from apps.lang_quiz.quiz_engine import ALL_STAGES as LANGUAGE_STAGES
 from apps.learning_core.state_machine import WorkflowState
 from apps.math_quiz.models import ConceptMastery as MathConceptMastery
 from apps.math_quiz.models import MasteryState as MathMasteryState
@@ -274,10 +275,11 @@ class LanguageProgressTests(TestCase):
     def setUp(self):
         self.session_key = 'language-progress-browser'
 
-    def _run(self, *, correct, finished=True, section='vocabulary'):
+    def _run(self, *, correct, finished=True, section='vocabulary', course_slug=''):
         return LanguageQuizRun.objects.create(
             browser_session_key=self.session_key,
             section=section,
+            course_slug=course_slug,
             questions=[{'key': f'q{index}'} for index in range(10)],
             correct_count=correct,
             finished=finished,
@@ -327,6 +329,34 @@ class LanguageProgressTests(TestCase):
 
         names = sorted(topic['name'] for topic in self._language_entry()['topics'])
         self.assertEqual(names, ['Grammar', 'Vocabulary'])
+
+    def test_a_course_stays_separate_from_the_section_it_draws_from(self):
+        """A stage run carries section='vocabulary' too, so grouping by section
+        alone would hide a weak plain quiz behind a strong stage result."""
+        stage_slug = next(iter(LANGUAGE_STAGES))
+        self._run(correct=9, course_slug=stage_slug)
+        self._run(correct=2)
+
+        topics = {topic['name']: topic for topic in self._language_entry()['topics']}
+        self.assertEqual(len(topics), 2)
+        self.assertTrue(topics[LANGUAGE_STAGES[stage_slug]['title']]['is_mastered'])
+        self.assertTrue(topics['Vocabulary']['is_review_item'])
+
+    def test_a_course_is_labelled_by_its_title_not_its_slug(self):
+        stage_slug = next(iter(LANGUAGE_STAGES))
+        self._run(correct=9, course_slug=stage_slug)
+
+        names = [topic['name'] for topic in self._language_entry()['topics']]
+        self.assertEqual(names, [LANGUAGE_STAGES[stage_slug]['title']])
+        self.assertNotIn(stage_slug, names)
+
+    def test_an_uncatalogued_course_falls_back_to_its_own_name(self):
+        run = self._run(correct=9, course_slug='uploaded-pack')
+        run.source_name = 'My uploaded notes'
+        run.save(update_fields=['source_name'])
+
+        names = [topic['name'] for topic in self._language_entry()['topics']]
+        self.assertEqual(names, ['My uploaded notes'])
 
     def test_another_browsers_runs_are_not_shown(self):
         LanguageQuizRun.objects.create(

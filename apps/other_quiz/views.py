@@ -60,7 +60,6 @@ def _record_attempt(request, question):
         defaults={'is_correct': question.is_correct},
     )
 
-
 def lesson_detail(request, subject_id, lesson_id):
     subject = get_object_or_404(Subject, id=subject_id)
     lesson = get_object_or_404(Lesson, id=lesson_id, subject=subject)
