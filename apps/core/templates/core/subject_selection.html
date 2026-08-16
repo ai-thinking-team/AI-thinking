@@ -2,7 +2,9 @@
   <a class="card" href="{% url 'math_quiz:home' %}">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/math.html" %}</svg>
     <h2>Mathematics</h2><p>Calculations &amp; concepts.</p>
-    <p class="card-progress">Coming soon</p>
+    <p class="card-progress">
+      {% if progress_summary.math %}{{ progress_summary.math.badge }}{% else %}Not started yet{% endif %}
+    </p>
   </a>
   <a class="card" href="{% url 'coding_quiz:home' %}">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/coding.html" %}</svg>
@@ -14,12 +16,16 @@
   <a class="card" href="{% url 'lang_quiz:home' %}">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/languages.html" %}</svg>
     <h2>Languages</h2><p>Vocabulary &amp; grammar.</p>
-    <p class="card-progress">Coming soon</p>
+    <p class="card-progress">
+      {% if progress_summary.languages %}{{ progress_summary.languages.badge }}{% else %}Not started yet{% endif %}
+    </p>
   </a>
   <a class="card" href="{% url 'other_quiz:home' %}">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% include "components/icons/other.html" %}</svg>
     <h2>Other Subjects</h2><p>Rubrics &amp; evidence.</p>
-    <p class="card-progress">Coming soon</p>
+    <p class="card-progress">
+      {% if progress_summary.other %}{{ progress_summary.other.badge }}{% else %}Not started yet{% endif %}
+    </p>
   </a>
 </section>
 
