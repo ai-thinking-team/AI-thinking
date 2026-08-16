@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Coding session evidence{% endblock %}
+
+{% block content %}
+{# Back to the focused Coding subject page, the level this drill-down came
+   from — not the all-subjects grid, which is one level further up. #}
+<p><a href="{% url 'progress:dashboard' %}?subject=coding">← Back to Coding progress</a></p>
+<header class="page-header progress-header">
+  <div>
+    <p class="eyebrow">Coding evidence trail</p>
+    <h1>{{ evidence.summary.title }}</h1>
+    {% if evidence.summary.concept %}<p>Concept: {{ evidence.summary.concept }}</p>{% endif %}
+    <p>{{ evidence.summary.state_label }} · started {{ learning_session.started_at|date:"Y-m-d H:i" }} · {% if learning_session.ended_at %}ended {{ learning_session.ended_at|date:"Y-m-d H:i" }}{% else %}active{% endif %}</p>
+  </div>
+  <a class="button-link button-secondary" href="{% url 'coding_quiz:exercise_detail' learning_session.activity.coding_exercise.slug %}">Return to exercise</a>
+</header>
+
+<section class="metric-grid compact-metric-grid" aria-label="Session evidence summary">
+  <article class="metric-card"><span>Attempts</span><strong>{{ evidence.summary.attempt_count }}</strong></article>
+  <article class="metric-card"><span>Confidence</span><strong>{{ evidence.summary.confidence_change }}</strong></article>
+  <article class="metric-card"><span>Highest hint</span><strong>{% if evidence.summary.highest_hint_level %}L{{ evidence.summary.highest_hint_level }}{% else %}—{% endif %}</strong></article>
+  <article class="metric-card"><span>Transfer</span><strong>{% if evidence.summary.transfer %}{% if evidence.summary.transfer.passed %}Passed{% else %}Pending{% endif %}{% else %}—{% endif %}</strong></article>
+</section>
+
+{% if evidence.mastery_records %}
+<section class="panel" aria-labelledby="mastery-heading">
+  <h2 id="mastery-heading">Mastery decision</h2>
+  {% for record in evidence.mastery_records %}
+    <article class="history-entry">
+      <p><span class="badge {% if record.status == 'MASTERED' %}badge-success{% else %}badge-danger{% endif %}">{{ record.get_status_display }}</span> · {{ record.created_at|date:"Y-m-d H:i:s" }}</p>
+      <p><strong>Reason:</strong> {{ record.reason }}</p>
+      {% if record.recommendation %}<p><strong>Recommended next step:</strong> {{ record.recommendation }}</p>{% endif %}
+    </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="plan-heading">
+  <h2 id="plan-heading">Understand and Plan</h2>
+  {% if evidence.plan %}
+    <p><strong>Solution plan:</strong> {{ evidence.plan.solution_plan }}</p>
+    <p><strong>Predicted output:</strong> {{ evidence.plan.predicted_output }}</p>
+    <p><small>Saved {{ evidence.plan.created_at|date:"Y-m-d H:i:s" }}</small></p>
+  {% else %}
+    <p>No planning evidence recorded.</p>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="attempts-heading">
+  <h2 id="attempts-heading">Code attempts</h2>
+  {% for attempt in evidence.attempts %}
+    <article class="history-entry">
+      <h3>Revision {{ attempt.revision_number }} · {{ attempt.created_at|date:"Y-m-d H:i:s" }}</h3>
+      <pre><code>{{ attempt.answer }}</code></pre>
+      <p><strong>Reasoning:</strong> {{ attempt.reasoning }}</p>
+      <p><strong>Confidence:</strong> {{ attempt.confidence }}/5 · <strong>Evaluation:</strong> {{ attempt.evaluation.status|default:"not evaluated" }}{% if attempt.evaluation.message %} — {{ attempt.evaluation.message }}{% endif %}</p>
+      {% if attempt.hint_usage.all %}
+        <div class="hint-history">
+          <strong>Unlocked hints</strong>
+          <ul>{% for hint in attempt.hint_usage.all %}<li><strong>Level {{ hint.level }}:</strong> {{ hint.content }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
+    </article>
+  {% empty %}<p>No code attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel" aria-labelledby="coach-heading">
+  <h2 id="coach-heading">Coach interactions</h2>
+  {% for interaction in evidence.interactions %}
+    <article class="history-entry">
+      <p><span class="badge {% if interaction.source == 'AI' %}badge-ai{% else %}badge-fallback{% endif %}">{{ interaction.get_source_display }}</span> <strong>{{ interaction.get_interaction_type_display }}</strong> · {{ interaction.created_at|date:"Y-m-d H:i:s" }} {% if interaction.failure_code %}<span class="badge badge-warning">Fallback code: {{ interaction.failure_code }}</span>{% endif %}</p>
+      {% if interaction.response.message %}<div class="interaction-entry"><p><strong>Coach question or hint:</strong> {{ interaction.response.message }}</p>{% if interaction.response.hint_level %}<p><small>Hint level: {{ interaction.response.hint_level }}</small></p>{% endif %}</div>{% endif %}
+      {% if interaction.learner_response %}<p class="learner-response"><strong>Learner response:</strong> {{ interaction.learner_response.response }}</p>{% endif %}
+    </article>
+  {% empty %}<p>No coach interactions recorded.</p>{% endfor %}
+</section>
+
+<section class="panel" aria-labelledby="teach-back-heading">
+  <h2 id="teach-back-heading">Teach-Back</h2>
+  {% for item in evidence.teach_back_attempts %}
+    <article class="history-entry">
+      <p><span class="badge badge-{{ item.badge }}">{{ item.attempt.evaluation|default:"Pending" }}</span> · {{ item.attempt.created_at|date:"Y-m-d H:i:s" }}</p>
+      {% if item.response_fields %}
+        <dl class="teach-back-fields">{% for field in item.response_fields %}<div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>{% endfor %}</dl>
+      {% else %}
+        <p><strong>Response:</strong> {{ item.attempt.response }}</p>
+      {% endif %}
+      {% if item.attempt.feedback %}<p><strong>Feedback:</strong> {{ item.attempt.feedback }}</p>{% endif %}
+      {% if item.attempt.follow_up_question %}<p><strong>Follow-up:</strong> {{ item.attempt.follow_up_question }}</p>{% endif %}
+    </article>
+  {% empty %}<p>No Teach-Back attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel" aria-labelledby="transfer-heading">
+  <h2 id="transfer-heading">Transfer Check</h2>
+  {% for attempt in evidence.transfer_attempts %}
+    <article class="history-entry">
+      <p><span class="badge {% if attempt.passed %}badge-success{% else %}badge-warning{% endif %}">{% if attempt.passed %}Passed{% else %}Not passed{% endif %}</span> · {{ attempt.created_at|date:"Y-m-d H:i:s" }}</p>
+      <pre><code>{{ attempt.response }}</code></pre>
+      <p><strong>Reasoning:</strong> {{ attempt.reasoning }}</p>
+      <p><strong>Confidence:</strong> {{ attempt.confidence }}/5 · <strong>Assisted:</strong> {{ attempt.used_assistance|yesno:"Yes,No" }} · <strong>Runner status:</strong> {{ attempt.evaluation.status|default:"not evaluated" }}</p>
+    </article>
+  {% empty %}<p>No Transfer attempt recorded.</p>{% endfor %}
+</section>
+
+<section class="panel" aria-labelledby="misconceptions-heading">
+  <h2 id="misconceptions-heading">Misconception history</h2>
+  {% if evidence.unresolved_misconceptions %}<p class="evidence-callout evidence-callout-review"><strong>Current attention:</strong> {% for record in evidence.unresolved_misconceptions %}{{ record.code }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  {% for record in evidence.misconceptions %}
+    <article class="history-entry"><p><span class="badge {% if record.status == 'CONFIRMED' or record.status == 'REPEATED' %}badge-danger{% elif record.status == 'RESOLVED' %}badge-success{% else %}badge-warning{% endif %}">{{ record.get_status_display }}</span> <strong>{{ record.code }}</strong> — {{ record.evidence }}</p></article>
+  {% empty %}<p>No misconception evidence recorded.</p>{% endfor %}
+</section>
+{% endblock %}

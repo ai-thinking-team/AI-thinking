@@ -11,9 +11,13 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+
+from .environment import env_bool, env_csv, require_env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,13 +28,31 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY') or 'unsafe-local-demo-only'
+ENVIRONMENT = os.environ.get('DJANGO_ENV', 'development').strip().lower()
+if ENVIRONMENT not in {'development', 'production'}:
+    raise ImproperlyConfigured('DJANGO_ENV must be development or production.')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+IS_PRODUCTION = ENVIRONMENT == 'production'
+DEBUG = env_bool('DJANGO_DEBUG', not IS_PRODUCTION)
 
-ALLOWED_HOSTS = []
+SECRET_KEY = os.environ.get('SECRET_KEY', '').strip()
+if IS_PRODUCTION:
+    SECRET_KEY = require_env('SECRET_KEY')
+    if len(SECRET_KEY) < 50:
+        raise ImproperlyConfigured('SECRET_KEY must contain at least 50 characters in production.')
+elif not SECRET_KEY:
+    SECRET_KEY = 'unsafe-local-demo-only'
+
+ALLOWED_HOSTS = env_csv(
+    'DJANGO_ALLOWED_HOSTS',
+    default=('127.0.0.1', 'localhost') if not IS_PRODUCTION else (),
+)
+if IS_PRODUCTION and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured('DJANGO_ALLOWED_HOSTS is required in production.')
+if IS_PRODUCTION and '*' in ALLOWED_HOSTS:
+    raise ImproperlyConfigured('DJANGO_ALLOWED_HOSTS cannot contain * in production.')
+
+CSRF_TRUSTED_ORIGINS = env_csv('DJANGO_CSRF_TRUSTED_ORIGINS')
 
 
 # Application definition
@@ -55,7 +77,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -75,6 +99,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.i18n',
             ],
         },
     },
@@ -86,12 +111,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').strip().lower()
+
+if DB_ENGINE == 'mysql':
+    if IS_PRODUCTION:
+        for required_database_setting in ('DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST'):
+            require_env(required_database_setting)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.environ.get('DB_NAME', 'ai_thinking'),
+            'USER': os.environ.get('DB_USER', 'ai_thinking_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+            'PORT': os.environ.get('DB_PORT', '3306'),
+            'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', '60')),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                'isolation_level': 'read committed',
+            },
+        }
     }
-}
+elif DB_ENGINE == 'sqlite':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    raise ImproperlyConfigured('DB_ENGINE must be sqlite or mysql.')
 
 
 # Password validation
@@ -116,7 +166,14 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ja'
+
+LANGUAGES = [
+    ('ja', '日本語'),
+    ('en', 'English'),
+]
+
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 TIME_ZONE = 'UTC'
 
@@ -130,15 +187,117 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'whitenoise.storage.CompressedManifestStaticFilesStorage'
+            if IS_PRODUCTION
+            else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+        ),
+    },
+}
+
+# Browser and transport security. HSTS preload remains opt-in because enabling it is difficult
+# to reverse; production enables a one-hour HSTS rollout by default.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = env_bool('DJANGO_SESSION_COOKIE_SECURE', IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env_bool('DJANGO_CSRF_COOKIE_SECURE', IS_PRODUCTION)
+SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', IS_PRODUCTION)
+SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '3600' if IS_PRODUCTION else '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    'DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    IS_PRODUCTION,
+)
+SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
+
+if env_bool('DJANGO_TRUST_PROXY_HEADERS', False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CODE_RUNNER_URL = os.environ.get('CODE_RUNNER_URL', '')
+CODE_RUNNER_AUTH_TOKEN = os.environ.get('CODE_RUNNER_AUTH_TOKEN', '')
+CODE_RUNNER_TIMEOUT_SECONDS = int(os.environ.get('CODE_RUNNER_TIMEOUT_SECONDS', '20'))
+CODE_RUNNER_AUTOSTART = env_bool('CODE_RUNNER_AUTOSTART', not IS_PRODUCTION)
+CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS = int(os.environ.get('CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS', '20'))
+if IS_PRODUCTION:
+    CODE_RUNNER_URL = require_env('CODE_RUNNER_URL')
+    CODE_RUNNER_AUTH_TOKEN = require_env('CODE_RUNNER_AUTH_TOKEN')
+AI_PROVIDER_CLASS = os.environ.get('AI_PROVIDER_CLASS') or (
+    'apps.ai_engine.providers.deepseek.DeepSeekProvider'
+    if os.environ.get('DEEPSEEK_API_KEY')
+    else (
+        'apps.ai_engine.providers.gemini.GeminiProvider'
+        if os.environ.get('GEMINI_API_KEY')
+        else ''
+    )
+)
+AI_CONTEXT_POLICY = 'privacy_minimized'
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '20'))
+DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-v4-flash')
+DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+DEEPSEEK_TIMEOUT_SECONDS = int(os.environ.get('DEEPSEEK_TIMEOUT_SECONDS', '20'))
+
+if 'test' in sys.argv:
+    AI_PROVIDER_CLASS = ''
+    CODE_RUNNER_URL = ''
+    CODE_RUNNER_GATEWAY_CLASS = ''
+    CODE_RUNNER_AUTOSTART = False
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
+    },
+}
 
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+if IS_PRODUCTION:
+    email_use_tls = env_bool('EMAIL_USE_TLS', True)
+    email_use_ssl = env_bool('EMAIL_USE_SSL', False)
+    if email_use_tls and email_use_ssl:
+        raise ImproperlyConfigured('EMAIL_USE_TLS and EMAIL_USE_SSL cannot both be true.')
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+            'OPTIONS': {
+                'host': require_env('EMAIL_HOST'),
+                'port': int(os.environ.get('EMAIL_PORT', '587')),
+                'username': os.environ.get('EMAIL_HOST_USER', ''),
+                'password': os.environ.get('EMAIL_HOST_PASSWORD', ''),
+                'use_tls': email_use_tls,
+                'use_ssl': email_use_ssl,
+                'timeout': int(os.environ.get('EMAIL_TIMEOUT', '10')),
+            },
+        },
+    }
+else:
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        },
+    }
+
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@localhost')

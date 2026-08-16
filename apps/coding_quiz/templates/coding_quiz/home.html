@@ -1,12 +1,34 @@
 {% extends "base.html" %}
 
-{% block title %}Coding{% endblock %}
+{% block title %}Coding topics{% endblock %}
 
 {% block navbar %}{% include "components/navbar.html" with subject_name="Coding" subject_icon="coding" %}{% endblock %}
 
 {% block content %}
-<h1>Coding</h1>
-<p>The first MVP supports beginner Python only. Passing tests is necessary, but Teach-Back and an unassisted Transfer Check are also required for mastery.</p>
-{% include "components/progress_bar.html" %}
-<a class="card" href="{% url 'coding_quiz:exercise' %}"><h2>Python loops: Double every number</h2><p>Open the detailed scaffold exercise.</p></a>
+<header class="page-header coding-catalog-header">
+  <div>
+    <p class="eyebrow">Python learning paths</p>
+    <h1>Choose a Coding topic</h1>
+    <p>Choose a topic first, then select one exercise. Passing tests is necessary, but Teach-Back and an unassisted Transfer Check are also required for mastery.</p>
+  </div>
+</header>
+<section class="panel ai-status">
+  <p><strong>AI Coach:</strong> {{ ai_status.label }}</p>
+  <p class="locked-note">{{ ai_status.detail }}</p>
+</section>
+<section aria-labelledby="topic-list-heading">
+  <h2 id="topic-list-heading">Topic categories</h2>
+  <div class="subject-grid topic-grid">
+  {% for topic in topics %}
+    <a class="card topic-card" href="{% url 'coding_quiz:topic_exercises' topic.slug %}">
+      <p class="eyebrow">{{ topic.exercise_count }} exercise{{ topic.exercise_count|pluralize }}</p>
+      <h3>{{ topic.name }}</h3>
+      <p>{{ topic.description }}</p>
+      <span class="topic-card-action">Choose exercises <span aria-hidden="true">&rarr;</span></span>
+    </a>
+  {% empty %}
+    <p>No active Coding topics are available.</p>
+  {% endfor %}
+  </div>
+</section>
 {% endblock %}

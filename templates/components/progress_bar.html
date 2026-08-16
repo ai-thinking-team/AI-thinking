@@ -1,3 +1,10 @@
 <ol class="workflow" aria-label="Learning workflow">
-  <li>First attempt</li><li>Diagnosis</li><li>Revision</li><li>Teach-Back</li><li>Transfer Check</li>
+  {% for step in progress_steps %}
+    <li class="{% if step.current %}current{% elif step.complete %}complete{% else %}locked{% endif %}"
+        {% if step.current %}aria-current="step"{% endif %}>
+      <span>{{ forloop.counter }}</span>{{ step.label }}
+    </li>
+  {% empty %}
+    <li>Understand &amp; Plan</li><li>First Attempt</li><li>Diagnosis</li><li>Revision</li><li>Teach-Back</li><li>Transfer Check</li><li>Completed</li>
+  {% endfor %}
 </ol>

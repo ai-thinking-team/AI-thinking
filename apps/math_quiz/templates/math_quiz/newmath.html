@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "新しい科目を追加" %} | Trellis{% endblock %}
+
+{% block navbar %}{% include "components/navbar.html" with subject_name="Mathematics" subject_icon="math" %}{% endblock %}
+
+{% block extra_head %}
+{% include "math_quiz/_style.html" %}
+<style>
+  .wrap { display: flex; justify-content: center; padding: 2.5rem 1.25rem 4rem; }
+  .form-card { width: 100%; max-width: 480px; padding: 2rem; display: flex; flex-direction: column; gap: 1.35rem; }
+  .form-card h1 { font-size: 1.4rem; margin: 0; }
+  .form-card > p { color: var(--muted); margin: -.8rem 0 0; font-size: .9rem; }
+  .field label { display: block; font-weight: 700; font-size: .88rem; margin-bottom: .4rem; }
+
+  #dropzone {
+    padding: 2.2rem 1rem;
+    border: 2px dashed #c8c1ec;
+    border-radius: var(--radius-md);
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    background: var(--primary-soft);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  #dropzone.dragover { border-color: var(--primary); background: #e6dffc; color: var(--primary-dark); }
+  #dropzone .icon { font-size: 1.6rem; margin-bottom: .3rem; }
+  #dropzone .hint { font-size: .78rem; margin-top: .3rem; }
+  #fileInput { display: none; }
+  #fileName { margin-top: .5rem; font-size: .85rem; font-weight: 700; color: var(--primary-dark); }
+
+  .note { font-size: .8rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem .9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wrap">
+    <form class="card form-card" method="post" action="{% url 'math_quiz:add_unit' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div>
+        <h1>{% trans "新しい科目を追加" %}</h1>
+        <p>{% trans "科目名を入力し、参考資料があればドラッグ&ドロップしてください。セクション構成は自動で作成されます。" %}</p>
+      </div>
+
+      <div class="field">
+        <label for="name">{% trans "科目名" %}</label>
+        <input type="text" id="name" name="name" placeholder="{% trans '例: 二次関数、微分の基礎' %}" required>
+      </div>
+
+      <div class="field">
+        <label>{% trans "参考ファイル（任意・複数可）" %}</label>
+        <div id="dropzone">
+          <div class="icon">⇧</div>
+          {% trans "ここにファイルをドラッグ&ドロップ" %}<br>{% trans "（またはクリックして選択、複数選択可）" %}
+          <div class="hint">{% trans "未選択でも追加できます" %}</div>
+          <div id="fileName"></div>
+        </div>
+        <input type="file" id="fileInput" name="file" multiple accept="application/pdf,image/*">
+      </div>
+
+      <p class="note">{% trans "「追加」を押すと、セクションが自動生成されます。" %}</p>
+
+      <button type="submit" class="btn btn-primary btn-block">{% trans "この科目を追加" %}</button>
+    </form>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+
+    const SELECTED_LABEL = '{% trans "選択中" %}';
+
+    function describeFiles(files) {
+      if (files.length === 0) return '';
+      if (files.length === 1) return SELECTED_LABEL + ': ' + files[0].name;
+      const names = Array.from(files).map((f) => f.name).join('、');
+      return SELECTED_LABEL + '(' + files.length + ') : ' + names;
+    }
+
+    function setFiles(files) {
+      const transfer = new DataTransfer();
+      for (const file of files) transfer.items.add(file);
+      fileInput.files = transfer.files;
+      fileName.textContent = describeFiles(fileInput.files);
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      fileName.textContent = describeFiles(fileInput.files);
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        setFiles(e.dataTransfer.files);
+      }
+    });
+  </script>
+{% endblock %}

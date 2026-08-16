@@ -1,4 +1,10 @@
 asgiref==3.12.1
 Django==6.1
+google-genai==2.13.0
+mysqlclient==2.2.8
+pypdf>=6.0.0
+python-docx>=1.2.0
 python-dotenv==1.2.2
 sqlparse==0.5.5
+waitress==3.0.2
+whitenoise==6.12.0

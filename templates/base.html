@@ -9,10 +9,43 @@
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+  <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20260814-4">
+  <!-- AI-generated math problem/hint text embeds LaTeX with no consistent
+       delimiter of its own — sometimes bare (e.g. \frac{a}{b}), sometimes
+       already wrapped in \( \), \[ \], or $$ $$. apps/math_quiz's
+       `latexify` template filter wraps bare runs in \( \) and leaves
+       already-delimited ones alone (double-wrapping an already-\(-wrapped
+       run breaks KaTeX's parse); every delimiter form it might leave
+       as-is needs to be registered here too. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '\\(', right: '\\)', display: false},
+      {left: '$', right: '$', display: false}
+    ], throwOnError: false});"></script>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
   {% block navbar %}{% include "components/navbar.html" %}{% endblock %}
-  <main class="container">{% block content %}{% endblock %}</main>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <main class="container" id="main-content" tabindex="-1">
+    {% if messages %}
+      <div class="messages" aria-live="polite" role="status">
+        {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    document.querySelector('.skip-link')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      const mainContent = document.getElementById('main-content');
+      mainContent?.scrollIntoView();
+      mainContent?.focus();
+    });
+  </script>
 </body>
 </html>

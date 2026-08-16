@@ -1,4 +1,6 @@
-from apps.learning_core.models import LearningSession, Subject
+from django.db.models import Prefetch
+
+from apps.learning_core.models import LearningSession, MisconceptionRecord, Subject
 from apps.learning_core.state_machine import WorkflowState
 
 
@@ -7,21 +9,44 @@ def sessions_for_browser(browser_session_key):
         return LearningSession.objects.none()
     return LearningSession.objects.filter(
         browser_session_key=browser_session_key
-    ).select_related('topic__subject').prefetch_related('misconceptions').order_by('-updated_at')
+    ).select_related('topic__subject').prefetch_related(
+        # Ordered explicitly because _is_review_item() keeps the last row per
+        # code as the current one; an unordered prefetch would make which
+        # record wins depend on the database's arbitrary row order.
+        Prefetch(
+            'misconceptions',
+            queryset=MisconceptionRecord.objects.order_by('created_at', 'pk'),
+        ),
+    ).order_by('-updated_at')
 
 
 def _is_review_item(session):
     """A topic needs review if the final Transfer Check failed, or a confirmed
-    misconception is still open. 'Still open' is approximated as 'not yet
-    Mastered', since MisconceptionRecord.resolved_at is never set by the
-    current Coding implementation."""
+    misconception is still open.
+
+    MisconceptionRecord is append-only: re-diagnosing the same `code` writes a
+    new row rather than editing the old one, so only the newest row per code
+    describes the learner's current state. CONFIRMED/REPEATED mean still open;
+    DISMISSED/RESOLVED mean closed. This mirrors coding.py's
+    _unresolved_misconceptions(), which does the same grouping for the
+    per-session drill-down.
+    """
     if session.current_state == WorkflowState.NEEDS_REVIEW:
         return True
     if session.current_state == WorkflowState.MASTERED:
         return False
     # session.misconceptions.all() reuses the prefetch_related() cache above
     # instead of firing one extra query per session (an N+1 query pattern).
-    return any(m.confirmed for m in session.misconceptions.all())
+    latest_by_code = {}
+    for record in session.misconceptions.all():
+        latest_by_code[record.code] = record
+    return any(
+        record.status in {
+            MisconceptionRecord.Status.CONFIRMED,
+            MisconceptionRecord.Status.REPEATED,
+        }
+        for record in latest_by_code.values()
+    )
 
 
 def _badge_text(bucket):

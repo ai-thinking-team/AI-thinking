@@ -1,6 +1,7 @@
 from django.test import SimpleTestCase
 
-from .services import mastery_requirements_met
+from .models import ConceptMastery
+from .services import evaluate_mastery
 from .state_machine import (
     InvalidWorkflowTransition,
     WorkflowState,
@@ -25,10 +26,53 @@ class WorkflowStateMachineTests(SimpleTestCase):
         self.assertFalse(hints_allowed(WorkflowState.TRANSFER_TASK))
 
     def test_mastery_requires_unassisted_transfer(self):
-        self.assertFalse(mastery_requirements_met(
+        decision = evaluate_mastery(
             original_passed=True,
             teach_back_clear=True,
             transfer_passed=True,
             transfer_unassisted=False,
-            misconception_repeated=False,
-        ))
+            repeated_misconception_codes=(),
+        )
+        self.assertEqual(decision.status, ConceptMastery.Status.NEEDS_REVIEW)
+
+    def test_mastery_rejects_a_repeated_misconception(self):
+        decision = evaluate_mastery(
+            original_passed=True,
+            teach_back_clear=True,
+            transfer_passed=True,
+            transfer_unassisted=True,
+            repeated_misconception_codes=('loop-value-misuse',),
+        )
+        self.assertEqual(decision.status, ConceptMastery.Status.NEEDS_REVIEW)
+
+    def test_mastery_recommendation_uses_the_repeated_concept(self):
+        decision = evaluate_mastery(
+            original_passed=True,
+            teach_back_clear=True,
+            transfer_passed=True,
+            transfer_unassisted=True,
+            repeated_misconception_codes=('dictionary-key-misuse',),
+            repeated_misconception_recommendations={
+                'dictionary-key-misuse': (
+                    'Review dictionary key lookup and missing-key fallbacks before retrying.'
+                ),
+            },
+        )
+        self.assertEqual(
+            decision.recommendation,
+            'Review dictionary key lookup and missing-key fallbacks before retrying.',
+        )
+        self.assertNotIn('loop', decision.recommendation.casefold())
+
+    def test_mastery_recommendation_has_a_safe_generic_fallback(self):
+        decision = evaluate_mastery(
+            original_passed=True,
+            teach_back_clear=True,
+            transfer_passed=True,
+            transfer_unassisted=True,
+            repeated_misconception_codes=('unknown-misconception',),
+        )
+        self.assertEqual(
+            decision.recommendation,
+            'Review the confirmed misconception and complete a corrective exercise before retrying.',
+        )

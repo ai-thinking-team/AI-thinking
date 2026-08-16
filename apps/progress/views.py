@@ -3,6 +3,8 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
+from .coding import coding_session_detail as coding_session_evidence
+from .coding import coding_session_for_browser
 from .dev_seed import clear_demo_progress, seed_demo_progress
 from .services import overall_progress_totals, subject_progress_detail, summary_from_detail
 
@@ -28,6 +30,24 @@ def dashboard(request):
         'subjects': subjects,
         'overall_progress': overall_progress_totals(summary),
     })
+
+
+def coding_session_detail(request, session_id):
+    """One Coding session's full evidence — the drill-down one level below
+    dashboard()'s ?subject=coding view. Coding is the only subject with a
+    per-session view so far, hence the coding-specific name and module (see
+    progress/coding.py)."""
+    learning_session = coding_session_for_browser(request.session.session_key, session_id)
+    if learning_session is None:
+        raise Http404('Learning session not found.')
+    return render(
+        request,
+        'progress/session_detail.html',
+        {
+            'learning_session': learning_session,
+            'evidence': coding_session_evidence(learning_session),
+        },
+    )
 
 
 def dev_tools(request):

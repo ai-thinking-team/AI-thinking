@@ -1,5 +1,8 @@
 # AI-thinking
 
+Production deployment and security settings are documented in [`PRODUCTION.md`](PRODUCTION.md).
+Coding exercise authoring and import are documented in [`CODING_CATALOG.md`](CODING_CATALOG.md).
+
 [日本語](#日本語) | [English](#english) | [Tiếng Việt](#tiếng-việt)
 
 ---
@@ -24,6 +27,7 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -38,6 +42,7 @@ python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -87,6 +92,7 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -101,6 +107,7 @@ python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -c "from django.core.management.utils import get_random_secret_key; open('.env','w').write(f'SECRET_KEY={get_random_secret_key()}\n')"
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -127,6 +134,129 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 **If you see "'python' is not recognized as an internal or external command"**: Python is not installed, or not added to PATH. Follow the installation steps above.
+
+### Local isolated Coding runner
+
+The Coding workflow requires a separate Docker-backed HTTP runner before a revision can be verified as `PASSED`. See [`runner_service/README.md`](runner_service/README.md). Without that service, submissions safely remain `NOT_EXECUTED` and cannot unlock Teach-Back or Mastery.
+
+For the reproducible local demo, start the runner in one PowerShell and Django in another:
+
+```powershell
+cd D:\study\gpbl\AI-thinking-review
+powershell -ExecutionPolicy Bypass -File .\runner_service\start.ps1
+```
+
+Then verify readiness from the second terminal:
+
+```powershell
+.\venv\Scripts\python.exe manage.py check_local_demo
+```
+
+Open Django at `http://127.0.0.1:8004/`. The runner listens only on local loopback at
+`http://127.0.0.1:8765/`.
+
+### Coding exercise catalog and history
+
+`python manage.py migrate` creates and seeds the initial database-backed Coding catalog. The
+catalog currently contains 210 curated exercises across conditionals, functions, one-dimensional
+lists, two-dimensional lists, strings, loops, recursion, dictionaries, list indexing, and advanced
+Python DSA topics: binary search, stacks, queues, sorting, hash maps, graphs, and dynamic
+programming. It also includes Python sets, comprehensions, exception handling, and numeric
+algorithms, plus DSA two pointers, sliding windows, greedy algorithms, and backtracking. The
+Every topic has at least ten exercises, including warm-up, boundary-case, mixed-input, applied,
+review, and mastery drills.
+Example exercise slugs include `double-numbers`, `square-numbers`, `increment-numbers`,
+`lookup-dictionary-grade`, `safe-divide-function`, `first-list-item`, `classify-number`,
+`rectangle-area`, `sum-one-dimensional-list`, `matrix-total`, `reverse-string`,
+`triple-numbers`, `factorial-recursion`, `binary-search-index`, `valid-brackets-stack`,
+`rotate-queue`, `selection-sort`, `two-sum-hash-map`, `graph-has-path`, and
+`climb-stairs-dp`, `is-leap-year`, `is-palindrome`, `power-of-two-recursion`,
+`first-binary-search-index`, `insertion-sort`, `character-frequencies`,
+`shortest-graph-path`, and `min-cost-climbing-stairs`; prompts,
+rubrics, public/hidden runner IDs, and Transfer Check configuration are selected per exercise.
+Opening `/coding/` first lists topic categories, then shows the active exercises for the selected
+topic. Each browser can keep one active session per exercise,
+while Reset closes the current session instead of deleting it. Previous code attempts, Teach-Back
+evidence, misconceptions, Transfer Checks, and mastery decisions remain available under
+`/progress/`.
+
+### Use MySQL on Windows
+
+Install MySQL Server 8 on Windows, create an `utf8mb4` database and a dedicated user, then set:
+
+```env
+DB_ENGINE=mysql
+DB_NAME=ai_thinking
+DB_USER=ai_thinking_user
+DB_PASSWORD=replace_with_your_password
+DB_HOST=127.0.0.1
+DB_PORT=3306
+```
+
+Install dependencies and initialize the new database:
+
+```powershell
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe manage.py migrate
+venv\Scripts\python.exe manage.py check
+```
+
+The session uniqueness rule uses a nullable active slot instead of a conditional index, so it is
+enforced by MySQL while still allowing any number of ended sessions to remain as history.
+
+### Optional DeepSeek or Gemini AI Coach
+
+DeepSeek is the preferred fallback when Gemini quota is unavailable. Add a DeepSeek API key to
+`.env`; the adapter uses the OpenAI-compatible HTTP endpoint and requires no additional SDK:
+
+```env
+DEEPSEEK_API_KEY=your-key-here
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+AI_PROVIDER_CLASS=apps.ai_engine.providers.deepseek.DeepSeekProvider
+```
+
+Gemini remains available by configuration:
+
+```env
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-2.5-flash
+AI_PROVIDER_CLASS=apps.ai_engine.providers.gemini.GeminiProvider
+```
+
+To enable semantic AI grading for Teach-Back, put one provider key in the local `.env`, run
+`venv\Scripts\python.exe -m pip install -r requirements.txt`, and restart Django. The Coding page
+will then show `Live AI provider available`. Teach-Back sends the current exercise's rubric and the
+learner's answers to the selected provider; the server validates the structured response and retains
+control of progression. Without a key, it shows `Curated fallback ready` and remains usable.
+
+Verify the configured provider with a data-free structured request before a demo:
+
+```powershell
+venv\Scripts\python.exe manage.py check_ai_provider
+```
+
+The command reports only a safe status code and latency; it never prints the API key.
+
+Run the opt-in end-to-end Coding check while the local runner is healthy. This executes real
+Dictionary code in Docker and calls the configured AI provider; transient provider rate limits are
+expected to exercise the curated fallback path without blocking the workflow:
+
+```powershell
+$env:RUN_LIVE_CODING_INTEGRATION='1'
+venv\Scripts\python.exe manage.py test apps.coding_quiz.tests.LiveCodingIntegrationTests --settings=config.settings_test
+Remove-Item Env:RUN_LIVE_CODING_INTEGRATION
+```
+
+Do not commit or paste either key into source code. When `AI_PROVIDER_CLASS` is omitted, Django
+selects DeepSeek when `DEEPSEEK_API_KEY` is present, otherwise Gemini when `GEMINI_API_KEY` is
+present. The Coding Diagnosis sends only privacy-minimized
+signals: the target concept, confidence, execution category, aggregate test counts, and boolean
+code-structure features. Raw learner source code and reasoning are not sent to the provider. Provider
+failure or invalid structured output falls back to the curated diagnostic question.
+The Coding page shows whether the session is using a live provider, a configured-but-workflow-locked
+provider, or the always-available curated fallback. This status is local configuration only and does
+not make a network health request.
 
 ---
 
