@@ -10,6 +10,7 @@ import random
 import re
 import unicodedata
 
+from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy as _lazy
 
 MAX_HINT_LEVEL = 5
@@ -2307,22 +2308,22 @@ def review_recommendation(section):
 
 def diagnostic_level_feedback(correct_count, total):
     if total == 0:
-        return 'この科目にはまだセクションがありません。科目にセクションが追加されると診断クイズが出題されます。'
+        return _('この科目にはまだセクションがありません。科目にセクションが追加されると診断クイズが出題されます。')
     ratio = correct_count / total
     if ratio == 1:
-        return (
-            f'{total}問すべて正解でした。この科目の基礎はすでに身についているようです。'
+        return _(
+            '%(total)s問すべて正解でした。この科目の基礎はすでに身についているようです。'
             '発展的なセクションから取り組んでみましょう。'
-        )
+        ) % {'total': total}
     if ratio >= 0.5:
-        return (
-            f'{total}問中{correct_count}問正解でした。理解度は「普通」です。'
+        return _(
+            '%(total)s問中%(correct)s問正解でした。理解度は「普通」です。'
             '間違えた問題に対応するセクションを優先的に復習しましょう。'
-        )
-    return (
-        f'{total}問中{correct_count}問正解でした。理解度は「要復習」です。'
+        ) % {'total': total, 'correct': correct_count}
+    return _(
+        '%(total)s問中%(correct)s問正解でした。理解度は「要復習」です。'
         '基礎のセクションから順番に進めることをおすすめします。'
-    )
+    ) % {'total': total, 'correct': correct_count}
 
 
 SHORT_TEACH_BACK_PROMPT = '今回の問題で一番重要だった考え方を、1〜2文で説明してください。'

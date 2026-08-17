@@ -1,11 +1,13 @@
 import os
-import re
+import json
 import uuid
 from pypdf import PdfReader
 import docx
+from groq import Groq
 from django.db import transaction
 
 from .models import Subject, Lesson, Question
+from .ai_prompts import LESSON_GENERATION_PROMPT
 
 
 # --- 1. HÀM CHẤM ĐIỂM ---
@@ -81,45 +83,54 @@ def extract_text_from_file(uploaded_file) -> str:
 
 # --- 3. HÀM GỌI GROQ API & LƯU DATABASE ---
 
-def can_evaluate_open_response(question):
-    """Only evaluate an open response when local reference evidence exists."""
-    return bool(
-        str(getattr(question, 'correct_answer', '') or '').strip()
-        or getattr(question, 'rubric_keywords', None)
-    )
-
-
 def generate_and_save_lesson(subject: Subject, uploaded_file) -> Lesson:
-    """Create a deterministic local lesson without exporting uploaded material."""
+    # 1. Đọc văn bản từ file
     raw_text = extract_text_from_file(uploaded_file)
     if not raw_text:
-        raise ValueError('The uploaded file is empty or contains no readable text.')
+        raise ValueError("Không thể đọc nội dung văn bản từ file này hoặc file rỗng.")
 
-    sentences = [
-        item.strip()
-        for item in re.split(r'(?<=[.!?])\s+|\r?\n', raw_text[:10000])
-        if item.strip()
-    ]
-    if not sentences:
-        raise ValueError('No usable lesson content was found.')
+    # 2. Khởi tạo Groq Client
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise ValueError("Chưa cấu hình GROQ_API_KEY trong file môi trường.")
 
+    client = Groq(api_key=api_key)
+
+    # 3. Định dạng Prompt (Giới hạn tối đa 10.000 ký tự gửi AI)
+    prompt = LESSON_GENERATION_PROMPT.format(raw_text=raw_text[:10000])
+
+    # 4. Gọi Groq API ép kiểu JSON
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"}
+    )
+
+    ai_data = json.loads(response.choices[0].message.content)
+
+    # 5. Lưu vào Database
     with transaction.atomic():
+        lesson_id = f"les_{uuid.uuid4().hex[:8]}"
+
         lesson = Lesson.objects.create(
-            id=f'les_{uuid.uuid4().hex[:8]}',
+            id=lesson_id,
             subject=subject,
-            chapter='Imported material',
-            title=os.path.splitext(uploaded_file.name)[0][:200] or 'New lesson',
+            chapter=ai_data.get("chapter", "Chương 1"),
+            title=ai_data.get("title", "Bài học mới")
         )
-        for index, sentence in enumerate(sentences[:10], start=1):
-            keywords = list(dict.fromkeys(
-                word.casefold() for word in re.findall(r'\w{4,}', sentence, flags=re.UNICODE)
-            ))[:4]
+
+        for q in ai_data.get("questions", []):
             Question.objects.create(
                 lesson=lesson,
-                title=f'Question {index}',
-                prompt=f'Explain the key idea in this excerpt: {sentence}',
-                q_type='RUBRIC',
-                rubric_keywords=keywords,
-                explanation=sentence,
+                title=q.get("title", "Câu hỏi"),
+                prompt=q.get("prompt", ""),
+                q_type=q.get("q_type", "MULTIPLE_CHOICE"),
+                options=q.get("options"),
+                correct_answer=q.get("correct_answer"),
+                rubric_keywords=q.get("rubric_keywords"),
+                explanation=q.get("explanation")
             )
+
     return lesson

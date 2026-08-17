@@ -14,7 +14,9 @@ from .orchestrator import (
     orchestrate_teach_back,
 )
 from .providers.deepseek import DeepSeekProvider
+from .providers.fallback import FallbackProvider
 from .providers.gemini import GeminiProvider
+from .providers.groq import GroqProvider
 from .schemas import (
     DiagnosticResponse,
     DiagnosisEvaluationResponse,
@@ -96,6 +98,16 @@ class InvalidThenValidDiagnosisProvider:
 class BrokenProvider:
     def generate(self, **kwargs):
         raise RuntimeError('provider failed')
+
+
+class UnavailableProvider:
+    """Raises a recognized AIEngineError, unlike BrokenProvider's bare
+    RuntimeError — for exercising FallbackProvider, which only falls
+    through to the next provider on this kind of (expected) failure and
+    lets anything else propagate as a real bug."""
+
+    def generate(self, **kwargs):
+        raise AIServiceUnavailable('provider unavailable')
 
 
 class AIClientTests(SimpleTestCase):
@@ -413,6 +425,40 @@ class GeminiProviderTests(SimpleTestCase):
         self.assertNotIn('additionalProperties', encoded_schema)
         self.assertNotIn('const', encoded_schema)
 
+    def test_sdk_api_error_is_normalized_to_aiengineerror(self):
+        # Regression: a failed request (e.g. a deprecated/unavailable
+        # model name) raised google.genai.errors.APIError straight
+        # through, unrecognized by anything expecting AIEngineError — in
+        # particular FallbackProvider, which only moves to the next
+        # provider on AIEngineError and let the real exception type skip
+        # the rest of the chain instead of falling through to it.
+        from google.genai import errors as genai_errors
+
+        models = Mock()
+        models.generate_content.side_effect = genai_errors.ClientError(
+            404, {'error': {'message': 'model not found'}},
+        )
+        provider = GeminiProvider(
+            api_key='test-key',
+            model='gemini-test-model',
+            client=SimpleNamespace(models=models),
+        )
+
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(system_prompt='system', user_prompt='learner')
+
+    def test_connection_failure_is_normalized_to_aiengineerror(self):
+        models = Mock()
+        models.generate_content.side_effect = OSError('offline')
+        provider = GeminiProvider(
+            api_key='test-key',
+            model='gemini-test-model',
+            client=SimpleNamespace(models=models),
+        )
+
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(system_prompt='system', user_prompt='learner')
+
 
 class DeepSeekProviderTests(SimpleTestCase):
     class Response:
@@ -539,3 +585,182 @@ class DeepSeekProviderTests(SimpleTestCase):
 
         with self.assertRaises(InvalidAIResponse):
             validate_diagnostic_response(payload)
+
+
+class GroqProviderTests(SimpleTestCase):
+    """Same OpenAI-compatible Chat Completions contract as DeepSeek — see
+    DeepSeekProviderTests above, which this mirrors closely."""
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = json.dumps(payload).encode('utf-8')
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self, size=-1):
+            return BytesIO(self.payload).read(size)
+
+    def provider_for(self, envelope):
+        opener = Mock(return_value=self.Response(envelope))
+        provider = GroqProvider(
+            api_key='test-key',
+            model='groq-test-model',
+            timeout=7,
+            opener=opener,
+        )
+        return provider, opener
+
+    def test_groq_requests_json_and_returns_parsed_object(self):
+        provider, opener = self.provider_for({
+            'choices': [{
+                'finish_reason': 'stop',
+                'message': {'content': json.dumps(VALID_DIAGNOSTIC)},
+            }],
+        })
+        schema = DiagnosticResponse.schema_contract(
+            allowed_misconception_codes=('loop-value-misuse',),
+        )
+
+        result = provider.generate(
+            system_prompt='Ask one focused question.',
+            user_prompt='privacy-minimized signals',
+            response_schema=schema,
+        )
+
+        self.assertEqual(result, VALID_DIAGNOSTIC)
+        sent_request = opener.call_args.args[0]
+        sent_payload = json.loads(sent_request.data)
+        self.assertEqual(sent_request.full_url, 'https://api.groq.com/openai/v1/chat/completions')
+        self.assertEqual(sent_request.get_header('User-agent'), 'Mozilla/5.0')
+        self.assertEqual(sent_payload['model'], 'groq-test-model')
+        self.assertEqual(sent_payload['response_format'], {'type': 'json_object'})
+        self.assertEqual(sent_payload['messages'][1]['content'], 'privacy-minimized signals')
+        self.assertIn('valid JSON object', sent_payload['messages'][0]['content'])
+        self.assertEqual(opener.call_args.kwargs['timeout'], 7)
+
+    def test_empty_malformed_and_truncated_responses_fail_closed(self):
+        envelopes = (
+            {
+                'choices': [{
+                    'finish_reason': 'stop',
+                    'message': {'content': ''},
+                }],
+            },
+            {
+                'choices': [{
+                    'finish_reason': 'stop',
+                    'message': {'content': '{invalid'},
+                }],
+            },
+            {
+                'choices': [{
+                    'finish_reason': 'length',
+                    'message': {'content': json.dumps(VALID_DIAGNOSTIC)},
+                }],
+            },
+        )
+        for envelope in envelopes:
+            with self.subTest(envelope=envelope):
+                provider, _ = self.provider_for(envelope)
+                with self.assertRaises(InvalidAIResponse):
+                    provider.generate(
+                        system_prompt='Return JSON.',
+                        user_prompt='signals',
+                        response_schema={},
+                    )
+
+    @patch.dict('os.environ', {'GROQ_API_KEY': ''})
+    def test_missing_key_fails_safely(self):
+        provider = GroqProvider(api_key='', opener=Mock())
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(
+                system_prompt='Return JSON.',
+                user_prompt='signals',
+                response_schema={},
+            )
+
+    def test_transport_failure_is_normalized(self):
+        provider = GroqProvider(
+            api_key='test-key',
+            opener=Mock(side_effect=OSError('offline')),
+        )
+
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(
+                system_prompt='Return JSON.',
+                user_prompt='signals',
+                response_schema={},
+            )
+
+
+class FallbackProviderTests(SimpleTestCase):
+    """FallbackProvider — apps.ai_engine.providers.fallback — tries each
+    configured provider in turn, only moving on when one raises an
+    AIEngineError (config/transport/invalid-response failure)."""
+
+    def test_first_working_provider_wins_without_touching_the_rest(self):
+        first = StaticProvider(VALID_DIAGNOSTIC)
+        second = BrokenProvider()
+        provider = FallbackProvider(providers=[first, second])
+
+        result = provider.generate(system_prompt='system', user_prompt='learner')
+
+        self.assertEqual(result, VALID_DIAGNOSTIC)
+
+    def test_falls_through_to_the_next_provider_on_failure(self):
+        first = UnavailableProvider()
+        second = StaticProvider(VALID_DIAGNOSTIC)
+        provider = FallbackProvider(providers=[first, second])
+
+        result = provider.generate(system_prompt='system', user_prompt='learner')
+
+        self.assertEqual(result, VALID_DIAGNOSTIC)
+
+    def test_does_not_fall_through_on_an_unrecognized_provider_bug(self):
+        # Only AIEngineError (a provider genuinely being unavailable/
+        # invalid) triggers fallback — anything else is a real bug and
+        # must propagate immediately, not get silently swallowed.
+        provider = FallbackProvider(providers=[BrokenProvider(), StaticProvider(VALID_DIAGNOSTIC)])
+
+        with self.assertRaises(RuntimeError):
+            provider.generate(system_prompt='system', user_prompt='learner')
+
+    def test_raises_the_last_error_when_every_provider_fails(self):
+        provider = FallbackProvider(providers=[UnavailableProvider(), UnavailableProvider()])
+
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(system_prompt='system', user_prompt='learner')
+
+    def test_no_providers_configured_fails_safely(self):
+        provider = FallbackProvider(providers=[])
+
+        with self.assertRaises(AIServiceUnavailable):
+            provider.generate(system_prompt='system', user_prompt='learner')
+
+    @patch.dict(
+        'os.environ',
+        {'GEMINI_API_KEY': 'gm-test', 'GROQ_API_KEY': 'gsk-test', 'DEEPSEEK_API_KEY': ''},
+        clear=True,
+    )
+    def test_default_chain_is_built_from_configured_keys_in_priority_order(self):
+        provider = FallbackProvider()
+        self.assertEqual(
+            [type(p).__name__ for p in provider._providers],
+            ['GeminiProvider', 'GroqProvider'],
+        )
+
+    @override_settings(AI_PROVIDER_CLASS='apps.ai_engine.providers.fallback.FallbackProvider')
+    @patch.dict('os.environ', {'GEMINI_API_KEY': '', 'GROQ_API_KEY': 'gsk-test', 'DEEPSEEK_API_KEY': ''})
+    def test_generate_ai_response_uses_the_fallback_chain_end_to_end(self):
+        with patch(
+            'apps.ai_engine.providers.groq.GroqProvider.generate',
+            return_value=VALID_DIAGNOSTIC,
+        ) as mock_generate:
+            result = generate_ai_response(system_prompt='system', user_prompt='learner')
+
+        self.assertEqual(result, VALID_DIAGNOSTIC)
+        mock_generate.assert_called_once()

@@ -242,21 +242,35 @@ CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS = int(os.environ.get('CODE_RUNNER_AUTOSTAR
 if IS_PRODUCTION:
     CODE_RUNNER_URL = require_env('CODE_RUNNER_URL')
     CODE_RUNNER_AUTH_TOKEN = require_env('CODE_RUNNER_AUTH_TOKEN')
+# An explicit AI_PROVIDER_CLASS still names exactly one provider class,
+# same as before (many tests override this to force a single provider —
+# see apps/ai_engine/tests.py, apps/coding_quiz/tests.py). Left
+# unset, it now points at FallbackProvider whenever *any* provider key is
+# configured — FallbackProvider itself builds the real DeepSeek -> Gemini
+# -> Groq chain from whichever keys are present (see
+# apps/ai_engine/providers/fallback.py), so a single failing provider (out
+# of quota, a deprecated model name, ...) no longer takes AI assistance
+# down entirely when another one is available.
 AI_PROVIDER_CLASS = os.environ.get('AI_PROVIDER_CLASS') or (
-    'apps.ai_engine.providers.deepseek.DeepSeekProvider'
-    if os.environ.get('DEEPSEEK_API_KEY')
-    else (
-        'apps.ai_engine.providers.gemini.GeminiProvider'
-        if os.environ.get('GEMINI_API_KEY')
-        else ''
+    'apps.ai_engine.providers.fallback.FallbackProvider'
+    if (
+        os.environ.get('DEEPSEEK_API_KEY')
+        or os.environ.get('GEMINI_API_KEY')
+        or os.environ.get('GROQ_API_KEY')
     )
+    else ''
 )
 AI_CONTEXT_POLICY = 'privacy_minimized'
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+# 'gemini-2.5-flash' (a pinned version) was retired for new callers —
+# 'gemini-flash-latest' is Google's unpinned alias to the current default
+# flash model, so it doesn't go stale the same way a pinned version does.
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-flash-latest')
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '20'))
 DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-v4-flash')
 DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
 DEEPSEEK_TIMEOUT_SECONDS = int(os.environ.get('DEEPSEEK_TIMEOUT_SECONDS', '20'))
+GROQ_MODEL = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+GROQ_TIMEOUT_SECONDS = int(os.environ.get('GROQ_TIMEOUT_SECONDS', '20'))
 
 if 'test' in sys.argv:
     AI_PROVIDER_CLASS = ''
