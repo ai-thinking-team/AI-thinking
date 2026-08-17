@@ -384,3 +384,27 @@ msgstr "Please answer the diagnostic question before continuing."
 msgid "診断質問はこのステップでは利用できません。"
 msgstr "The diagnostic question is not available at this step."
 
+
+msgid "この科目にはまだセクションがありません。科目にセクションが追加されると診断クイズが出題されます。"
+msgstr "This subject doesn't have any sections yet. Once sections are added, the diagnostic quiz will start."
+
+msgid ""
+"%(total)s問すべて正解でした。この科目の基礎はすでに身についているようです。"
+"発展的なセクションから取り組んでみましょう。"
+msgstr ""
+"You got all %(total)s questions correct. It looks like you already have "
+"the basics of this subject down — try starting from a more advanced section."
+
+msgid ""
+"%(total)s問中%(correct)s問正解でした。理解度は「普通」です。"
+"間違えた問題に対応するセクションを優先的に復習しましょう。"
+msgstr ""
+"You got %(correct)s of %(total)s questions correct. Your understanding "
+"looks solid overall — review the sections tied to the questions you missed first."
+
+msgid ""
+"%(total)s問中%(correct)s問正解でした。理解度は「要復習」です。"
+"基礎のセクションから順番に進めることをおすすめします。"
+msgstr ""
+"You got %(correct)s of %(total)s questions correct. This subject needs "
+"more review — we recommend working through the sections in order, starting from the basics."
