@@ -221,22 +221,87 @@ class HarnessTests(TestCase):
 
         self.assertEqual(result['status'], 'TIMEOUT')
 
+    def test_set_membership_and_for_loop_pass(self):
+        result = execute({
+            'language': 'python',
+            'source_code': (
+                'def count_allowed(numbers, allowed_values):\n'
+                '    allowed_set = set(allowed_values)\n'
+                '    count = 0\n'
+                '    for number in numbers:\n'
+                '        if number in allowed_set:\n'
+                '            count += 1\n'
+                '    return count\n'
+            ),
+            'test_case_ids': ['set-membership-public', 'set-membership-none', 'set-membership-other'],
+        })
+        self.assertEqual(result['status'], 'PASSED')
+
+    def test_large_reasonable_input_passes(self):
+        result = execute({
+            'language': 'python',
+            'source_code': (
+                'def count_allowed(numbers, allowed_values):\n'
+                '    allowed_set = set(allowed_values)\n'
+                '    count = 0\n'
+                '    for number in numbers:\n'
+                '        if number in allowed_set:\n'
+                '            count += 1\n'
+                '    return count\n'
+            ),
+            'test_case_ids': ['set-membership-large'],
+        })
+        self.assertEqual(result['status'], 'PASSED')
+
+    def test_terminating_while_loop_passes(self):
+        result = execute({
+            'language': 'python',
+            'source_code': (
+                'def safe_divide(a, b):\n'
+                '    quotient = 0\n'
+                '    remaining = a\n'
+                '    while remaining >= b:\n'
+                '        remaining -= b\n'
+                '        quotient += 1\n'
+                '    return quotient\n'
+            ),
+            'test_case_ids': ['divide-public'],
+        })
+        self.assertEqual(result['status'], 'PASSED')
+
+    def test_repeated_sequential_submissions_remain_stable(self):
+        source_code = 'def count_allowed(numbers, allowed_values):\n    return sum(number in set(allowed_values) for number in numbers)'
+        for _ in range(5):
+            with self.subTest(attempt=_):
+                result = execute({
+                    'language': 'python',
+                    'source_code': source_code,
+                    'test_case_ids': ['set-membership-public'],
+                })
+                self.assertEqual(result['status'], 'PASSED')
+
 
 class RunnerServiceTests(TestCase):
     @patch('runner_service.server.subprocess.run')
     def test_docker_command_has_required_isolation_limits(self, mocked_run):
-        mocked_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0,
-            stdout='{"status":"PASSED","message":"ok","tests":[]}', stderr='',
-        )
+        mocked_run.side_effect = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='container-id\n', stderr=''),
+            subprocess.CompletedProcess(
+                args=[], returncode=0,
+                stdout='{"status":"PASSED","message":"ok","tests":[]}', stderr='',
+            ),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr=''),
+        ]
         result = run_in_sandbox({
             'language': 'python',
             'source_code': 'def double_numbers(values): return []',
             'test_case_ids': ['double-public'],
         })
 
-        command = mocked_run.call_args.args[0]
+        command = mocked_run.call_args_list[0].args[0]
         self.assertEqual(result['status'], 'PASSED')
+        self.assertEqual(command[1], 'create')
+        self.assertIn('--pull=never', command)
         self.assertIn('--network', command)
         self.assertIn('none', command)
         self.assertIn('--memory', command)
@@ -244,23 +309,26 @@ class RunnerServiceTests(TestCase):
         self.assertIn('--cpus', command)
         self.assertIn('--cap-drop', command)
         self.assertIn('ALL', command)
+        self.assertIn('--init', command)
         self.assertNotIn('SETUID', command)
         self.assertNotIn('SETGID', command)
+        self.assertEqual(mocked_run.call_args_list[1].args[0][1:3], ['start', '--attach'])
 
     @patch('runner_service.server.subprocess.run', side_effect=FileNotFoundError)
-    def test_missing_docker_returns_not_executed(self, mocked_run):
+    def test_missing_docker_returns_runner_error(self, mocked_run):
         result = run_in_sandbox({
             'language': 'python',
             'source_code': 'print(1)',
             'test_case_ids': ['double-public'],
         })
 
-        self.assertEqual(result['status'], 'NOT_EXECUTED')
+        self.assertEqual(result['status'], 'RUNNER_ERROR')
 
     @patch('runner_service.server.subprocess.run')
-    def test_timed_out_container_is_force_removed(self, mocked_run):
+    def test_execution_transport_timeout_is_runner_error_and_force_removed(self, mocked_run):
         mocked_run.side_effect = [
-            subprocess.TimeoutExpired('docker', server.CONTAINER_TIMEOUT_SECONDS),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='container-id\n', stderr=''),
+            subprocess.TimeoutExpired('docker', server.CONTAINER_START_TIMEOUT_SECONDS),
             subprocess.CompletedProcess(args=[], returncode=0),
         ]
 
@@ -270,13 +338,50 @@ class RunnerServiceTests(TestCase):
             'test_case_ids': ['double-public'],
         })
 
-        self.assertEqual(result['status'], 'TIMEOUT')
+        self.assertEqual(result['status'], 'RUNNER_ERROR')
         self.assertIn(
-            f'{server.CONTAINER_TIMEOUT_SECONDS}-second container limit',
+            'infrastructure limit',
             result['message'],
         )
-        cleanup_command = mocked_run.call_args_list[1].args[0]
-        self.assertEqual(cleanup_command[:3], ['docker', 'rm', '-f'])
+        cleanup_command = mocked_run.call_args_list[2].args[0]
+        self.assertEqual(cleanup_command[:3], ['docker', 'rm', '--force'])
+
+    @patch('runner_service.server.subprocess.run')
+    def test_container_creation_timeout_is_runner_error_without_student_timeout(self, mocked_run):
+        mocked_run.side_effect = subprocess.TimeoutExpired(
+            'docker', server.CONTAINER_CREATE_TIMEOUT_SECONDS
+        )
+
+        result = run_in_sandbox({
+            'language': 'python',
+            'source_code': 'def double_numbers(values): return values',
+            'test_case_ids': ['double-public'],
+        })
+
+        self.assertEqual(result['status'], 'RUNNER_ERROR')
+        self.assertIn('container creation', result['message'])
+        mocked_run.assert_called_once()
+
+    @patch('runner_service.server.subprocess.run')
+    def test_student_timeout_result_is_preserved(self, mocked_run):
+        mocked_run.side_effect = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='container-id\n', stderr=''),
+            subprocess.CompletedProcess(
+                args=[], returncode=0,
+                stdout='{"status":"TIMEOUT","message":"Execution exceeded the 2-second limit.","tests":[]}',
+                stderr='',
+            ),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr=''),
+        ]
+
+        result = run_in_sandbox({
+            'language': 'python',
+            'source_code': 'def double_numbers(values):\n    while True: pass',
+            'test_case_ids': ['double-public'],
+        })
+
+        self.assertEqual(result['status'], 'TIMEOUT')
+        self.assertIn('2-second', result['message'])
 
     @patch('runner_service.server.subprocess.run')
     def test_docker_failure_includes_runner_diagnostic(self, mocked_run):
@@ -290,15 +395,19 @@ class RunnerServiceTests(TestCase):
             'test_case_ids': ['double-public'],
         })
 
-        self.assertEqual(result['status'], 'NOT_EXECUTED')
+        self.assertEqual(result['status'], 'RUNNER_ERROR')
         self.assertIn('Docker Desktop is not running', result['message'])
 
     @patch('runner_service.server.subprocess.run')
     def test_extra_payload_keys_are_sanitized(self, mocked_run):
-        mocked_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0,
-            stdout='{"status":"PASSED","message":"ok","tests":[]}', stderr='',
-        )
+        mocked_run.side_effect = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='container-id\n', stderr=''),
+            subprocess.CompletedProcess(
+                args=[], returncode=0,
+                stdout='{"status":"PASSED","message":"ok","tests":[]}', stderr='',
+            ),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr=''),
+        ]
         run_in_sandbox({
             'language': 'python',
             'source_code': 'def double_numbers(values): return []',
@@ -306,7 +415,7 @@ class RunnerServiceTests(TestCase):
             'malicious_key': 'should_be_stripped',
             'secret_token': '12345',
         })
-        input_data = mocked_run.call_args.kwargs['input']
+        input_data = mocked_run.call_args_list[1].kwargs['input']
         self.assertNotIn('malicious_key', input_data)
         self.assertNotIn('secret_token', input_data)
 

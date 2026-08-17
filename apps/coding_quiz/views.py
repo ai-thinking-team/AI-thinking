@@ -214,7 +214,7 @@ def _handle_action(request, learning_session, exercise, forms):
             exercise=exercise,
             **form.cleaned_data,
         )
-        if result.status.value == 'NOT_EXECUTED':
+        if result.status.value in {'NOT_EXECUTED', 'RUNNER_ERROR'}:
             feedback = execution_status_feedback(result.status)
             messages.warning(request, (
                 f'Transfer Check saved but not evaluated: {feedback["guidance"]} '

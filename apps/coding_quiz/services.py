@@ -164,6 +164,10 @@ EXECUTION_STATUS_FEEDBACK = {
         'Timed out',
         'The code did not finish within the limit. Check loops and repeated work before retrying.',
     ),
+    ExecutionStatus.RUNNER_ERROR.value: (
+        'Runner error',
+        'The shared coding runner could not start or complete this check. Your work is saved; retry when the runner is healthy.',
+    ),
     ExecutionStatus.NOT_EXECUTED.value: (
         'Not executed',
         'The isolated runner did not evaluate this submission. Your work is saved and can be retried.',
@@ -945,7 +949,10 @@ def submit_transfer_check(*, learning_session, exercise, source_code, reasoning,
     latest_transfer = locked_session.transfer_attempts.order_by('-created_at', '-pk').first()
     if (
         latest_transfer
-        and latest_transfer.evaluation.get('status') != ExecutionStatus.NOT_EXECUTED.value
+        and latest_transfer.evaluation.get('status') not in {
+            ExecutionStatus.NOT_EXECUTED.value,
+            ExecutionStatus.RUNNER_ERROR.value,
+        }
     ):
         raise ValidationError('Your Transfer Check has already been evaluated.')
     original_attempt = locked_session.attempts.order_by('-revision_number', '-created_at').first()
@@ -977,7 +984,7 @@ def submit_transfer_check(*, learning_session, exercise, source_code, reasoning,
         passed=result.status == ExecutionStatus.PASSED,
         evaluation=_execution_evidence(result),
     )
-    if result.status == ExecutionStatus.NOT_EXECUTED:
+    if result.status in {ExecutionStatus.NOT_EXECUTED, ExecutionStatus.RUNNER_ERROR}:
         learning_session.current_state = locked_session.current_state
         return transfer, result
 

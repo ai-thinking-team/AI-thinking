@@ -2,7 +2,9 @@ param(
     [switch]$SkipBuild,
     [int]$Port = 8765,
     [int]$DockerReadyTimeoutSeconds = 60,
-    [int]$ContainerTimeoutSeconds = 30
+    [int]$ContainerCreateTimeoutSeconds = 30,
+    [int]$ContainerStartTimeoutSeconds = 10,
+    [int]$ContainerCleanupTimeoutSeconds = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,9 +13,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 function Resolve-DockerPath {
-    $command = Get-Command docker -CommandType Application -ErrorAction SilentlyContinue
-    if ($command) {
-        return $command.Source
+    $commands = @(Get-Command docker -CommandType Application -ErrorAction SilentlyContinue)
+    if ($commands.Count -gt 0) {
+        return [string]$commands[0].Source
     }
 
     $candidates = @()
@@ -83,7 +85,9 @@ if (-not (Test-DockerReady)) {
 $env:RUNNER_PORT = $Port
 $env:RUNNER_IMAGE = 'ai-thinking-code-runner:local'
 $env:DOCKER_BIN = $dockerPath
-$env:RUNNER_CONTAINER_TIMEOUT_SECONDS = [string]$ContainerTimeoutSeconds
+$env:RUNNER_CONTAINER_CREATE_TIMEOUT_SECONDS = [string]$ContainerCreateTimeoutSeconds
+$env:RUNNER_CONTAINER_START_TIMEOUT_SECONDS = [string]$ContainerStartTimeoutSeconds
+$env:RUNNER_CONTAINER_CLEANUP_TIMEOUT_SECONDS = [string]$ContainerCleanupTimeoutSeconds
 if ($SkipBuild) {
     Write-Host 'Skipping runner image build.'
 } else {

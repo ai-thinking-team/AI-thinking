@@ -64,6 +64,17 @@ class PassingCodeExecutionGateway:
 PASSING_GATEWAY = 'apps.coding_quiz.tests.PassingCodeExecutionGateway'
 
 
+class RunnerErrorCodeExecutionGateway:
+    def run(self, request):
+        return ExecutionResult(
+            status=ExecutionStatus.RUNNER_ERROR,
+            message='Docker is unavailable for the shared runner.',
+        )
+
+
+RUNNER_ERROR_GATEWAY = 'apps.coding_quiz.tests.RunnerErrorCodeExecutionGateway'
+
+
 class PassingDiagnosticProvider:
     def generate(self, **kwargs):
         return {
@@ -124,6 +135,7 @@ class TeachBackRubricTests(SimpleTestCase):
             ExecutionStatus.SYNTAX_ERROR: 'Syntax error',
             ExecutionStatus.RUNTIME_ERROR: 'Runtime error',
             ExecutionStatus.TIMEOUT: 'Timed out',
+            ExecutionStatus.RUNNER_ERROR: 'Runner error',
             ExecutionStatus.NOT_EXECUTED: 'Not executed',
         }
         for status, label in expected.items():
@@ -1201,6 +1213,25 @@ class CodingWorkflowBrowserTests(TestCase):
         retry_page = self.client.get(self.url)
         self.assertContains(retry_page, 'You may retry without losing the saved attempt')
         self.assertContains(retry_page, 'def word_lengths(words)')
+
+    @override_settings(CODE_RUNNER_GATEWAY_CLASS=RUNNER_ERROR_GATEWAY)
+    def test_runner_error_saves_transfer_and_keeps_check_open_for_retry(self):
+        self.advance_to_transfer()
+
+        response = self.client.post(self.url, {
+            'action': 'transfer',
+            'transfer-source_code': 'def word_lengths(words):\n    return [len(word) for word in words]',
+            'transfer-reasoning': 'Transform each word into its length.',
+            'transfer-confidence': '4',
+        })
+
+        self.assertRedirects(response, self.url)
+        transfer = TransferAttempt.objects.get()
+        self.assertEqual(transfer.evaluation['status'], 'RUNNER_ERROR')
+        self.assertEqual(LearningSession.objects.get().current_state, WorkflowState.TRANSFER_TASK)
+        retry_page = self.client.get(self.url)
+        self.assertContains(retry_page, 'RUNNER_ERROR')
+        self.assertContains(retry_page, 'Docker is unavailable for the shared runner.')
 
     @override_settings(CODE_RUNNER_URL='', CODE_RUNNER_GATEWAY_CLASS='')
     def test_transfer_can_retry_after_not_executed_and_then_reach_mastery(self):

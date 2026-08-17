@@ -273,6 +273,12 @@ TEST_CATALOG.update({
     'set-membership-public': {'function': 'count_allowed', 'args': ([1, 2, 4, 2], [2, 3]), 'expected': 2, 'public': True},
     'set-membership-none': {'function': 'count_allowed', 'args': ([1, 4], [2, 3]), 'expected': 0, 'public': False},
     'set-membership-other': {'function': 'count_allowed', 'args': ([3, 3, 5, 7], [3, 7]), 'expected': 3, 'public': False},
+    'set-membership-large': {
+        'function': 'count_allowed',
+        'args': (list(range(10000)), list(range(0, 10000, 2))),
+        'expected': 5000,
+        'public': False,
+    },
     'missing-numbers-public': {'function': 'missing_numbers', 'args': ([1, 2, 3], [2]), 'expected': [1, 3], 'public': False},
     'missing-numbers-empty': {'function': 'missing_numbers', 'args': ([], [1]), 'expected': [], 'public': False},
     'missing-numbers-other': {'function': 'missing_numbers', 'args': ([4, 2, 2], [2, 5]), 'expected': [4], 'public': False},

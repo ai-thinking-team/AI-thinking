@@ -29,8 +29,8 @@ This service is separate from Django. Django sends only Python source code and c
 `start.ps1` finds Docker Desktop in the standard Windows installation locations and waits up to
 60 seconds for the daemon. If it still reports that Docker CLI or Docker Desktop is unavailable,
 install Docker Desktop with the WSL 2 Linux-container backend and confirm `docker info` works in a
-new PowerShell. The first isolated execution allows 30 seconds for image/container startup; learner
-code itself remains limited to 2 seconds. If the Django page reports `NOT_EXECUTED`, inspect the
+new PowerShell. Container creation allows 30 seconds and execution transport allows 10 seconds;
+learner code itself remains limited to 2 seconds. If the Django page reports `RUNNER_ERROR`, inspect the
 runner terminal: the HTTP response includes Docker's diagnostic message (for example, an image-not-found
 or Docker-Desktop-not-running error).
 
@@ -41,9 +41,14 @@ runs inside the Django process.
 
 The executor container is removed after every request and runs with no network, a read-only root filesystem, a non-root user, all Linux capabilities dropped, a 128 MB memory limit, one CPU, a PID limit, and layered execution timeouts.
 
-The runner service allows 30 seconds for Docker container startup and teardown by default, while learner execution inside the container remains limited to 2 seconds. Override the outer limit with `-ContainerTimeoutSeconds` or `RUNNER_CONTAINER_TIMEOUT_SECONDS`; keep Django's `CODE_RUNNER_TIMEOUT_SECONDS` greater than that value (the supplied default is 40 seconds).
+The runner service separates container creation (30 seconds), execution transport (10 seconds),
+and cleanup (5 seconds) by default. Override them with `-ContainerCreateTimeoutSeconds`,
+`-ContainerStartTimeoutSeconds`, and `-ContainerCleanupTimeoutSeconds`. These are infrastructure
+guards; only the harness's 2-second result is reported as a learner-code `TIMEOUT`.
 
 Evaluation statuses distinguish `OUTPUT_MISMATCH` for a failed public expected/actual check from
 `LOGIC_ERROR` for a missing required function or a hidden boundary failure. Hidden failures never
 return expected or actual values. Syntax, runtime, timeout, unavailable-runner, and passing results
-remain `SYNTAX_ERROR`, `RUNTIME_ERROR`, `TIMEOUT`, `NOT_EXECUTED`, and `PASSED` respectively.
+remain `SYNTAX_ERROR`, `RUNTIME_ERROR`, `TIMEOUT`, `RUNNER_ERROR`, `NOT_EXECUTED`, and `PASSED`
+respectively. `RUNNER_ERROR` means the infrastructure failed before a student result was
+received; it is never presented as a learner-code timeout.

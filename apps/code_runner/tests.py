@@ -82,7 +82,7 @@ class HttpCodeExecutionGatewayTests(SimpleTestCase):
         self,
         mocked_urlopen,
     ):
-        for status in ('OUTPUT_MISMATCH', 'LOGIC_ERROR'):
+        for status in ('OUTPUT_MISMATCH', 'LOGIC_ERROR', 'RUNNER_ERROR'):
             with self.subTest(status=status):
                 response = MagicMock()
                 response.read.return_value = json.dumps({
@@ -107,13 +107,14 @@ class HttpCodeExecutionGatewayTests(SimpleTestCase):
 
         result = self.gateway.run(self.request)
 
-        self.assertEqual(result.status, ExecutionStatus.NOT_EXECUTED)
+        self.assertEqual(result.status, ExecutionStatus.RUNNER_ERROR)
 
     @patch('apps.code_runner.http_gateway.urlopen', side_effect=URLError('offline'))
-    def test_unavailable_runner_fails_closed(self, mocked_urlopen):
+    def test_unavailable_runner_is_runner_error(self, mocked_urlopen):
         result = self.gateway.run(self.request)
 
-        self.assertEqual(result.status, ExecutionStatus.NOT_EXECUTED)
+        self.assertEqual(result.status, ExecutionStatus.RUNNER_ERROR)
+        self.assertIn('could not be reached', result.message)
 
     @override_settings(
         CODE_RUNNER_URL='http://127.0.0.1:8765',

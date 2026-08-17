@@ -115,7 +115,7 @@
 <section class="panel" id="revision">
   <h2>4. Revision</h2>
   <p>This creates a new revision. Your first attempt remains unchanged.</p>
-  <p class="locked-note">Teach-Back opens only after an isolated runner verifies this exercise as <strong>PASSED</strong>. If the status is NOT_EXECUTED, your revision is still saved but the workflow remains here.</p>
+  <p class="locked-note">Teach-Back opens only after an isolated runner verifies this exercise as <strong>PASSED</strong>. If the runner is unavailable or the status is NOT_EXECUTED, your revision is still saved but the workflow remains here.</p>
   <form method="post" data-disable-on-submit data-default-action="save_revision">
     {% csrf_token %}
     {% include "components/form_errors.html" with form=revision_form %}
@@ -175,8 +175,10 @@
   <h2>6. Transfer Check</h2>
   <p><strong>New task:</strong> {{ exercise.transfer_prompt }}</p>
   <p class="locked-note">AI and all hints are locked for this unassisted check.</p>
-  {% if transfer_attempt and transfer_attempt.evaluation.status == 'NOT_EXECUTED' %}
-    <p class="status"><strong>Previous submission:</strong> NOT_EXECUTED — {{ transfer_attempt.evaluation.message }} You may retry without losing the saved attempt.</p>
+  {% if transfer_attempt %}
+    {% if transfer_attempt.evaluation.status == 'NOT_EXECUTED' or transfer_attempt.evaluation.status == 'RUNNER_ERROR' %}
+      <p class="status"><strong>Previous submission:</strong> {{ transfer_attempt.evaluation.status }} — {{ transfer_attempt.evaluation.message }} You may retry without losing the saved attempt.</p>
+    {% endif %}
   {% endif %}
   <form method="post" data-disable-on-submit>
     {% csrf_token %}

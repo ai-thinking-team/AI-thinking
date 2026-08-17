@@ -29,19 +29,19 @@ class HttpCodeExecutionGateway:
         try:
             with urlopen(http_request, timeout=self.timeout) as response:
                 raw_response = response.read(MAX_RESPONSE_BYTES + 1)
-        except (HTTPError, URLError, TimeoutError, OSError):
-            return self._unavailable()
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            return self._runner_error(f'The isolated runner could not be reached: {exc}')
         if len(raw_response) > MAX_RESPONSE_BYTES:
-            return self._unavailable('The isolated runner returned an oversized response.')
+            return self._runner_error('The isolated runner returned an oversized response.')
         try:
             data = json.loads(raw_response)
             status = ExecutionStatus(data['status'])
             message = str(data['message'])[:500]
             tests = tuple(item for item in data.get('tests', ()) if isinstance(item, dict))
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            return self._unavailable('The isolated runner returned an invalid response.')
+            return self._runner_error('The isolated runner returned an invalid response.')
         return ExecutionResult(status=status, message=message, tests=tests)
 
     @staticmethod
-    def _unavailable(message='The isolated execution service is unavailable; the submission was not run.'):
-        return ExecutionResult(status=ExecutionStatus.NOT_EXECUTED, message=message)
+    def _runner_error(message):
+        return ExecutionResult(status=ExecutionStatus.RUNNER_ERROR, message=str(message)[:500])

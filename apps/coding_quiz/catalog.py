@@ -802,7 +802,7 @@ DSA_CODING_CATALOG = (
         slug='climb-stairs-dp', order=20, title='Count ways to climb stairs with dynamic programming',
         prompt='Return the number of ways to climb n stairs when each move is one or two steps.',
         starter_code='def climb_stairs(n):\n    return 0',
-        public_description='climb_stairs(4) should return 5.',
+        public_description='climb_stairs(4) should return 5; climb_stairs(0) should return 1 (the empty climb).',
         public_test_ids=['climb-stairs-public'], hidden_test_ids=['climb-stairs-zero', 'climb-stairs-other'],
         concept='dynamic_programming', misconception_code='dynamic-programming-state-misuse',
         concept_terms=['dynamic programming', 'state', 'previous'], action_terms=['one step', 'two steps', 'sum', 'base case'],
