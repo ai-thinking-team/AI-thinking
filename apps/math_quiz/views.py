@@ -80,7 +80,10 @@ def home(request):
     services.ensure_sample_unit()
     key = request.session.session_key
     courses = []
-    for unit in Unit.objects.order_by('name').prefetch_related('sections'):
+    # is_demo units (currently just the bundled sample course) stay in the
+    # DB and keep working normally if visited directly — they're just kept
+    # off the user-facing course list.
+    for unit in Unit.objects.filter(is_demo=False).order_by('name').prefetch_related('sections'):
         mastered, total, percent, complete = services.unit_progress(
             unit=unit, browser_session_key=key,
         )
