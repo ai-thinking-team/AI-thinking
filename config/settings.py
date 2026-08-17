@@ -58,6 +58,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Must run before LocaleMiddleware — see its docstring: makes
+    # LANGUAGE_CODE the real default for new visitors instead of the
+    # browser's Accept-Language header silently overriding it.
+    'config.middleware.IgnoreBrowserLanguageMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -150,7 +154,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'ja'
+LANGUAGE_CODE = 'en'
 
 LANGUAGES = [
     ('ja', '日本語'),

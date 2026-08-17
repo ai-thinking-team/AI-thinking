@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone, translation
 
@@ -89,6 +89,17 @@ class MathRouteTests(TestCase):
     def test_home_loads(self):
         self.assertEqual(self.client.get(reverse('math_quiz:home')).status_code, 200)
 
+    def test_sample_unit_is_hidden_from_the_course_list_but_still_exists(self):
+        response = self.client.get(reverse('math_quiz:home'))
+        self.assertNotContains(response, '一次方程式（サンプル）')
+        sample = Unit.objects.get(name='一次方程式（サンプル）')
+        self.assertTrue(sample.is_demo)  # still in the DB, untouched
+
+    def test_sample_unit_still_works_if_visited_directly(self):
+        sample = services.ensure_sample_unit()
+        response = self.client.get(reverse('math_quiz:unit_detail', args=[sample.id]), follow=True)
+        self.assertEqual(response.status_code, 200)
+
     def test_section_quiz_starts_directly_at_first_attempt(self):
         section = _create_section()
         url = reverse('math_quiz:section_quiz', args=[section.id])
@@ -96,7 +107,7 @@ class MathRouteTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, section.unit.name)
-        self.assertContains(response, '最初の解答')
+        self.assertContains(response, 'First attempt')  # English is now the default language
 
 
 class MathDontKnowButtonTests(TestCase):
@@ -110,11 +121,11 @@ class MathDontKnowButtonTests(TestCase):
 
     def test_dont_know_button_is_shown_on_the_first_attempt_screen(self):
         response = self.client.get(self.url)
-        self.assertContains(response, 'わからない')
+        self.assertContains(response, "I don't know")
 
     def test_clicking_dont_know_shows_a_level_1_hint(self):
         response = self.client.post(self.url, {'action': 'dont_know'}, follow=True)
-        self.assertContains(response, 'ヒント レベル1')
+        self.assertContains(response, 'Hint level 1')
         expected_hint = demo_content.build_hint(section=self.section, level=1, kind='first')
         self.assertContains(response, expected_hint)
 
@@ -133,7 +144,7 @@ class MathDontKnowButtonTests(TestCase):
         self.client.post(self.url, {'action': 'dont_know'})
         response = self.client.post(self.url, {'action': 'think_again'}, follow=True)
         self.assertContains(response, 'name="answer"')
-        self.assertNotContains(response, 'ヒント レベル1')
+        self.assertNotContains(response, 'Hint level 1')
 
     def test_normal_answer_submission_still_works_after_using_dont_know(self):
         self.client.post(self.url, {'action': 'dont_know'})
@@ -342,7 +353,7 @@ class MathViewFlowTests(TestCase):
         # The visit after that starts a brand new round.
         old_pk = session.pk
         response = self.client.get(self.url)
-        self.assertContains(response, '最初の解答')
+        self.assertContains(response, 'First attempt')  # English is now the default language
         new_session = Section.objects.get(id=self.section.id).sessions.get()
         self.assertNotEqual(old_pk, new_session.pk)
 
@@ -524,7 +535,7 @@ class MathUnitDiagnosticViewTests(TestCase):
         self._complete_diagnostic_with_all_correct()
 
         response = self.client.get(self.diag_url)
-        self.assertContains(response, '診断結果')
+        self.assertContains(response, 'Diagnostic result')  # English is now the default language
 
         response = self.client.post(self.diag_url, {'action': 'continue'}, follow=True)
         self.assertContains(response, self.sections[0].title)
@@ -542,7 +553,7 @@ class MathUnitDiagnosticViewTests(TestCase):
     def test_progress_shows_first_question_out_of_the_actual_candidate_total(self):
         self.client.get(self.detail_url)  # creates the diagnostic session (3 sections -> total 3)
         response = self.client.get(self.diag_url)
-        self.assertContains(response, '診断問題 1 / 3')
+        self.assertContains(response, 'Diagnostic question 1 / 3')
         self.assertEqual(response.context['current'], 1)
         self.assertEqual(response.context['total'], 3)
         self.assertEqual(response.context['progress_percent'], 33)
@@ -555,7 +566,7 @@ class MathUnitDiagnosticViewTests(TestCase):
         self.client.post(self.diag_url, {'action': 'answer', 'answer_id': item.id, 'answer': wrong_answer})
 
         response = self.client.get(self.diag_url)
-        self.assertContains(response, '診断問題 2 / 3')
+        self.assertContains(response, 'Diagnostic question 2 / 3')
         self.assertEqual(response.context['progress_percent'], 67)
 
     def test_progress_reaches_100_percent_on_the_final_question(self):
@@ -573,7 +584,7 @@ class MathUnitDiagnosticViewTests(TestCase):
         self.assertIsNone(diagnostic.completed_at)  # still mid-quiz, on question 3 of 3
 
         response = self.client.get(self.diag_url)
-        self.assertContains(response, '診断問題 3 / 3')
+        self.assertContains(response, 'Diagnostic question 3 / 3')
         self.assertEqual(response.context['progress_percent'], 100)
 
     def test_revisiting_a_completed_unit_never_redirects_to_diagnostic_again(self):
@@ -634,7 +645,7 @@ class MathDiagnosticGenerationFailureTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '診断結果')
+        self.assertContains(response, 'Diagnostic result')  # English is now the default language
         self.assertNotContains(response, '<div class="equation"></div>')
 
     def test_view_self_heals_a_stuck_diagnostic_with_no_pending_question(self):
@@ -654,7 +665,7 @@ class MathDiagnosticGenerationFailureTests(TestCase):
 
         response = self.client.get(diag_url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '診断結果')
+        self.assertContains(response, 'Diagnostic result')  # English is now the default language
         diagnostic.refresh_from_db()
         self.assertIsNotNone(diagnostic.completed_at)
 
@@ -868,7 +879,7 @@ class MathUnitMaterialTests(TestCase):
         unit = Unit.objects.create(name='資料追加空テスト単元', is_demo=True)
         response = self.client.post(self._url(unit), {}, follow=True)
         self.assertEqual(unit.materials.count(), 0)
-        self.assertContains(response, 'ファイルを選択してください')
+        self.assertContains(response, 'Please select a file')
 
     def test_added_materials_are_included_when_sections_are_generated(self):
         """The one AI call generate_sections makes must see both a file
@@ -2279,7 +2290,7 @@ class MathTeachBackTests(TestCase):
         response = self.client.post(
             url, {'action': 'teach_back', 'answer': CLEAR_TEACH_BACK_RESPONSE}, follow=True,
         )
-        self.assertContains(response, 'AIのヒントなしで解いてください')
+        self.assertContains(response, 'Solve this without AI hints')
 
 
 class MathAdaptiveTeachBackAIModeTests(TestCase):
@@ -2507,25 +2518,25 @@ class MathSectionStatusTests(TestCase):
         label, tone = mastery.classify_section_status(
             section_state=WorkflowState.MASTERED, concept_mastery=record,
         )
-        self.assertEqual((label, tone), ('再確認の時期です', 'warning'))
+        self.assertEqual((label, tone), ('Time for a recheck', 'warning'))
 
     def test_overconfident_in_progress_shows_calibration_pill(self):
         record = ConceptMastery(confidence_calibration=ConfidenceCalibration.OVERCONFIDENT)
         label, tone = mastery.classify_section_status(
             section_state=WorkflowState.GUIDED_REVISION, concept_mastery=record,
         )
-        self.assertEqual((label, tone), ('自信過剰かもしれません', 'muted'))
+        self.assertEqual((label, tone), ('May be overconfident', 'muted'))
 
     def test_underconfident_in_progress_shows_calibration_pill(self):
         record = ConceptMastery(confidence_calibration=ConfidenceCalibration.UNDERCONFIDENT)
         label, tone = mastery.classify_section_status(
             section_state=WorkflowState.FIRST_ATTEMPT, concept_mastery=record,
         )
-        self.assertEqual((label, tone), ('自信不足かもしれません', 'muted'))
+        self.assertEqual((label, tone), ('May be underconfident', 'muted'))
 
     def test_not_started_shows_not_started_pill(self):
         label, tone = mastery.classify_section_status(section_state=None, concept_mastery=None)
-        self.assertEqual((label, tone), ('未着手', 'muted'))
+        self.assertEqual((label, tone), ('Not started', 'muted'))
 
     def test_unit_detail_view_renders_status_pills(self):
         unit, sections = _create_unit_with_sections('セクション状態テスト科目', 1)
@@ -2549,7 +2560,7 @@ class MathSectionStatusTests(TestCase):
         })
 
         response = self.client.get(detail_url)
-        self.assertContains(response, '自信過剰かもしれません')
+        self.assertContains(response, 'May be overconfident')
 
 
 class MathI18nTests(TestCase):
@@ -2559,9 +2570,47 @@ class MathI18nTests(TestCase):
     Django's own gettext/gettext_lazy machinery; these tests only check
     the switch works end-to-end, not the completeness of the wordlist."""
 
-    def test_japanese_is_the_default_language(self):
+    def test_english_is_the_default_language(self):
+        # LANGUAGE_CODE = 'en' (see config/settings.py) — a fresh visitor
+        # with no saved language preference and no Accept-Language header
+        # (as here — the test client sends none) gets English by default.
+        response = self.client.get(reverse('math_quiz:home'))
+        self.assertContains(response, 'Math')
+
+    def test_japanese_can_still_be_selected(self):
+        # The switch mechanism itself must still work even though its UI
+        # is hidden — see test_language_switcher_ui_is_hidden_from_users.
+        self.client.post(reverse('set_language'), {'language': 'ja', 'next': reverse('math_quiz:home')})
         response = self.client.get(reverse('math_quiz:home'))
         self.assertContains(response, '数学')
+
+    def test_a_browsers_japanese_accept_language_does_not_override_the_english_default(self):
+        # Regression: LocaleMiddleware checks Accept-Language before
+        # falling back to LANGUAGE_CODE, so a browser with Japanese OS/
+        # browser settings got Japanese regardless of LANGUAGE_CODE='en'
+        # for any visitor who'd never explicitly chosen a language — see
+        # config.middleware.IgnoreBrowserLanguageMiddleware.
+        client = Client(HTTP_ACCEPT_LANGUAGE='ja,ja-JP;q=0.9,en;q=0.8')
+        response = client.get(reverse('math_quiz:home'))
+        self.assertContains(response, 'Math')
+        self.assertNotContains(response, '数学')
+
+    def test_an_explicit_past_choice_still_wins_over_the_english_default(self):
+        # The middleware above must only skip Accept-Language when there's
+        # no saved choice yet — an explicit past selection (the
+        # django_language cookie) always wins, browser language or not.
+        client = Client(HTTP_ACCEPT_LANGUAGE='ja,ja-JP;q=0.9,en;q=0.8')
+        client.post(reverse('set_language'), {'language': 'ja', 'next': reverse('math_quiz:home')})
+        response = client.get(reverse('math_quiz:home'))
+        self.assertContains(response, '数学')
+
+    def test_language_switcher_ui_is_hidden_from_users(self):
+        # 'lang-switch' alone isn't a safe marker — the CSS rule for it
+        # still lives in _style.html regardless of whether the widget
+        # renders, so check for the widget's own actual markup instead.
+        response = self.client.get(reverse('math_quiz:home'))
+        self.assertNotContains(response, 'name="language" value="ja"')
+        self.assertNotContains(response, 'name="language" value="en"')
 
     def test_english_can_be_selected(self):
         self.client.post(reverse('set_language'), {'language': 'en', 'next': reverse('math_quiz:home')})

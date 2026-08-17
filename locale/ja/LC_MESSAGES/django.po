@@ -117,6 +117,12 @@ msgstr "提出"
 msgid "わからない"
 msgstr "わからない"
 
+msgid "もう一度考える"
+msgstr "もう一度考える"
+
+msgid "ヒント レベル1"
+msgstr "ヒント レベル1"
+
 msgid "数学"
 msgstr "数学"
 

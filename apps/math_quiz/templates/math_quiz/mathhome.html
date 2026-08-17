@@ -83,7 +83,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="math-toolbar">{% include "math_quiz/_language_switcher.html" %}</div>
+{# Language switcher UI hidden from the user-facing screen (default
+   language is now English — see config.settings.LANGUAGE_CODE), but the
+   switching mechanism itself (this partial, the set_language URL, session
+   handling) is untouched — uncomment to bring the UI back. #}
+{# <div class="math-toolbar">{% include "math_quiz/_language_switcher.html" %}</div> #}
 
 <section class="hero">
   <p class="eyebrow">{% trans "数学" %}</p>
