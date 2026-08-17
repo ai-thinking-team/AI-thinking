@@ -83,6 +83,14 @@ def extract_text_from_file(uploaded_file) -> str:
 
 # --- 3. HÀM GỌI GROQ API & LƯU DATABASE ---
 
+def can_evaluate_open_response(question):
+    """Only evaluate an open response when local reference evidence exists."""
+    return bool(
+        str(getattr(question, 'correct_answer', '') or '').strip()
+        or getattr(question, 'rubric_keywords', None)
+    )
+
+
 def generate_and_save_lesson(subject: Subject, uploaded_file) -> Lesson:
     # 1. Đọc văn bản từ file
     raw_text = extract_text_from_file(uploaded_file)
