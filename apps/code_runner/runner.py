@@ -115,7 +115,7 @@ def ensure_local_runner_started(base_url):
         _local_runner_process = None
         return False
 
-    deadline = time.monotonic() + getattr(settings, 'CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS', 20)
+    deadline = time.monotonic() + getattr(settings, 'CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS', 75)
     while time.monotonic() < deadline:
         if _runner_port_open('127.0.0.1', port):
             return True
@@ -137,7 +137,7 @@ def get_code_execution_gateway():
         return HttpCodeExecutionGateway(
             base_url=base_url,
             auth_token=getattr(settings, 'CODE_RUNNER_AUTH_TOKEN', ''),
-            timeout=getattr(settings, 'CODE_RUNNER_TIMEOUT_SECONDS', 20),
+            timeout=getattr(settings, 'CODE_RUNNER_TIMEOUT_SECONDS', 40),
         )
     return UnavailableCodeExecutionGateway()
 

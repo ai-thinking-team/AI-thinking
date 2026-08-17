@@ -11,9 +11,10 @@ from .harness import TEST_CATALOG
 HOST = os.environ.get('RUNNER_HOST', '127.0.0.1')
 PORT = int(os.environ.get('RUNNER_PORT', '8765'))
 IMAGE = os.environ.get('RUNNER_IMAGE', 'ai-thinking-code-runner:local')
+DOCKER_BIN = os.environ.get('DOCKER_BIN', 'docker')
 AUTH_TOKEN = os.environ.get('RUNNER_AUTH_TOKEN', '')
 MAX_REQUEST_BYTES = 25_000
-CONTAINER_TIMEOUT_SECONDS = int(os.environ.get('RUNNER_CONTAINER_TIMEOUT_SECONDS', '15'))
+CONTAINER_TIMEOUT_SECONDS = int(os.environ.get('RUNNER_CONTAINER_TIMEOUT_SECONDS', '30'))
 ALLOWED_TEST_IDS = frozenset(TEST_CATALOG)
 
 
@@ -31,7 +32,7 @@ def _docker_failure_message(process):
 
 def _docker_command(container_name):
     return [
-        'docker', 'run', '--rm', '--name', container_name,
+        DOCKER_BIN, 'run', '--rm', '--name', container_name,
         '--network', 'none',
         '--memory', '128m',
         '--cpus', '1.0',
@@ -47,7 +48,7 @@ def _docker_command(container_name):
 def _cleanup_container(container_name):
     try:
         subprocess.run(
-            ['docker', 'rm', '-f', container_name],
+            [DOCKER_BIN, 'rm', '-f', container_name],
             capture_output=True,
             timeout=2,
             check=False,

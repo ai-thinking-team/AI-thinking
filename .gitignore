@@ -5,6 +5,7 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *.pyc
+runserver-*.log
 media/
 units/
 db.sqlite3

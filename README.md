@@ -123,6 +123,10 @@ python -c "from django.core.management.utils import get_random_secret_key; open(
 python manage.py runserver
 ```
 
+For the full local Coding workflow, start the isolated runner in a second PowerShell as
+described in [runner_service/README.md](runner_service/README.md). Development settings use
+`http://127.0.0.1:8765` as the runner URL by default, so no extra `.env` entry is required.
+
 ### Troubleshooting (Windows)
 
 **Required Python version**: Python 3.10 or later is required (check with `python --version`). If not installed, download it from [python.org](https://www.python.org/downloads/) and make sure to check "Add python.exe to PATH" during installation.
@@ -142,7 +146,7 @@ The Coding workflow requires a separate Docker-backed HTTP runner before a revis
 For the reproducible local demo, start the runner in one PowerShell and Django in another:
 
 ```powershell
-cd D:\study\gpbl\AI-thinking-review
+cd path\to\AI-thinking
 powershell -ExecutionPolicy Bypass -File .\runner_service\start.ps1
 ```
 
