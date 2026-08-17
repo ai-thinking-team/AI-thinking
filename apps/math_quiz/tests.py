@@ -2603,6 +2603,24 @@ class MathI18nTests(TestCase):
         response = client.get(reverse('math_quiz:home'))
         self.assertContains(response, '数学')
 
+    def test_diagnostic_result_feedback_follows_the_selected_language(self):
+        # Regression: demo_content.diagnostic_level_feedback used to be a
+        # plain hardcoded Japanese string, unlike everything else here —
+        # it never went through gettext, so it stayed Japanese on the
+        # diagnostic result screen even with English selected.
+        with translation.override('en'):
+            self.assertEqual(
+                demo_content.diagnostic_level_feedback(1, 1),
+                'You got all 1 questions correct. It looks like you already have '
+                'the basics of this subject down — try starting from a more advanced section.',
+            )
+        with translation.override('ja'):
+            self.assertEqual(
+                demo_content.diagnostic_level_feedback(1, 1),
+                '1問すべて正解でした。この科目の基礎はすでに身についているようです。'
+                '発展的なセクションから取り組んでみましょう。',
+            )
+
     def test_language_switcher_ui_is_hidden_from_users(self):
         # 'lang-switch' alone isn't a safe marker — the CSS rule for it
         # still lives in _style.html regardless of whether the widget

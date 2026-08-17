@@ -27,7 +27,7 @@ def _gemini_compatible_schema(schema):
 class GeminiProvider:
     def __init__(self, *, api_key=None, model=None, timeout=None, client=None):
         self.api_key = api_key or os.environ.get('GEMINI_API_KEY', '')
-        self.model = model or getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        self.model = model or getattr(settings, 'GEMINI_MODEL', 'gemini-flash-latest')
         self.timeout = timeout or getattr(settings, 'GEMINI_TIMEOUT_SECONDS', 20)
         self._client = client
 
@@ -48,18 +48,32 @@ class GeminiProvider:
 
     def generate(self, *, system_prompt, user_prompt, response_schema=None):
         client = self._get_client()
-        response = client.models.generate_content(
-            model=self.model,
-            contents=user_prompt,
-            config={
-                'system_instruction': system_prompt,
-                'response_mime_type': 'application/json',
-                'response_json_schema': _gemini_compatible_schema(response_schema),
-                # Teach-Back evaluates five fields; 512 tokens can truncate otherwise-valid JSON.
-                'max_output_tokens': 2048,
-                'temperature': 0,
-            },
-        )
+        from google.genai import errors as genai_errors
+
+        try:
+            response = client.models.generate_content(
+                model=self.model,
+                contents=user_prompt,
+                config={
+                    'system_instruction': system_prompt,
+                    'response_mime_type': 'application/json',
+                    'response_json_schema': _gemini_compatible_schema(response_schema),
+                    # Teach-Back evaluates five fields; 512 tokens can truncate otherwise-valid JSON.
+                    'max_output_tokens': 2048,
+                    'temperature': 0,
+                },
+            )
+        except genai_errors.APIError as exc:
+            # Anything the SDK raises for a failed request (bad/expired
+            # model name, rate limit, auth failure, ...) — normalized to
+            # AIEngineError so callers trying multiple providers (see
+            # apps.ai_engine.providers.fallback.FallbackProvider) can
+            # recognize "this provider failed, try the next one" instead
+            # of a raw, provider-specific exception type escaping
+            # unrecognized and skipping the rest of the chain.
+            raise AIServiceUnavailable(f'Gemini request failed: {exc}') from exc
+        except OSError as exc:
+            raise AIServiceUnavailable('Could not reach Gemini.') from exc
         if isinstance(getattr(response, 'parsed', None), dict):
             return response.parsed
         response_text = getattr(response, 'text', '')
