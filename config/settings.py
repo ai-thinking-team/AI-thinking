@@ -43,16 +43,22 @@ if IS_PRODUCTION:
 elif not SECRET_KEY:
     SECRET_KEY = 'unsafe-local-demo-only'
 
-ALLOWED_HOSTS = env_csv(
-    'DJANGO_ALLOWED_HOSTS',
-    default=('127.0.0.1', 'localhost') if not IS_PRODUCTION else (),
-)
+render_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip()
+default_allowed_hosts = ('127.0.0.1', 'localhost') if not IS_PRODUCTION else ()
+if render_hostname:
+    default_allowed_hosts = (*default_allowed_hosts, render_hostname)
+
+ALLOWED_HOSTS = env_csv('DJANGO_ALLOWED_HOSTS', default=default_allowed_hosts)
 if IS_PRODUCTION and not ALLOWED_HOSTS:
     raise ImproperlyConfigured('DJANGO_ALLOWED_HOSTS is required in production.')
 if IS_PRODUCTION and '*' in ALLOWED_HOSTS:
     raise ImproperlyConfigured('DJANGO_ALLOWED_HOSTS cannot contain * in production.')
 
-CSRF_TRUSTED_ORIGINS = env_csv('DJANGO_CSRF_TRUSTED_ORIGINS')
+default_csrf_trusted_origins = (f'https://{render_hostname}',) if render_hostname else ()
+CSRF_TRUSTED_ORIGINS = env_csv(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    default=default_csrf_trusted_origins,
+)
 
 
 # Application definition

@@ -65,3 +65,22 @@ test account. Never run destructive test commands against the production databas
 - Retain application and reverse-proxy logs without logging learner code or credentials.
 - Monitor runner timeouts/errors and AI fallback rates.
 - Review `/progress/` access rules before adding authenticated multi-user accounts.
+
+## 6. Deploy on Render
+
+The repository includes `render.yaml` and `scripts/render_start.sh` for the Django web service.
+The Blueprint keeps MySQL as the production database so the existing migrations and schema are
+unchanged. In Render, create a MySQL private service (or use an external MySQL provider), then
+set `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` on the web service. If using Render's
+MySQL example, the service must use a persistent disk mounted at `/var/lib/mysql`.
+
+The Render web service runs migrations and `collectstatic` before starting Waitress. Render's
+`RENDER_EXTERNAL_HOSTNAME` is accepted automatically for `ALLOWED_HOSTS` and CSRF origins; add
+your custom domain explicitly to `DJANGO_ALLOWED_HOSTS` and
+`DJANGO_CSRF_TRUSTED_ORIGINS` when you attach one.
+
+The current coding runner is not deployable as a normal Render web/private service because it
+creates Docker sandbox containers for each submission and therefore needs a Docker daemon. Keep
+`CODE_RUNNER_URL` and `CODE_RUNNER_AUTH_TOKEN` pointed at a separately isolated runner service;
+until that service is available, coding submissions remain safely `NOT_EXECUTED` rather than
+executing learner code inside Django.

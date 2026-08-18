@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: ai-thinking
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: bash scripts/render_start.sh
+    healthCheckPath: /
+    envVars:
+      - key: DJANGO_ENV
+        value: production
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: DJANGO_TRUST_PROXY_HEADERS
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DB_ENGINE
+        value: mysql
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_CONN_MAX_AGE
+        value: "60"
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "true"
+      - key: EMAIL_USE_SSL
+        value: "false"
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: CODE_RUNNER_URL
+        sync: false
+      - key: CODE_RUNNER_AUTH_TOKEN
+        sync: false
+      - key: CODE_RUNNER_AUTOSTART
+        value: "false"
+      - key: CODE_RUNNER_TIMEOUT_SECONDS
+        value: "40"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
