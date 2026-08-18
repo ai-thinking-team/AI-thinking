@@ -26,5 +26,9 @@ services:
         value: "false"
       - key: CODE_RUNNER_TIMEOUT_SECONDS
         value: "40"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
       - key: GROQ_API_KEY
         sync: false
