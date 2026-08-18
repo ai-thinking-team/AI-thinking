@@ -69,10 +69,11 @@ test account. Never run destructive test commands against the production databas
 ## 6. Deploy on Render
 
 The repository includes `render.yaml` and `scripts/render_start.sh` for the Django web service.
-The Blueprint keeps MySQL as the production database so the existing migrations and schema are
-unchanged. In Render, create a MySQL private service (or use an external MySQL provider), then
-set `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` on the web service. If using Render's
-MySQL example, the service must use a persistent disk mounted at `/var/lib/mysql`.
+The Blueprint uses the project's existing SQLite configuration so no separate database service
+is required for a demo deployment. Render's free web services have an ephemeral filesystem, so
+the local SQLite database is reset when the service redeploys, restarts, or spins down. Use a
+paid web service with a persistent disk, or migrate to a managed relational database, before
+using this deployment for durable learner data.
 
 The Render web service runs migrations and `collectstatic` before starting Waitress. Render's
 `RENDER_EXTERNAL_HOSTNAME` is accepted automatically for `ALLOWED_HOSTS` and CSRF origins; add

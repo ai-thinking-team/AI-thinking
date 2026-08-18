@@ -17,19 +17,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DB_ENGINE
-        value: mysql
-      - key: DB_NAME
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        value: "3306"
-      - key: DB_CONN_MAX_AGE
-        value: "60"
+        value: sqlite
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_PORT
