@@ -44,6 +44,7 @@ elif not SECRET_KEY:
     SECRET_KEY = 'unsafe-local-demo-only'
 
 render_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip()
+running_on_render = bool(render_hostname or os.environ.get('RENDER'))
 default_allowed_hosts = ('127.0.0.1', 'localhost') if not IS_PRODUCTION else ()
 if render_hostname:
     default_allowed_hosts = (*default_allowed_hosts, render_hostname)
@@ -224,7 +225,12 @@ CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = env_bool('DJANGO_SESSION_COOKIE_SECURE', IS_PRODUCTION)
 CSRF_COOKIE_SECURE = env_bool('DJANGO_CSRF_COOKIE_SECURE', IS_PRODUCTION)
-SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', IS_PRODUCTION)
+# Render's edge proxy terminates TLS and redirects public HTTP to HTTPS. Do not
+# make Django issue a second redirect based on the internal HTTP hop.
+SECURE_SSL_REDIRECT = env_bool(
+    'DJANGO_SECURE_SSL_REDIRECT',
+    IS_PRODUCTION and not running_on_render,
+)
 SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '3600' if IS_PRODUCTION else '0'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
     'DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS',
@@ -232,7 +238,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 )
 SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
 
-if env_bool('DJANGO_TRUST_PROXY_HEADERS', False):
+if env_bool('DJANGO_TRUST_PROXY_HEADERS', running_on_render):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
