@@ -242,10 +242,11 @@ CODE_RUNNER_URL = os.environ.get(
     '' if IS_PRODUCTION else 'http://127.0.0.1:8765',
 )
 CODE_RUNNER_AUTH_TOKEN = os.environ.get('CODE_RUNNER_AUTH_TOKEN', '')
+CODE_RUNNER_REQUIRED = env_bool('CODE_RUNNER_REQUIRED', IS_PRODUCTION)
 CODE_RUNNER_TIMEOUT_SECONDS = int(os.environ.get('CODE_RUNNER_TIMEOUT_SECONDS', '40'))
 CODE_RUNNER_AUTOSTART = env_bool('CODE_RUNNER_AUTOSTART', not IS_PRODUCTION)
 CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS = int(os.environ.get('CODE_RUNNER_AUTOSTART_TIMEOUT_SECONDS', '75'))
-if IS_PRODUCTION:
+if IS_PRODUCTION and CODE_RUNNER_REQUIRED:
     CODE_RUNNER_URL = require_env('CODE_RUNNER_URL')
     CODE_RUNNER_AUTH_TOKEN = require_env('CODE_RUNNER_AUTH_TOKEN')
 # An explicit AI_PROVIDER_CLASS still names exactly one provider class,
@@ -301,7 +302,8 @@ LOGGING = {
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-if IS_PRODUCTION:
+EMAIL_ENABLED = env_bool('EMAIL_ENABLED', IS_PRODUCTION)
+if IS_PRODUCTION and EMAIL_ENABLED:
     email_use_tls = env_bool('EMAIL_USE_TLS', True)
     email_use_ssl = env_bool('EMAIL_USE_SSL', False)
     if email_use_tls and email_use_ssl:
@@ -323,7 +325,9 @@ if IS_PRODUCTION:
 else:
     MAILERS = {
         'default': {
-            'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+            'BACKEND': 'config.email_backend.DisabledEmailBackend'
+            if IS_PRODUCTION
+            else 'django.core.mail.backends.console.EmailBackend',
         },
     }
 

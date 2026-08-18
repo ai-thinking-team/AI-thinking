@@ -18,31 +18,13 @@ services:
         generateValue: true
       - key: DB_ENGINE
         value: sqlite
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: EMAIL_USE_TLS
-        value: "true"
-      - key: EMAIL_USE_SSL
+      - key: EMAIL_ENABLED
         value: "false"
-      - key: DEFAULT_FROM_EMAIL
-        sync: false
-      - key: CODE_RUNNER_URL
-        sync: false
-      - key: CODE_RUNNER_AUTH_TOKEN
-        sync: false
+      - key: CODE_RUNNER_REQUIRED
+        value: "false"
       - key: CODE_RUNNER_AUTOSTART
         value: "false"
       - key: CODE_RUNNER_TIMEOUT_SECONDS
         value: "40"
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
       - key: GROQ_API_KEY
         sync: false

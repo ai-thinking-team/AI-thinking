@@ -83,5 +83,8 @@ your custom domain explicitly to `DJANGO_ALLOWED_HOSTS` and
 The current coding runner is not deployable as a normal Render web/private service because it
 creates Docker sandbox containers for each submission and therefore needs a Docker daemon. Keep
 `CODE_RUNNER_URL` and `CODE_RUNNER_AUTH_TOKEN` pointed at a separately isolated runner service;
-until that service is available, coding submissions remain safely `NOT_EXECUTED` rather than
-executing learner code inside Django.
+until that service is available, the Render demo sets `CODE_RUNNER_REQUIRED=false` and coding
+submissions remain safely `NOT_EXECUTED` rather than executing learner code inside Django.
+
+Email is also disabled in the Render demo with `EMAIL_ENABLED=false`, so no SMTP configuration is
+needed. Set it to `true` only after adding a real SMTP host and credentials.
